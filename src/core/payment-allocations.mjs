@@ -48,7 +48,7 @@ export function paymentAllocations(row){
    else warnings.add('Phân bổ liên quan vượt giá trị hóa đơn; không cộng lặp các vòng chuyển.');
   }
   return {id,receipt,amount,paths,terminalKeys:terminals.map(key),warnings:[...warnings]};
- }).sort((a,b)=>order(a.receipt,b.receipt));
+ }).sort((a,b)=>a.receipt.date-b.receipt.date||receipts.indexOf(a.receipt)-receipts.indexOf(b.receipt));
  // An entire invoice pool arriving at this CT proves each original amount.
  // A partial mixed pool has no FIFO/pro-rata rule: leave each share unknown.
  const seen=new Set();

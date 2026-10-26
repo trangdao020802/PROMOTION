@@ -18,7 +18,7 @@ export function samplePaymentRow(){
 test('Payment info shows three original invoices once, with original method/date and full intermediate lineage',()=>{
  const row=samplePaymentRow(),before=structuredClone(row),p=paymentAllocations(row);
  assert.equal(p.ct,ct);assert.equal(p.total,75336000);assert.equal(p.invoices.length,3);assert.equal(p.originals.length,0);assert.deepEqual(p.dates,[day('2026-10-22')]);
- assert.deepEqual(p.invoices.map(i=>i.amount),[7200000,40000000,28136000]);
+ assert.deepEqual(p.invoices.map(i=>i.amount),[7200000,28136000,40000000]);
  const invoice=p.invoices.find(i=>i.id==='0000460');
  assert.equal(invoice.receipt.date,day('2026-09-14'));assert.equal(invoice.receipt.method,'Online Payments');
  assert.deepEqual(invoice.paths[0].map(e=>[e.from,e.to,e.date]),[[dep,old,day('2026-09-15')],[old,ct,day('2026-10-22')]]);

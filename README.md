@@ -22,7 +22,7 @@ Mở `http://localhost:4173/`. Bản web để triển khai nằm trong `dist/`.
 - Sửa Course fee KOC, Hour/week, Package, Giftcode và Discount; Enter/rời ô tự tính lại và lưu.
 - Voucher mới giữ chờ duyệt; kiểm tra học viên, trung tâm, hiệu lực, mức giảm và căn cứ.
 - Duyệt riêng CEO/RCM, sibling, loyalty, ghi danh và thông số gốc. Tích hiện **Đã duyệt**. Duyệt ngoại lệ trả góp là cột riêng. KẾT QUẢ được tổng hợp sau duyệt; nếu còn lỗi có cột **Lý do CHECK còn lại**.
-- Payment info giữ từng hóa đơn gốc một lần, ngày/phương thức/EPP gốc và luồng DEP → CT trung gian → CT nhận tiền. Chuyển nội bộ không cộng thành tiền thu mới.
+- Moving dùng thẻ xanh bốn cột như ảnh mẫu, mở/đóng lịch sử dọc cho từng hóa đơn. Payment info giữ từng hóa đơn gốc một lần, ngày/phương thức/EPP gốc và luồng DEP → CT trung gian → CT nhận tiền. Chuyển nội bộ không cộng thành tiền thu mới.
 - Lưu/mở lại đợt nguồn, tải file gốc và xuất CSV theo bộ lọc; bộ lọc xuống hàng và căn thẳng khi màn hình hẹp.
 
 ## Dữ liệu
@@ -30,6 +30,17 @@ Mở `http://localhost:4173/`. Bản web để triển khai nằm trong `dist/`.
 File giao dịch, chỉnh sửa, dấu duyệt, voucher, minh chứng và link Hub được lưu bằng IndexedDB trong trình duyệt đang dùng. Chúng không được upload lên GitHub hay máy chủ web. Không có đồng bộ tài khoản/thiết bị. Dữ liệu không tự chuyển sang miền khác; khi chuyển hosting cần tải lại bộ nguồn trên miền mới. Xóa dữ liệu trình duyệt sẽ xóa dữ liệu cục bộ.
 
 `reference/rules-source.json` chứa bảng giá và quy tắc đã chuẩn hóa dùng cho build. Repo không chứa báo cáo giao dịch, danh sách học viên, mật khẩu hoặc lịch sử Git của bản Sites.
+
+## Cập nhật file chính sách giá mới
+
+Hiện web chưa tự nhập file chính sách bất kỳ. **Tải bộ nguồn** chỉ cập nhật dữ liệu giao dịch từ Export / PaymentList / Transfer. Khi có chính sách mới:
+
+1. Cung cấp file Excel đã duyệt, ngày hiệu lực từ/đến, trung tâm/đối tượng áp dụng và phần chính sách được thay thế. Giữ căn cứ sheet/dòng và phiên bản cũ cho giao dịch kỳ cũ.
+2. Chuẩn hóa dữ liệu giá/lộ trình và căn cứ vào `reference/rules-source.json`; không lấy số quan sát của báo cáo giao dịch làm giá được duyệt.
+3. Cập nhật khoảng ngày và cách chọn giá trong `src/local/calculation.mjs` (`priceFor`). Nếu thay điều kiện, giảm tiền, tháng tặng hoặc cộng gộp thì cập nhật thêm `src/core/promotions.mjs` / `src/core/verification.mjs`. Đổi bảng giá không tự chứng minh công thức ưu đãi cũ còn đúng.
+4. Thêm các ca kiểm thử trước/đúng/sau ngày hiệu lực, đối chiếu hồ sơ mẫu của kỳ cũ và mới; chạy build/test rồi commit, push `main` và deploy.
+
+Trên giao diện có hướng dẫn tại **Quy tắc & voucher → Bảng giá chung / RULE → Cập nhật file chính sách giá mới**. Bạn có thể gửi file mới cùng thông tin hiệu lực trong cuộc trò chuyện để cập nhật bộ quy tắc và xuất bản bản mới.
 
 ## Hosting miễn phí
 
