@@ -1,11 +1,13 @@
 import {dateSerial} from './verification.mjs';
+import {voucherDetailURL} from './hub-voucher.mjs';
 export const voucherCode=value=>{const code=String(value??'').trim().toUpperCase();return code==='0'?'':code;};
-export const EMPTY_VOUCHER={code:'',label:'',studentId:'',studentName:'',center:'',startDate:'',endDate:'',type:'',amount:null,rate:null,minimum:null,maximum:null,status:'PENDING',approvalNote:''};
+export const EMPTY_VOUCHER={code:'',label:'',studentId:'',studentName:'',center:'',startDate:'',endDate:'',type:'',amount:null,rate:null,minimum:null,maximum:null,status:'PENDING',approvalNote:'',hubUrl:'',hubCheckedAt:'',hubStatus:''};
 const fields=new Set(Object.keys(EMPTY_VOUCHER));
 export function validateVoucher(v){
  if(!v||typeof v!=='object'||Array.isArray(v)||Object.keys(v).some(k=>!fields.has(k)))return 'Thông tin voucher không hợp lệ.';
  if(typeof v.code!=='string'||!voucherCode(v.code)||v.code.length>150||/[\x00-\x1f\x7f]/.test(v.code))return 'Giftcode No cần từ 1 đến 150 ký tự, không xuống dòng.';
  for(const k of ['label','studentId','studentName','center','approvalNote'])if(typeof v[k]!=='string'||v[k].length>(k==='approvalNote'?2000:200))return 'Tên, học viên, trung tâm hoặc căn cứ voucher không hợp lệ.';
+ if(v.hubUrl&&(!voucherDetailURL(v.hubUrl)||v.hubUrl.length>2048)||v.hubCheckedAt&&(!/^\d{4}-\d{2}-\d{2}T/.test(v.hubCheckedAt)||!Number.isFinite(Date.parse(v.hubCheckedAt)))||v.hubStatus&&!['ACTIVE','CLOSED','INACTIVE','UNKNOWN'].includes(v.hubStatus))return 'Nguồn Voucher Hub không hợp lệ.';
  for(const k of ['startDate','endDate'])if(v[k]!==''&&dateSerial(v[k])===null)return 'Ngày hiệu lực voucher không hợp lệ.';
  if(v.startDate&&v.endDate&&v.startDate>v.endDate)return 'Ngày bắt đầu phải trước hoặc bằng ngày kết thúc voucher.';
  if(!['','amount','percent'].includes(v.type)||!['PENDING','APPROVED','REJECTED','CLOSED','INACTIVE'].includes(v.status))return 'Loại giảm/trạng thái voucher không hợp lệ.';
@@ -24,7 +26,7 @@ export function voucherMissing(v){
 }
 export function voucherInput(v){return Object.fromEntries(Object.entries({...EMPTY_VOUCHER,...v}).filter(([k])=>fields.has(k)));}
 export function nativeVoucherCodes(data){return new Set(Object.entries(data.grids.PROMO_VOUCHER).filter(([key])=>/^AH\d+$/.test(key)&&Number(key.slice(2))>=3&&Number(key.slice(2))<=2500).map(([,v])=>voucherCode(v)).filter(Boolean));}
-export function voucherReference(v,i){const row=2501+i;return {row,M:v.label||v.code,AH:v.code,U:v.studentName,O:v.center,P:dateSerial(v.startDate),Q:dateSerial(v.endDate),R:v.status,Z:v.type==='amount'?'SỐ TIỀN':v.type==='percent'?'PHẦN TRĂM':'',AA:v.amount,V:v.rate,AB:v.minimum,AC:v.maximum,studentId:v.studentId,approvalNote:v.approvalNote,custom:true,version:v.version,updatedAt:v.updatedAt};}
+export function voucherReference(v,i){const row=2501+i;return {row,M:v.label||v.code,AH:v.code,U:v.studentName,O:v.center,P:dateSerial(v.startDate),Q:dateSerial(v.endDate),R:v.status,Z:v.type==='amount'?'SỐ TIỀN':v.type==='percent'?'PHẦN TRĂM':'',AA:v.amount,V:v.rate,AB:v.minimum,AC:v.maximum,studentId:v.studentId,approvalNote:v.approvalNote,hubUrl:v.hubUrl||'',custom:true,version:v.version,updatedAt:v.updatedAt};}
 export function withVoucherRegistry(base,vouchers){
  const native=nativeVoucherCodes(base),entries=vouchers.filter(v=>!native.has(voucherCode(v.code))).map((v,i)=>({...v,code:voucherCode(v.code),row:2501+i}));
  const grid=Object.fromEntries(Object.entries(base.grids.PROMO_VOUCHER).filter(([k])=>Number(k.replace(/^[A-Z]+/,''))<=2500));

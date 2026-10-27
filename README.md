@@ -91,3 +91,8 @@ Quy tắc giá và Voucher dùng hai mô hình/bảng riêng: lưu voucher sẽ 
 ## Đối chiếu CALC với tổng thu CT
 
 Cột đối chiếu tiền theo CT so trực tiếp `Phải đóng theo CT (CALC)` (Q) với `Tổng thu / phân bổ CT` (W). Hai số khớp theo ngưỡng kỳ thì trả `OK`, kể cả khi còn cảnh báo nguồn/Export; cảnh báo giữ trong truy vết. Ô trống không được coi là 0. Thiếu/thừa tiền và các kiểm tra Giftcode, policy, trả góp, khóa học, duyệt vẫn độc lập.
+
+
+## Tự điền Voucher từ Hub
+
+Cầu nối Hub 1.6.0 tự tra Giftcode đầy đủ tại `/giftcode/manage`, mở link chi tiết có trong kết quả và xác nhận đúng mã trong List gift code. Voucher còn thiếu sẽ tự điền khi mở hồ sơ nếu cầu nối sẵn sàng; có nút Tìm & tự điền từ Hub để đọc lại. Student ID/tên lấy từ CT đang mở và phải khớp thông tin riêng trên Hub nếu có. Phạm vi, ngày hiệu lực, kiểu/mức giảm, sàn/trần, căn cứ và link/thời điểm nguồn được lưu cùng voucher. Kiểm tra trạng thái duyệt rồi bấm Lưu voucher & tính lại. Không tự duyệt ngoại lệ hoặc bấm Create/Update trên Hub. Cần cập nhật tiện ích và đăng nhập Hub trên máy người dùng. Chi tiết tại `docs/hub-voucher-import.md`; kiểm thử dùng dữ liệu/DOM giả, chưa xác nhận đọc tài khoản Hub thật trong phiên này.

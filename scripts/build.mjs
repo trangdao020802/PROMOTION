@@ -10,6 +10,7 @@ await fs.mkdir('dist',{recursive:true});
 for(const name of await fs.readdir('dist'))await fs.rm('dist/'+name,{recursive:true,force:true});
 await fs.mkdir('dist/assets',{recursive:true});
 await fs.mkdir('dist/downloads',{recursive:true});
+await build({entryPoints:['src/core/hub-voucher.mjs'],bundle:true,format:'iife',globalName:'PromotionHubVoucher',target:'es2022',outfile:'reference/hub/voucher-core.js'});
 await fs.writeFile('dist/rules.json',JSON.stringify(policyData()));
 const contentHash=createHash('sha256');
 async function hashSource(directory){

@@ -79,6 +79,7 @@ test('CSV mapping parses numeric and date values, rejects conflicting copies and
  const result=buildBundle([{...mapped,key:'p',fileName:'p.csv',sheetName:'CSV',fileIndex:0,role:'payment',...normalized}],{from:'2026-10-01',to:'2026-10-31',center:''});assert.equal(result.bundle,null);assert.ok(result.errors.some(e=>e.message.includes('Export')));
 });
 test('the public build contains rules only, without uploaded transaction files or legacy results',()=>{
+ assert.ok(!fs.existsSync(new URL('../dist/qa-voucher.html',import.meta.url)));assert.ok(!fs.existsSync(new URL('../dist/assets/qa-voucher.js',import.meta.url)));
  assert.ok(!fs.existsSync(new URL('../dist/sources',import.meta.url)));assert.ok(!fs.existsSync(new URL('../dist/data',import.meta.url)));
  const r=JSON.parse(fs.readFileSync(new URL('../dist/rules.json',import.meta.url)));assert.ok(r.roadmap.length);assert.ok(!('audit' in r));assert.ok(!('vouchers' in r));
 });
