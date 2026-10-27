@@ -1,5 +1,5 @@
 import React,{useCallback,useEffect,useRef,useState} from 'react';
-import {voucherInput} from '../core/vouchers.mjs';
+import {voucherInput,VOUCHER_POLICIES} from '../core/vouchers.mjs';
 import {HUB_VOUCHERS,voucherRequest,withVoucherProfile,mergeHubVoucher,voucherDetailURL} from '../core/hub-voucher.mjs';
 import {readHubVoucher} from './hub-voucher-bridge.mjs';
 import {assetPath} from './paths.mjs';
@@ -52,10 +52,13 @@ export default function VoucherEditor({initial={},profile={},disabled=false,onSa
    {input('center','Center / phạm vi *',{maxLength:2000,placeholder:'Mã từ cột Center code trên Hub, phân cách bằng dấu phẩy'})}
    <label><span>Trạng thái</span><select value={draft.status} disabled={locked} onChange={e=>change('status',e.target.value)}><option value="PENDING">Chờ bổ sung / duyệt</option><option value="APPROVED">Đã duyệt</option><option value="CLOSED">Đã đóng · có duyệt</option><option value="REJECTED">Từ chối</option><option value="INACTIVE">Không áp dụng</option></select></label>
    {input('startDate','Từ ngày *',{type:'date'})}{input('endDate','Đến hết ngày *',{type:'date'})}
+   <label><span>Chính sách áp dụng</span><select value={draft.policyId??'case-specific'} disabled={locked} onChange={e=>change('policyId',e.target.value)}>{Object.entries(VOUCHER_POLICIES).map(([id,label])=><option key={id} value={id}>{String(label)}</option>)}</select></label>
+   <label><span>Cơ sở tính voucher %</span><select value={draft.percentBasis??'policy-default'} disabled={locked||draft.type==='amount'} onChange={e=>change('percentBasis',e.target.value)}><option value="policy-default">Theo bộ ca đối chiếu · cần xác minh nếu cộng Discount</option><option value="gross">Giá gốc trước Discount · theo căn cứ của mã</option><option value="after-discount">Giá gốc − Discount · theo căn cứ của mã</option></select></label>
    <label><span>Loại giảm *</span><select value={draft.type} disabled={locked} onChange={e=>change('type',e.target.value)}><option value="">Chưa xác định</option><option value="amount">Số tiền (VND)</option><option value="percent">Phần trăm</option></select></label>
    {draft.type==='percent'?<label><span>Tỷ lệ giảm (%) *</span><input type="number" min="0" max="100" step="any" value={draft.rate===null?'':Number((draft.rate*100).toFixed(6))} disabled={locked} onChange={e=>change('rate',e.target.value===''?null:Number(e.target.value)/100)}/></label>:numberInput('amount','Số tiền giảm (VND) *')}
    {numberInput('minimum','Mức sàn (VND)')}{numberInput('maximum','Mức trần (VND) · 0 = không giới hạn')}
   </div>
+  <p className="evidence-caption">Chọn chính sách theo hồ sơ của mã, không theo tiền tố Giftcode. Duyệt voucher xác nhận hồ sơ mã; các kiểm tra sai gói, sai đối tượng, cộng trùng và ngoài hạn vẫn giữ CHECK.</p>
   <label className="verification-note"><span>Căn cứ / phê duyệt và điều kiện áp dụng *</span><textarea rows={3} maxLength={2000} value={draft.approvalNote} disabled={locked} onChange={e=>change('approvalNote',e.target.value)} placeholder="Ghi tài liệu/người duyệt/ngày duyệt và điều kiện của mã này…"/></label>
   {failure&&<div className="verification-error" role="alert"><p>{failure}</p>{conflict&&<button className="secondary-button" onClick={()=>window.location.reload()}>Tải bản voucher mới</button>}</div>}
   <div className="verification-footer"><span>{initial.updatedAt?'Lưu lần cuối '+new Date(initial.updatedAt).toLocaleString('vi-VN'):'Các mục * cần đủ trước khi duyệt.'}</span>{onCancel&&<button type="button" className="quiet-button" disabled={locked} onClick={onCancel}>Đóng chỉnh sửa</button>}<button type="button" className="primary-button" disabled={locked||!dirty&&!!initial.version} onClick={()=>void save()}>{saving?'Đang lưu…':'Lưu voucher & tính lại'}</button></div>

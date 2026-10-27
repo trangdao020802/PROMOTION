@@ -56,7 +56,7 @@ export function discountPolicyMatch(label,date,regime){
  const base=regime==='OCT_BASE'||regime==='OCT_DUYET'||regime===undefined&&typeof date==='number'&&date<serial('2026-10-06');
  let ruleKey=null,programIds=[];
  if(period&&kind){
-  if(period==='september'){if(kind==='cash')ruleKey='BBSEP26_CASH';programIds=['sep-bigbang'];}
+  if(period==='september'){if(kind==='cash')ruleKey='BBSEP26_CASH';else if(kind==='months'||kind==='straight')ruleKey='BBSEP26_STRAIGHT';programIds=['sep-bigbang'];}
   else {
    ruleKey=kind==='months'?'BBQ426_LOYALTY':kind==='straight'?'BBQ426_STRAIGHT':kind==='referral'?'REFQ426':base?'OCT26_BASE':'BBQ426_CASH';
    programIds=kind==='referral'?['ref-q4']:[period==='q4'||!base?'q4':'oct-base'];
@@ -114,7 +114,7 @@ export function promotionResult(cells, context, account, programs) {
   const match=discountPolicyMatch(label,cells.D,cells.AO),checks=[...match.issues];
   if(match.kind==='straight'&&/installment/i.test(String(context.method??'')))checks.push('CHECK - TRẢ GÓP KHÔNG TẶNG TRẢ THẲNG');
   if(label&&label!=='0'&&cells.AL==='OTHER')checks.push('XÁC MINH - CHƯA ĐỦ BỘ GIÁ/CÔNG THỨC CHO DISCOUNT NÀY; xem quy tắc và chứng từ');
-  if(context.voucherType==='PHẦN TRĂM'&&Number(cells.N)>0&&cells.CI==='OK')checks.push('XÁC MINH - CƠ SỞ % GIFTCODE: Bảng giá chung / Giftcode dòng 2 dùng Before − Discount; công thức Audit dùng Before. Cần đối chiếu điều kiện duyệt của mã khi cộng giảm tiền.');
+  if(context.voucherType==='PHẦN TRĂM'&&Number(cells.N)>0&&cells.CI==='OK'&&(!context.voucherBasis||context.voucherBasis==='policy-default'))checks.push('XÁC MINH - CƠ SỞ % GIFTCODE: nguồn có cả Before − Discount và Before; chọn cơ sở % theo căn cứ phê duyệt của mã khi cộng giảm tiền.');
   for (const p of found) {
     if (p.state !== 'confirmed') checks.push(`XÁC MINH - ${p.title}: ${p.state === 'unverified' ? 'chưa đủ chính sách được duyệt' : 'cần căn cứ thời kỳ/phê duyệt riêng'}`);
     if (typeof cells.D !== 'number') checks.push('CHECK - THIẾU NGÀY ÁP DỤNG PROMOTION');

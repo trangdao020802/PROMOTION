@@ -10,7 +10,7 @@ export function manualCheckKey(message){
 }
 export function reviewScope(row){
  const c=row.cells??{},a=row.reconciliation??row.account,context=row.context??{};
- return JSON.stringify(['review-v1',a?.ct??c.contractTotal??c.C,String(c.F??''),c.D,...['H','I','J','K','L'].map(k=>String(c[k]??'').trim()),context.method??'',context.term??'',context.contractType??'',fullPaymentDay(a),a?.paid?.target??a?.snapshot?.target??null,a?.net??null]);
+ return JSON.stringify(['review-v1',a?.ct??c.contractTotal??c.C,String(c.F??''),c.D,...['H','I','J','K','L'].map(k=>String(c[k]??'').trim()),context.method??'',context.term??'',context.contractType??'',fullPaymentDay(a),a?.paid?.target??a?.snapshot?.target??null,a?.net??null,...(context.voucherPolicyScope?[context.voucherPolicyScope]:[])]);
 }
 const itemScope=(row,id)=>reviewScope(row)+(id==='source-comparison'?JSON.stringify(['T','U','V','X'].map(k=>row.cells[k]??null)):'');
 export const reviewAccepted=(patch,id,row)=>patch?.reviews?.[id]?.approved===true&&patch.reviews[id].scope===itemScope(row,id);

@@ -48,7 +48,7 @@ Trên giao diện có hướng dẫn tại **Quy tắc & voucher → Bảng giá
 
 Dữ liệu tham chiếu nằm tại `reference/rules-source.json` → `auditPolicy` (kèm tên file và SHA-256). Ngưỡng tiền 1.000 ₫ và cơ sở voucher % trên giá trước giảm áp dụng trong phạm vi ca Audit tháng 9–10; không tự thay tham số kỳ khác. Tổng giờ làm tròn theo công thức kiểm chứng. Không chứa danh sách học viên, kết quả giao dịch hay voucher cá nhân của file Audit.
 
-Xem [căn cứ công thức và phạm vi kiểm tra](docs/audit-v7-rules.md). Kiểm thử dùng dữ liệu giả cho CT trung gian, các giới hạn gộp, giá theo kỳ, gói lẻ, voucher, giờ học và duyệt. Đối chiếu giá gốc trên 95 dòng có số trong Audit khớp 95/95; đây không phải khẳng định mọi trạng thái AF trong Excel đã được sao chép hoặc toàn bộ policy thực tế đã được chuẩn hóa.
+Xem [căn cứ công thức và phạm vi kiểm tra](docs/audit-v7-rules.md). Kiểm thử dùng dữ liệu giả cho CT trung gian, các giới hạn gộp, giá theo kỳ, gói lẻ, voucher, giờ học và duyệt. Trước đợt sửa giá tháng chưa giảm, đối chiếu giá gốc trên 95 dòng Audit từng khớp 95/95; đây là mốc lịch sử, không phải tiêu chuẩn của toàn bộ bộ tính hiện tại; đây không phải khẳng định mọi trạng thái AF trong Excel đã được sao chép hoặc toàn bộ policy thực tế đã được chuẩn hóa.
 
 ## Hosting miễn phí
 
@@ -104,3 +104,12 @@ Discount Big Bang Sep giảm tiền lấy cột K theo Layer/giờ/gói trước
 Gói lẻ dùng đơn giá tháng **chưa giảm** từ bảng giá thường gói 3T để nhân số tháng. Rule 51–56 hiển thị giá đã sửa; giữ giá trải nghiệm cũ trong metadata để truy vết. Layer 1, 3 giờ/tuần: 3.600.000/tháng, 2 tháng 7.200.000. Discount và Giftcode tính riêng. Xem `docs/monthly-gross-price.md`.
 
 Discount apply giữ nguyên chuỗi PaymentList và đọc riêng từng nhãn phân cách bằng `;`. Nhận Siblings 1.000.000/800.000, giảm theo gói và tặng tháng, không cộng trùng hoặc dùng thời hạn tháng 6–7 cho nhãn Q4. Hiển thị đầy đủ các nhãn dưới ô nhập. Vẫn kiểm tra loại/gói, layer, học viên và xác minh riêng. Xem `docs/discount-apply-combinations.md`.
+
+
+## Bảng giá, quy tắc và voucher thống nhất
+
+Bảng giá và bộ tính cùng dùng lịch giá có khóa loại/đời giá, Layer, giờ, gói và kỳ. Hiển thị giá tháng chưa giảm, số tháng, giá gốc, tiền giảm, net, tháng tặng, kỳ trả góp, phạm vi hỗ trợ và căn cứ từng dòng. Giá Report chỉ để so sánh.
+
+Đã đọc 18 workbook nguồn/tham chiếu, đối chiếu 48 lộ trình với chính sách gốc. RULE có đối tượng, hiệu lực, quyền lợi, điều kiện, cộng gộp và minh chứng. Thêm kiểm tra nhiều giảm nền, sai Layer/giờ/gói, Special30/CEO, dữ kiện chia đôi mâu thuẫn và Discount + Giftcode vượt giá gốc. Voucher có chính sách và cơ sở % rõ ràng; duyệt không bỏ lỗi chính sách.
+
+Cập nhật đồng thời reference/rules-source.json, reference/policy-register.json và reference/price-evidence.json. Tái tạo bằng chứng bằng scripts/verify-policy-sources.py khi có file đã duyệt. Chưa đủ rule vẫn CHECK. Xem [phạm vi, cách tính và 101 kiểm thử](docs/consistent-prices-and-policies.md).

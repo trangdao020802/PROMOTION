@@ -1,7 +1,8 @@
 import {dateSerial} from './verification.mjs';
 import {voucherDetailURL} from './hub-voucher.mjs';
 export const voucherCode=value=>{const code=String(value??'').trim().toUpperCase();return code==='0'?'':code;};
-export const EMPTY_VOUCHER={code:'',label:'',studentId:'',studentName:'',center:'',startDate:'',endDate:'',type:'',amount:null,rate:null,minimum:null,maximum:null,status:'PENDING',approvalNote:'',hubUrl:'',hubCheckedAt:'',hubStatus:''};
+export const VOUCHER_POLICIES={'case-specific':'Phê duyệt riêng của mã / chưa phân loại chính sách',ceo:'CEO / RCM cứu Net Gain', 'four-centers':'Hỗ trợ 30% · RGI / TPU / LNQ / LBB','referral-points':'Điểm giới thiệu / Apo · trừ sau cùng','local-scholarship':'Học bổng Local / đặc quyền cụm',staff:'Học bổng nhân viên'};
+export const EMPTY_VOUCHER={code:'',label:'',studentId:'',studentName:'',center:'',startDate:'',endDate:'',type:'',amount:null,rate:null,minimum:null,maximum:null,status:'PENDING',approvalNote:'',hubUrl:'',hubCheckedAt:'',hubStatus:'',policyId:'case-specific',percentBasis:'policy-default'};
 const fields=new Set(Object.keys(EMPTY_VOUCHER));
 export function validateVoucher(v){
  if(!v||typeof v!=='object'||Array.isArray(v)||Object.keys(v).some(k=>!fields.has(k)))return 'Thông tin voucher không hợp lệ.';
@@ -11,6 +12,7 @@ export function validateVoucher(v){
  for(const k of ['startDate','endDate'])if(v[k]!==''&&dateSerial(v[k])===null)return 'Ngày hiệu lực voucher không hợp lệ.';
  if(v.startDate&&v.endDate&&v.startDate>v.endDate)return 'Ngày bắt đầu phải trước hoặc bằng ngày kết thúc voucher.';
  if(!['','amount','percent'].includes(v.type)||!['PENDING','APPROVED','REJECTED','CLOSED','INACTIVE'].includes(v.status))return 'Loại giảm/trạng thái voucher không hợp lệ.';
+ if(v.policyId!==undefined&&!Object.hasOwn(VOUCHER_POLICIES,v.policyId)||v.percentBasis!==undefined&&!['policy-default','gross','after-discount'].includes(v.percentBasis))return 'Chính sách hoặc cơ sở % voucher không hợp lệ.';
  for(const k of ['amount','rate','minimum','maximum'])if(v[k]!==null&&(typeof v[k]!=='number'||!Number.isFinite(v[k])||v[k]<0||v[k]>(k==='rate'?1:1e13)))return 'Số tiền không âm; tỷ lệ từ 0 đến 100%.';
  if(v.maximum>0&&v.minimum>v.maximum)return 'Mức sàn không được vượt mức trần voucher.';
  if(['APPROVED','CLOSED'].includes(v.status))return voucherMissing(v);
@@ -26,7 +28,7 @@ export function voucherMissing(v){
 }
 export function voucherInput(v){return Object.fromEntries(Object.entries({...EMPTY_VOUCHER,...v}).filter(([k])=>fields.has(k)));}
 export function nativeVoucherCodes(data){return new Set(Object.entries(data.grids.PROMO_VOUCHER).filter(([key])=>/^AH\d+$/.test(key)&&Number(key.slice(2))>=3&&Number(key.slice(2))<=2500).map(([,v])=>voucherCode(v)).filter(Boolean));}
-export function voucherReference(v,i){const row=2501+i;return {row,M:v.label||v.code,AH:v.code,U:v.studentName,O:v.center,P:dateSerial(v.startDate),Q:dateSerial(v.endDate),R:v.status,Z:v.type==='amount'?'SỐ TIỀN':v.type==='percent'?'PHẦN TRĂM':'',AA:v.amount,V:v.rate,AB:v.minimum,AC:v.maximum,studentId:v.studentId,approvalNote:v.approvalNote,hubUrl:v.hubUrl||'',custom:true,version:v.version,updatedAt:v.updatedAt};}
+export function voucherReference(v,i){const row=2501+i;return {row,M:v.label||v.code,AH:v.code,U:v.studentName,O:v.center,P:dateSerial(v.startDate),Q:dateSerial(v.endDate),R:v.status,Z:v.type==='amount'?'SỐ TIỀN':v.type==='percent'?'PHẦN TRĂM':'',AA:v.amount,V:v.rate,AB:v.minimum,AC:v.maximum,studentId:v.studentId,approvalNote:v.approvalNote,hubUrl:v.hubUrl||'',policyId:v.policyId??'case-specific',percentBasis:v.percentBasis??'policy-default',custom:true,version:v.version,updatedAt:v.updatedAt};}
 export function withVoucherRegistry(base,vouchers){
  const native=nativeVoucherCodes(base),entries=vouchers.filter(v=>!native.has(voucherCode(v.code))).map((v,i)=>({...v,code:voucherCode(v.code),row:2501+i}));
  const grid=Object.fromEntries(Object.entries(base.grids.PROMO_VOUCHER).filter(([k])=>Number(k.replace(/^[A-Z]+/,''))<=2500));

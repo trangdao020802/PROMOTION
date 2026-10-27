@@ -12,6 +12,7 @@ export function regularMonthlyPrice(data,{course,hours,group}){
  if(rows.length!==1||!positive(row.F)||row.E!==3||row.G!==row.F*3)return null;
  const corrected=(policy.monthlyRates??[]).filter(r=>r.layer===layer&&r.hours===hour);
  if(policy.monthlyRates&&(corrected.length!==1||corrected[0].monthly!==row.F))return null;
+ if(policy.priceEvidence){const evidence=policy.priceEvidence.roadmap.filter(r=>r.key===row.A);if(evidence.length!==1||evidence[0].values.F!==row.F||evidence[0].values.G!==row.G||evidence[0].issues.length)return null;}
  const prices=(policy.prices??[]).filter(r=>text(r.C).toUpperCase()===text(course).toUpperCase()&&text(r.D)===`${hour} hrs/week`&&/^3\s+months?$/i.test(text(r.E))&&positive(r.J));
  if(prices.some(r=>r.J!==row.G))return null;
  return {kind:'regular-monthly',layer,hours:hour,monthly:row.F,refs:corrected[0]?.refs??[{file:'Lo_trinh_san_pham_CTKM_ATLS_2026.xlsx',sheet:'BẢNG GIÁ',row:row.row,cell:'F'+row.row}]};

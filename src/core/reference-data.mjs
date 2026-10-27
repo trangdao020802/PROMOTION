@@ -3,8 +3,8 @@ import {voucherCode,voucherReference} from './vouchers.mjs';
 // Each tab owns its source schema. In particular, a policy's label/price can
 // never be interpreted as Giftcode No, student, dates or voucher amount.
 export function referenceRows(data,section){
- if(section==='master')return data.prices??[];
- if(section==='prices')return (data.rules??[]).filter(row=>row.K||row.A);
+ if(section==='master')return data.priceCatalogue??data.prices??[];
+ if(section==='prices')return data.ruleCatalogue??(data.rules??[]).filter(row=>row.K||row.A);
  if(section==='vouchers')return (data.customVouchers??[])
   .filter(v=>typeof v.code==='string'&&voucherCode(v.code))
   .map(voucherReference);
