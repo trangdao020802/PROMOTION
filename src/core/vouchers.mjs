@@ -6,7 +6,7 @@ const fields=new Set(Object.keys(EMPTY_VOUCHER));
 export function validateVoucher(v){
  if(!v||typeof v!=='object'||Array.isArray(v)||Object.keys(v).some(k=>!fields.has(k)))return 'Thông tin voucher không hợp lệ.';
  if(typeof v.code!=='string'||!voucherCode(v.code)||v.code.length>150||/[\x00-\x1f\x7f]/.test(v.code))return 'Giftcode No cần từ 1 đến 150 ký tự, không xuống dòng.';
- for(const k of ['label','studentId','studentName','center','approvalNote'])if(typeof v[k]!=='string'||v[k].length>(k==='approvalNote'?2000:200))return 'Tên, học viên, trung tâm hoặc căn cứ voucher không hợp lệ.';
+ for(const k of ['label','studentId','studentName','center','approvalNote'])if(typeof v[k]!=='string'||v[k].length>(k==='approvalNote'||k==='center'?2000:200))return 'Tên, học viên, trung tâm hoặc căn cứ voucher không hợp lệ.';
  if(v.hubUrl&&(!voucherDetailURL(v.hubUrl)||v.hubUrl.length>2048)||v.hubCheckedAt&&(!/^\d{4}-\d{2}-\d{2}T/.test(v.hubCheckedAt)||!Number.isFinite(Date.parse(v.hubCheckedAt)))||v.hubStatus&&!['ACTIVE','CLOSED','INACTIVE','UNKNOWN'].includes(v.hubStatus))return 'Nguồn Voucher Hub không hợp lệ.';
  for(const k of ['startDate','endDate'])if(v[k]!==''&&dateSerial(v[k])===null)return 'Ngày hiệu lực voucher không hợp lệ.';
  if(v.startDate&&v.endDate&&v.startDate>v.endDate)return 'Ngày bắt đầu phải trước hoặc bằng ngày kết thúc voucher.';

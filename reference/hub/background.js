@@ -115,7 +115,8 @@ async function handle(m, sender) {
     }
     if(m.type==='voucher-codes'&&job.stage==='voucher-detail'&&V.voucherDetailURL(sender.url)===job.detailUrl){
       const codesUrl=V.voucherCodesURL(m.url,job.detailUrl);if(!codesUrl||!Array.isArray(m.pairs)||m.pairs.length>40)return {error:'List gift code không thuộc Voucher đang đọc.'};
-      const detailPairs=m.pairs.filter(p=>V.voucherLabel(p.label)&&typeof p.value==='string').map(p=>({label:String(p.label).slice(0,100),value:p.value.slice(0,1500),unit:String(p.unit??'').slice(0,20)}));
+      if(m.pairs.some(p=>typeof p.value==='string'&&p.value.length>(V.voucherLabel(p.label)==='centerCode'?2000:1500)))return {error:'Thông tin Voucher vượt giới hạn đọc; chưa tự điền.'};
+      const detailPairs=m.pairs.filter(p=>V.voucherLabel(p.label)&&typeof p.value==='string').map(p=>({label:String(p.label).slice(0,100),value:p.value,unit:String(p.unit??'').slice(0,20)}));
       job={...job,stage:'voucher-codes',codesUrl,detailPairs,resumes:0};await chrome.storage.session.set({job});await emit(job,{type:'progress',phase:'voucher-detail',message:'Đang xác nhận mã đầy đủ trong List gift code…'});await chrome.tabs.update(job.hubTab,{url:codesUrl,active:true});return {};
     }
     if(m.type==='voucher-complete'&&((job.stage==='voucher-detail'&&V.voucherDetailURL(sender.url)===job.detailUrl)||(job.stage==='voucher-codes'&&V.voucherCodesURL(sender.url,job.detailUrl)===job.codesUrl))){
@@ -123,7 +124,7 @@ async function handle(m, sender) {
       await finish(job,{type:'voucher-result',payload});return {};
     }
     if(m.type==='voucher-failure'){
-      const messages={ambiguous:'Hub trả nhiều Voucher; chưa xác định duy nhất mã đang tìm.',code_unconfirmed:'Chưa thấy Giftcode đầy đủ trong List gift code. Không dùng Code prefix để tự điền.',conflict:'Thông tin Voucher trên Hub có dữ liệu mâu thuẫn.',filters:'Hub chưa giữ đúng mã Giftcode trong ô tìm kiếm.',unsupported:'Chưa đọc được cấu trúc trang Voucher của Hub.',timeout:'Hub chưa hiển thị đủ Voucher hoặc List gift code trong thời gian chờ.'};
+      const messages={ambiguous:'Hub trả nhiều Voucher; chưa xác định duy nhất mã đang tìm.',code_unconfirmed:'Chưa thấy Giftcode đầy đủ trong List gift code. Không dùng Code prefix để tự điền.',conflict:'Thông tin Voucher trên Hub có dữ liệu mâu thuẫn.',unit:'Chưa xác định rõ đơn vị % hay VNĐ/đ cạnh Discount amount. Chưa tự điền mức giảm.',centers:'Chưa đọc đủ danh sách Center code trên Hub; chưa tự điền phạm vi.',filters:'Hub chưa giữ đúng mã Giftcode trong ô tìm kiếm.',unsupported:'Chưa đọc được cấu trúc trang Voucher của Hub.',timeout:'Hub chưa hiển thị đủ Voucher hoặc List gift code trong thời gian chờ.'};
       await finish(job,{type:'error',code:'voucher_'+(Object.hasOwn(messages,m.reason)?m.reason:'unsupported'),message:messages[m.reason]||messages.unsupported},false);return {};
     }
     return {};

@@ -24,6 +24,7 @@ var PromotionHubVoucher = (() => {
     VOUCHER_LABELS: () => VOUCHER_LABELS,
     giftcodeKey: () => giftcodeKey,
     hubDate: () => hubDate,
+    hubDiscountType: () => hubDiscountType,
     hubNumber: () => hubNumber,
     hubVoucherStatus: () => hubVoucherStatus,
     mergeHubVoucher: () => mergeHubVoucher,
@@ -86,6 +87,7 @@ var PromotionHubVoucher = (() => {
     "start date": "startDate",
     "end date": "endDate",
     "center": "center",
+    "center code": "centerCode",
     "region": "region",
     "status": "status",
     "description": "description",
@@ -117,6 +119,12 @@ var PromotionHubVoucher = (() => {
     const n = Number(s);
     return Number.isFinite(n) && n >= 0 && n <= 1e13 ? n : null;
   }
+  function hubDiscountType(value) {
+    const s = text(value), normalized = fold(s);
+    const percent = /%|\bpercent(?:age)?\b|\bphan tram\b/.test(normalized);
+    const amount = /[₫đĐ]/.test(s) || /\bvnd\b|\bdong\b|\bfixed(?: amount)?\b|\bamount\b|\bso tien\b/.test(normalized) || /^(?:\(?\s*)d(?:\s*\)?)$/i.test(s);
+    return percent && amount ? "conflict" : percent ? "percent" : amount ? "amount" : "";
+  }
   function hubVoucherStatus(value) {
     const s = fold(value);
     if (/^(?:inactive|disabled|cancelled|canceled|rejected|not applied|khong ap dung)$/.test(s)) return "INACTIVE";
@@ -133,7 +141,7 @@ var PromotionHubVoucher = (() => {
   function voucherPayload(value, expected, url) {
     const request = voucherRequest(expected), detail = voucherDetailURL(value?.url);
     if (!request || !value || typeof value !== "object" || Object.keys(value).some((k) => !payloadFields.has(k)) || giftcodeKey(value.code) !== request.code || !detail || url && detail !== voucherDetailURL(url)) return null;
-    for (const key of ["label", "center", "startDate", "endDate", "creator", "description", "studentId", "studentName", "checkedAt"]) if (typeof value[key] !== "string" || value[key].length > (key === "description" ? 1500 : 200)) return null;
+    for (const key of ["label", "center", "startDate", "endDate", "creator", "description", "studentId", "studentName", "checkedAt"]) if (typeof value[key] !== "string" || value[key].length > (key === "center" ? 2e3 : key === "description" ? 1500 : 200)) return null;
     if (value.startDate && hubDate(value.startDate) !== value.startDate || value.endDate && hubDate(value.endDate) !== value.endDate || value.startDate && value.endDate && value.startDate > value.endDate) return null;
     if (!["", "amount", "percent"].includes(value.type) || !["ACTIVE", "CLOSED", "INACTIVE", "UNKNOWN"].includes(value.status)) return null;
     for (const key of ["amount", "rate", "minimum", "maximum"]) if (value[key] !== null && (typeof value[key] !== "number" || !Number.isFinite(value[key]) || value[key] < 0 || value[key] > (key === "rate" ? 1 : 1e13))) return null;
@@ -156,10 +164,13 @@ var PromotionHubVoucher = (() => {
     const list = page.list ?? {}, row = exact[0] ?? {}, one = (key) => unique(key)[0] ?? "", conditions = text(list.conditions);
     const observed = conditions.match(/discount amount\s*:\s*([\d.,]+)\s*(%|VND|VNĐ|₫|đ)?/i);
     const discount = one("discount") || observed?.[1] || "", unit = pairs.filter((p) => voucherLabel(p.label) === "discount").map((p) => p.unit ?? "").join(" ");
-    const percent = /%|percent|phan tram/i.test([one("discountType"), discount, unit, observed?.[2]].join(" "));
-    const amount = hubNumber(discount), type = amount === null ? "" : percent ? "percent" : "amount";
-    if (percent && amount > 100) return { error: "amount" };
-    const scope = unique("center").join(", ") || unique("region").join(", ") || text(list.center);
+    const types = [...new Set([one("discountType"), discount, unit, ...!one("discount") ? [observed?.[2]] : []].map(hubDiscountType).filter(Boolean))];
+    const amount = hubNumber(discount);
+    if (amount !== null && (types.length !== 1 || types[0] === "conflict")) return { error: "unit" };
+    const type = amount === null ? "" : types[0];
+    if (type === "percent" && amount > 100) return { error: "amount" };
+    const rowCenters = [...new Set(exact.map((r) => text(r.centerCode)).filter(Boolean))];
+    const scope = rowCenters.join(", ") || unique("centerCode").join(", ") || unique("center").join(", ") || unique("region").join(", ") || text(list.center);
     const payload = {
       code: request.code,
       url,

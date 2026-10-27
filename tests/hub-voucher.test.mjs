@@ -19,6 +19,24 @@ test('Giftcode prefix and voucher label never supply a missing numeric discount'
  const p=page();p.pairs=p.pairs.filter(pair=>!/^Discount amount/.test(pair.label));const r=parseVoucherDetail(p,{code});assert.equal(r.payload.type,'');assert.equal(r.payload.rate,null);assert.equal(r.payload.amount,null);
  const fixed=page();fixed.pairs=fixed.pairs.map(p=>/^Discount amount/.test(p.label)?{...p,value:'1.500.000',unit:'₫'}:p);const f=parseVoucherDetail(fixed,{code}).payload;assert.equal(f.type,'amount');assert.equal(f.amount,1500000);assert.equal(f.rate,null);
 });
+test('the displayed Discount amount unit determines percent or VND, without a numeric default',()=>{
+ const discount=(value,unit)=>{const p=page();p.pairs=p.pairs.map(pair=>/^Discount amount/.test(pair.label)?{...pair,value,unit}:pair);return parseVoucherDetail(p,{code});};
+ for(const unit of ['đ','Đ','₫','VNĐ','VND','(đ)']){const p=discount('2.000.000',unit).payload;assert.equal(p.type,'amount',unit);assert.equal(p.amount,2000000,unit);assert.equal(p.rate,null);}
+ for(const unit of ['%','percent','Phần trăm']){const p=discount('15',unit).payload;assert.equal(p.type,'percent',unit);assert.equal(p.rate,.15);assert.equal(p.amount,null);}
+ assert.equal(discount('15','đ').payload.amount,15);
+ assert.equal(discount('2.000.000','%').error,'amount');
+ assert.equal(discount('2.000.000','').error,'unit');
+ assert.equal(discount('15','% đ').error,'unit');
+ const p=page();p.list.conditions='Minimum: 0 đ Discount amount: 2.000.000 đ Maximum: 0 đ';assert.equal(parseVoucherDetail(p,{code}).payload.rate,.15);
+});
+test('Center code overrides broad region and prefilled CT scope, using only the matched full code row',()=>{
+ const p=page();p.pairs.push({label:'Center code',value:'HN15.VP, HN22.NVO'});
+ let source=parseVoucherDetail(p,{code}).payload;assert.equal(source.center,'HN15.VP, HN22.NVO');
+ const merged=mergeHubVoucher({...EMPTY_VOUCHER,code},source,profile);assert.equal(merged.center,source.center);assert.equal(merged.studentId,profile.studentId);
+ p.giftcodes=[{code:'UNRELATED-CODE',centerCode:'HN99.OTHER'},{code,centerCode:'HN15.VP'}];source=parseVoucherDetail(p,{code}).payload;assert.equal(source.center,'HN15.VP');
+ const longCenters=Array.from({length:60},(_,i)=>'QA'+(i+1)+'.TEST').join(', ');p.giftcodes=[{code}];p.pairs=p.pairs.filter(p=>p.label!=='Center code');p.pairs.push({label:'Center code',value:longCenters});
+ const saved=voucherInput(mergeHubVoucher({...EMPTY_VOUCHER,code},parseVoucherDetail(p,{code}).payload,profile));assert.ok(saved.center.length>200);assert.equal(saved.center,longCenters);assert.equal(validateVoucher(saved),null);
+});
 test('profile identity fills blank voucher fields without inventing a Hub assignment',()=>{
  const filled=withVoucherProfile({...EMPTY_VOUCHER,code},profile);assert.equal(filled.studentId,profile.studentId);assert.equal(filled.studentName,profile.studentName);assert.equal(filled.center,profile.center);
  const wrong=withVoucherProfile({...EMPTY_VOUCHER,code,studentId:'SOMEONE-ELSE'},profile);assert.equal(wrong.studentName,'');assert.equal(wrong.center,'');
@@ -46,16 +64,17 @@ test('Voucher provenance allows only observed read/detail routes on the exact Hu
  assert.ok(voucherCodesURL('/giftcode/listgiftcode/12345',url));assert.ok(voucherCodesURL('/giftcode/codes?giftcodeId=12345',url));assert.equal(voucherCodesURL('/giftcode/listgiftcode/99999',url),null);assert.equal(voucherCodesURL('https://example.com/giftcode/listgiftcode/12345',url),null);
  assert.equal(voucherPayload({...payload(),code:'OTHER'},{code}),null);assert.equal(voucherPayload({...payload(),rate:5},{code}),null);
 });
-function bridgeWindow({capabilities=['voucher'],wrong=false}={}){
+function bridgeWindow({capabilities=['voucher'],wrong=false,version='1.6.1'}={}){
  const listeners=new Set(),target={location:{origin:'https://promotion-hub-2026.roundskunk11.chatgpt.site'},addEventListener:(type,fn)=>listeners.add(fn),removeEventListener:(type,fn)=>listeners.delete(fn),postMessage:m=>{
   if(m.direction!=='request'||m.action==='cancel')return;
-  const reply={channel:m.channel,direction:'response',id:m.id,...m.action==='ping'?{type:'ready',version:'1.6.0',capabilities}:{type:'voucher-result',payload:wrong?{...payload(),code:'OTHER'}:payload()}};
+  const reply={channel:m.channel,direction:'response',id:m.id,...m.action==='ping'?{type:'ready',version,capabilities}:{type:'voucher-result',payload:wrong?{...payload(),code:'OTHER'}:payload()}};
   queueMicrotask(()=>{for(const fn of listeners)fn({source:target,origin:target.location.origin,data:reply});});
  }};return target;
 }
 test('the Site bridge requires Voucher capability and validates returned identity',async()=>{
  assert.equal((await readHubVoucher(code,{window:bridgeWindow(),timeoutMs:100})).rate,.15);
- await assert.rejects(readHubVoucher(code,{window:bridgeWindow({capabilities:[]}),timeoutMs:100}),/1.6.0/);
+ await assert.rejects(readHubVoucher(code,{window:bridgeWindow({capabilities:[]}),timeoutMs:100}),/1.6.1/);
+ await assert.rejects(readHubVoucher(code,{window:bridgeWindow({version:'1.6.0'}),timeoutMs:100}),/1.6.1/);
  await assert.rejects(readHubVoucher(code,{window:bridgeWindow({wrong:true}),timeoutMs:100}),/không khớp/);
  const controller=new AbortController();controller.abort();await assert.rejects(readHubVoucher(code,{window:bridgeWindow(),signal:controller.signal,timeoutMs:100}),/Đã dừng/);
 });
