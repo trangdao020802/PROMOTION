@@ -14,6 +14,16 @@ const unique=a=>[...new Set(a.filter(x=>x!==null&&x!==undefined&&x!==''))];
 export function priceFor(data,cells,context){
  const course=text(cells.H),hours=Number(/^([34])\s*(?:hrs|hours|giờ)/i.exec(text(cells.I))?.[1]),date=cells.D,pkg=auditPackageKey(cells.J,cells.L,date,packageKey(cells.J),data.policy.auditPolicy);
  const layer=Number(/^(?:ATLS|AGLS) - New Price 2026 - Layer ([123])$/i.exec(course)?.[1]);
+ // A named September cash offer owns its fixed VND column. An October
+ // invoice can require approval, but cannot change that offer into Q4's rate.
+ const septemberCash=text(cells.L).split(';').some(label=>discountPolicyMatch(label,date).ruleKey==='BBSEP26_CASH');
+ if(septemberCash){
+  const row=data.policy.roadmap.find(r=>r.A===`${layer}|${hours}|${pkg}`);
+  if(!row||!/^ATLS\b/i.test(course)||text(context.group).toUpperCase()!=='ATLS'||/VTDH|vững tin/i.test([course,cells.J,cells.L].join(' '))||!['G','K','N','E'].every(k=>number(row[k])))return null;
+  return {row,hours,pkg,layer,phase:'base',policyKey:'BBSEP26_CASH',months:row.E,gross:row.G,discount:row.K,maxTerms:row.N,straight:row.M??0,loyalty:0,referral:0,
+   issue:between(date,'2026-09-01','2026-09-30')?null:'CHECK - NGOÀI THỜI KỲ DISCOUNT BIG BANG SEP',
+   refs:[{file:'Lo_trinh_san_pham_CTKM_ATLS_2026.xlsx',sheet:'BẢNG GIÁ',row:row.row,cell:'K'+row.row}]};
+ }
  if(data.policy.auditPolicy){const matched=auditPriceFor(data,{course,hours,pkg,date,layer,cells,context});if(matched)return matched;}
  const separatePolicy=/VTDH|vững tin/i.test([course,cells.J,cells.L].join(' '));
  const row=data.policy.roadmap.find(r=>r.A===`${layer}|${hours}|${pkg}`);
@@ -42,14 +52,13 @@ class IndependentCalculator{
   if(label&&label!=='0'&&pricing&&!pricing.short){
    const terms=label.split(';').map(s=>s.trim()).filter(Boolean),matches=terms.map(s=>discountPolicyMatch(s,cells.D));
    const base=/học bổng (đồng hành|ghi danh)|new price 2026.*(đồng hành|ghi danh)/i.test(label)&&pricing.phase==='base';
-   const september=/Big Bang Sep/i.test(label)&&between(cells.D,'2026-09-01','2026-09-30');
+   const september=pricing.policyKey==='BBSEP26_CASH';
    const special=/Special (?:30%|Support)/i.test(label)&&between(cells.D,'2026-06-24','2026-12-31');
    const supported=terms.length<=4&&matches.every((m,i)=>!!m.ruleKey||/học bổng (đồng hành|ghi danh)|Special (?:30%|Support)|Big Bang Sep|Flash Sale/i.test(terms[i]));
    if(supported&&(base||september||special||matches.some(m=>m.ruleKey))){
     const cashOffer=base||september||special||matches.some(m=>m.kind==='cash');
-    cells.N=september&&pricing.row?pricing.row.K:special?Math.round(cells.M*.3):cashOffer?pricing.discount:0;
+    cells.N=special?Math.round(cells.M*.3):cashOffer?pricing.discount:0;
     cells.AL=special?'SPECIAL30':base?'BASE2026':september?'BBSEP26_CASH':match.ruleKey||matches.find(m=>m.ruleKey)?.ruleKey||'OTHER';
-    if(september&&pricing.row&&/installment/i.test(text(context.method)))cells.S=pricing.row.N;
     if(special){cells.S=0;if(!/RGI|TPU|LNQ|LBB/i.test(text(cells.B)))checks.push('CHECK - NGOÀI 4 TRUNG TÂM');checks.push('XÁC MINH - HỌC BỔNG ĐẶC BIỆT: cần căn cứ cấp code đúng học viên/gói.');}
     if(/Flash Sale/i.test(label)){
      if(Math.floor(cells.D)!==dateSerial('2026-08-26'))checks.push('CHECK - NGOÀI NGÀY FLASH SALE');
@@ -113,7 +122,7 @@ class IndependentCalculator{
   cells.ctCheck=reconciliation.status;cells.promoCheck=promotion.status;cells.contractTotal=account.ct||'';cells.ctNet=account.ct?account.net:null;
   const complete=['Z','AA','AB','AC','AD'].every(k=>number(cells[k])&&Math.abs(cells[k])<=1);
   cells.AF=complete&&cells.AE==='OK'&&cells.BD==='OK'&&cells.BO==='OK'&&['OK','NO GIFTCODE'].includes(cells.CI)&&!promotion.blocking&&!reconciliation.blocking?'OK':'CHECK';
-  cells.AN=unique([pricing?pricing.refs.map(r=>r.file+' · '+r.sheet+' · dòng '+r.row).join('; '):'Chưa có quy tắc giá đúng Course fee / giờ / gói / ngày.',number(cells.Q)?'Phải đóng = giá niêm yết − discount − giftcode. Transfer là phân bổ tiền, không trừ học phí lần hai.':'Chưa đủ dữ liệu để tính; ô trống không được coi là 0.',code?(voucherBasisFor(data,cells.D)==='gross'?'Giftcode % trên giá trước giảm: ca đối chiếu Audit v7 tháng 9–10 / cột O.':'Giftcode % theo cơ sở trước giảm trừ discount của bảng giá nguồn ngoài phạm vi ca Audit.'):'',loyaltyMissing?'Cần lịch sử học phí và ngày dừng học để xét loyalty.':'',...promotion.checks]).join(' | ');
+  cells.AN=unique([pricing?pricing.refs.map(r=>r.file+' · '+r.sheet+' · dòng '+r.row+(r.cell?' · ô '+r.cell:'')).join('; '):'Chưa có quy tắc giá đúng Course fee / giờ / gói / ngày.',number(cells.Q)?'Phải đóng = giá niêm yết − discount − giftcode. Transfer là phân bổ tiền, không trừ học phí lần hai.':'Chưa đủ dữ liệu để tính; ô trống không được coi là 0.',code?(voucherBasisFor(data,cells.D)==='gross'?'Giftcode % trên giá trước giảm: ca đối chiếu Audit v7 tháng 9–10 / cột O.':'Giftcode % theo cơ sở trước giảm trừ discount của bảng giá nguồn ngoài phạm vi ca Audit.'):'',loyaltyMissing?'Cần lịch sử học phí và ngày dừng học để xét loyalty.':'',...promotion.checks]).join(' | ');
   return {...record,cells,context,errors:[],reconciliation,promotion,pricing,tolerance};
  }
 }

@@ -63,6 +63,37 @@ test('the agreed 36/36 siblings mapping selects half the price and still require
  const {engine}=fixture({pkg:'36 months',label:'2026 October - Promotion Discount - 36/36 siblings - From 06/10',gross:77400000,discount:23220000,net:54180000,totalHours:300});
  const r=calculate(engine);assert.equal(r.cells.AK,'36 SPLIT');assert.equal(r.cells.M,77400000);assert.equal(r.cells.N,23220000);assert.equal(r.cells.R,null);assert.ok(r.reviewItems.some(i=>i.id==='sibling'&&!i.approved));
 });
+const septemberSplit='Big Bang Sep 2026 - Giảm Tiền - Layer 1 - 36 months (chia đôi) - 3hrs/week';
+test('Big Bang Sep cash offers use every roadmap fixed-amount cell, including October invoices',()=>{
+ for(const row of p.roadmap){
+  const label=`Big Bang Sep 2026 - Giảm Tiền - Layer ${row.B} - ${row.D==='36 SPLIT'?'36 months (chia đôi)':row.D+' months'} - ${row.C}hrs/week`;
+  for(const when of ['2026-09-15','2026-10-05','2026-10-10']){
+   const matched=priceFor({policy:p},{H:`ATLS - New Price 2026 - Layer ${row.B}`,I:row.C+' hrs/week',J:row.D==='36 SPLIT'?'18 months siblings':row.D+' months',D:date(when),L:label},{group:'ATLS',contractType:'New'});
+   assert.equal(matched?.discount,row.K,`${row.A} · ${when}`);assert.equal(matched?.gross,row.G);assert.equal(matched?.maxTerms,row.N);assert.equal(matched?.policyKey,'BBSEP26_CASH');assert.equal(matched?.refs[0].cell,'K'+row.row);
+  }
+ }
+});
+test('the reported sibling course calculates 18 million discount and 40.05 million payable',()=>{
+ for(const when of ['2026-09-15','2026-10-10']){
+  const {engine}=fixture({pkg:'18 months siblings',hours:'3 hrs/week',label:septemberSplit,when,gross:58050000,discount:18000000,net:40050000,totalHours:225});
+  const r=calculate(engine);assert.equal(r.cells.M,58050000);assert.equal(r.cells.N,18000000);assert.equal(r.cells.O,0);assert.equal(r.cells.Q,40050000);assert.equal(r.cells.AA,0);assert.equal(r.cells.AK,'36 SPLIT');assert.equal(r.cells.S,12);assert.ok(r.cells.AN.includes('ô K31'));
+  assert.ok(r.reviewItems.some(i=>i.id==='sibling'&&!i.approved));
+  if(when==='2026-10-10'){assert.equal(r.cells.AF,'CHECK');assert.ok(r.promotion.checks.some(s=>s.includes('NGOÀI THỜI KỲ')));}
+ }
+});
+test('Q4 and base October retain their own sibling columns when the selected discount changes',()=>{
+ const {engine}=fixture({pkg:'18 months siblings',hours:'3 hrs/week',label:septemberSplit,gross:58050000,discount:18000000,net:40050000});
+ assert.equal(calculate(engine).cells.N,18000000);
+ assert.equal(calculate(engine,{L:'2026 October - Promotion Discount - 36/36 siblings - From 06/10'}).cells.N,17415000);
+ assert.equal(calculate(engine,{L:''}).cells.N,0);
+ const beforeQ4=fixture({pkg:'18 months siblings',hours:'3 hrs/week',label:'2026 October - Promotion Discount - 36/36 siblings',when:'2026-10-05'});
+ assert.equal(calculate(beforeQ4.engine).cells.N,13351500);
+});
+test('a missing September cash rule never falls through to a Q4 percentage or collected money',()=>{
+ const policy=structuredClone(p);policy.roadmap=policy.roadmap.filter(r=>r.A!=='1|3|36 SPLIT');
+ const {b}=fixture({pkg:'18 months siblings',hours:'3 hrs/week',label:septemberSplit,gross:58050000,discount:18000000,net:40050000});
+ const r=calculate(new AuditEngine(buildModel(b,policy)));assert.equal(r.cells.M,null);assert.equal(r.cells.N,null);assert.equal(r.cells.Q,null);assert.equal(r.cells.AF,'CHECK');
+});
 test('missing Audit coverage still uses an independently approved price reference',()=>{
  const policy=structuredClone(p);policy.prices.push({C:'Khóa khác có bảng giá riêng',D:'2 hrs/week',E:'1 months',J:9000000,I:'Bảng giá được duyệt ngoài Audit',row:999});
  const matched=priceFor({policy},{H:'Khóa khác có bảng giá riêng',I:'2 hrs/week',J:'1 months',D:date('2026-10-10')},{group:'OTHER',contractType:'New'});
