@@ -8,7 +8,7 @@ Audit chỉ tổng hợp các policy tháng 9–10 và những ca có trong Paym
 | Nội dung | Căn cứ trong Audit | Cách áp dụng |
 | --- | --- | --- |
 | Giá gốc / giá theo kỳ | RULE A3:I56, K3:AR134; CHECK M | Tra đúng layer, giờ/tuần, package và ngày; không lấy tiền đã thu làm giá |
-| Gói lẻ | RULE A51:I56; CHECK M/N/R/S, BD | Giá một tháng đã duyệt × số tháng khi chưa có giá gói; New, đúng kỳ, không nội suy ưu đãi dài hạn |
+| Gói lẻ | Bảng giá chung: giá gốc RULE_ATLS; Lộ trình BẢNG GIÁ cột F gói 3T | Đơn giá 1 tháng **chưa giảm** × số tháng khi chưa có giá gói riêng. Không nhân từ giá trải nghiệm trong Audit RULE 51–56. Discount/Giftcode kiểm riêng; giữ kiểm kỳ và không nội suy ưu đãi dài hạn |
 | Chuyển kỳ 06/10 | RULE Z83:Z84 và các dòng BBQ426/OCT26 | Chọn đúng bảng và mức giảm trước/sau ngày hiệu lực |
 | Voucher % | CHECK O; HUONG_DAN B4 | Làm tròn giá trước giảm × tỷ lệ; áp dụng sàn/trần với voucher phần trăm; voucher số tiền giữ giá trị cố định |
 | Phải đóng | CHECK Q | max(0, giá gốc − discount − giftcode). Web đối chiếu ở cấp CT tổng: tiền chuyển đã nằm trong tổng thu nên không trừ lần nữa |
@@ -39,4 +39,6 @@ Times City có mã `HN24.TC` trong PaymentList/Export và `HN24.TCY` ở sổ vo
 
 Các ca tự động dùng dữ liệu giả: CT trung gian, nhiều bước chuyển, nguồn thiếu Export, sai ngày chốt, chuyển một phần, khác học viên, nhiều nhánh, vòng chuyển và giữ đúng khóa học CT cuối; cùng các công thức giá/voucher/giờ/ngưỡng và điều kiện ở bảng trên.
 
-Việc đối chiếu giá tham chiếu chạy trên 95 dòng có giá CALC dạng số của workbook: 95/95 khớp giá gốc sau khi dùng đúng lịch 36/36 siblings. Đây là kiểm tra giá gốc; không phải xác nhận toàn bộ 200 trạng thái AF theo học viên. Bản Excel kiểm theo từng payment, còn web tổng hợp theo CT nhận cuối. Minh chứng, RCM giữ policy cũ, dữ liệu lịch sử thiếu và policy chưa có đủ đầu vào vẫn cần xác minh; không sao chép trạng thái OK của Excel sang web.
+Lần đối chiếu ban đầu chạy trên 95 dòng có giá CALC dạng số của workbook và khớp 95/95 sau khi dùng đúng lịch 36/36 siblings. Đây là kết quả kiểm trước bản sửa đơn giá tháng ngày 27/10, không phải chuẩn để giữ giá trải nghiệm đã giảm trong các gói lẻ. Theo yêu cầu người dùng và bảng giá mới, RULE 51–56 được chuẩn hóa sang giá tháng chưa giảm, lưu giá cũ trong metadata `monthlyPriceSource.corrections`. Xem `monthly-gross-price.md`.
+
+Kiểm tra trên không xác nhận toàn bộ 200 trạng thái AF theo học viên. Bản Excel kiểm theo từng payment, còn web tổng hợp theo CT nhận cuối. Minh chứng, RCM giữ policy cũ, dữ liệu lịch sử thiếu và policy chưa có đủ đầu vào vẫn cần xác minh; không sao chép trạng thái OK của Excel sang web.

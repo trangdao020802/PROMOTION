@@ -100,3 +100,5 @@ Cầu nối Hub 1.6.1 tự tra Giftcode đầy đủ tại `/giftcode/manage`, m
 Bản 1.6.1 đọc đơn vị ngay cạnh Discount amount: `15 %` là 15%, `2.000.000 đ` là số tiền 2.000.000 VND. Không có đơn vị rõ thì dừng tự điền. Center ưu tiên cột Center code của đúng mã hoặc bảng Center code tại trang chi tiết, đọc tiếp nếu phân trang; không thay bằng North/South khi đã có mã center. Cần cập nhật cầu nối rồi bấm Tìm & tự điền từ Hub để sửa lại voucher đã đọc trước đó, kiểm tra và Lưu voucher & tính lại.
 
 Discount Big Bang Sep giảm tiền lấy cột K theo Layer/giờ/gói trước bảng bổ sung Audit. Chứng từ tháng 10 giữ đúng số giảm, vẫn kiểm tra thời kỳ và điều kiện riêng. Case Layer 1, 3 giờ/tuần, 36 tháng chia đôi: 58.050.000 − 18.000.000 = 40.050.000 trước Giftcode (BẢNG GIÁ!G31/K31/L31). Chi tiết: `docs/big-bang-september-discount.md`.
+
+Gói lẻ dùng đơn giá tháng **chưa giảm** từ bảng giá thường gói 3T để nhân số tháng. Rule 51–56 hiển thị giá đã sửa; giữ giá trải nghiệm cũ trong metadata để truy vết. Layer 1, 3 giờ/tuần: 3.600.000/tháng, 2 tháng 7.200.000. Discount và Giftcode tính riêng. Xem `docs/monthly-gross-price.md`.

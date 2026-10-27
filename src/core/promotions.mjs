@@ -1,3 +1,4 @@
+import {regularMonthlyPrice} from './monthly-price.mjs';
 export const normalize = value => String(value ?? '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/g,'d');
 const serial = value => value ? (Date.parse(value+'T00:00:00Z') - Date.UTC(1899,11,30)) / 86400000 : null;
 const inWindow = (p, date) => (p.from == null || date >= serial(p.from)) && (p.to == null || date < serial(p.to)+1);
@@ -62,22 +63,12 @@ export function discountPolicyCheck(label,date,regime,grid){
  return 'OK';
 }
 
-// The workbook's odd-package fallback multiplies the one-month TRIAL price.
-// Only the regular 2026 two-month package is extended here: the roadmap's
-// regular three-month unit price must agree with every matching master row.
-// Observed invoices and received cash never supply a calculated price.
+// Kept for the original engine: the same pre-discount monthly source is used
+// for a regular two-month package. No trial rate or invoice supplies a price.
 export function regularTwoMonthPrice(data,{course,hours,package:pkg,group}){
- const match=/^(ATLS|AGLS) - New Price 2026 - Layer ([123])$/i.exec(String(course??'').trim());
- const weekly=/^([34])\s+hrs\/week$/i.exec(String(hours??'').trim());
- if(!match||!weekly||!/^2\s+months?$/i.test(String(pkg??'').trim())||!['ATLS','AGLS'].includes(String(group??'').trim().toUpperCase()))return null;
- const ext=data.extensions,roadmap=ext?.roadmap?.filter(r=>r.A===`${match[2]}|${weekly[1]}|3`)??[];
- const prices=ext?.prices?.filter(r=>String(r.C).toUpperCase()===match[0].toUpperCase()&&r.D===`${weekly[1]} hrs/week`&&r.E==='2 months')??[];
- const monthly=roadmap[0]?.F,amount=monthly*2;
- if(roadmap.length!==1||!(monthly>0)||!Number.isFinite(amount)||!prices.length||prices.some(r=>r.H!==amount||r.K!==amount))return null;
- return {kind:'regular-two-month',monthly,amount,refs:[
-  {file:'Lo_trinh_san_pham_CTKM_ATLS_2026.xlsx',sheet:'BẢNG GIÁ',row:roadmap[0].row},
-  {file:'Bang_gia_chung_doi_chieu_Report.xlsx',sheet:'Bảng giá chung',rows:prices.map(r=>r.row)}
- ]};
+ if(!/^2\s+months?$/i.test(String(pkg??'').trim()))return null;
+ const unit=regularMonthlyPrice(data,{course,hours,group});
+ return unit?{...unit,kind:'regular-two-month',amount:unit.monthly*2}:null;
 }
 
 export function matchingPrograms(label, programs, date) {

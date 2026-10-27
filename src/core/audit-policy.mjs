@@ -1,16 +1,18 @@
 // Normalized rules from the agreed Audit workbook. No cached transaction
 // result or collected amount supplies a price or a discount.
+import {regularMonthlyPrice} from './monthly-price.mjs';
 const text=x=>String(x??'').trim();
 export function auditPriceFor(data,{course,hours,pkg,date,layer,cells,context}){
  const audit=data.policy.auditPolicy;
  if(!audit||!layer||!hours||/VTDH|vững tin/i.test([course,cells.J,cells.L].join(' '))||/weeks?|tuần/i.test(text(cells.J)))return null;
  const row=data.policy.roadmap.find(r=>r.A===`${layer}|${hours}|${pkg}`),key=`ATLS|${layer}|${hours}|${pkg}`;
- const base=audit.baseTuition.find(r=>r.A===key),unit=audit.baseTuition.find(r=>r.A===`ATLS|${layer}|${hours}|1`);
+ const base=audit.baseTuition.find(r=>r.A===key);
  const ref=r=>[{file:audit.sourceFile,sheet:'RULE',row:r.row}];
  const phase=date>=audit.q4From&&date<audit.q4To+1?'q4':date>=audit.octoberFrom&&date<audit.q4From?'october':date>=audit.newFrom&&date<audit.octoberFrom?'base':null;
- if((!base||base.row>=51)&&unit&&['ATLS','AGLS'].includes(text(context.group).toUpperCase())&&typeof pkg==='number'&&pkg>0&&pkg<=120){
-  const issue=date<audit.shortFrom||date>=audit.shortTo+1?'CHECK - GÓI LẺ NGOÀI KỲ GIÁ THAM CHIẾU':!/^new$/i.test(text(context.contractType))?'CHECK - GIÁ THÁNG GÓI LẺ DÀNH CHO NEW':text(cells.L)&&text(cells.L)!=='0'?'CHECK - ƯU ĐÃI GÓI LẺ CẦN RULE RIÊNG':null;
-  return {row,hours,pkg,layer,phase,short:true,issue,months:pkg,gross:Math.round(unit.E*pkg),discount:Math.round((unit.F||0)*pkg),maxTerms:unit.G??0,straight:0,loyalty:0,referral:0,refs:ref(unit)};
+ if((!base||base.row>=51)&&['ATLS','AGLS'].includes(text(context.group).toUpperCase())&&Number.isInteger(pkg)&&pkg>0&&pkg<=120){
+  const monthly=regularMonthlyPrice(data,{course,hours:cells.I,group:context.group}),hasOffer=!!text(cells.L)&&text(cells.L)!=='0';
+  const issue=!monthly?'CHECK - CHƯA CÓ ĐƠN GIÁ THÁNG CHƯA GIẢM HỢP LỆ':!Number.isFinite(date)?'CHECK - THIẾU NGÀY ÁP DỤNG GIÁ':date<audit.shortFrom||date>=audit.shortTo+1?'CHECK - GÓI LẺ NGOÀI KỲ GIÁ THAM CHIẾU':hasOffer?'CHECK - ƯU ĐÃI GÓI LẺ CẦN RULE RIÊNG':null;
+  return {row,hours,pkg,layer,phase,short:true,issue,months:pkg,monthly:monthly?.monthly??null,gross:monthly?Math.round(monthly.monthly*pkg):null,discount:hasOffer?null:0,maxTerms:0,straight:0,loyalty:0,referral:0,refs:monthly?.refs??[]};
  }
  if(!base||!phase)return null;
  if(['q4','october'].includes(phase)&&(!/^ATLS\b/i.test(course)||text(context.group).toUpperCase()!=='ATLS'))return null;

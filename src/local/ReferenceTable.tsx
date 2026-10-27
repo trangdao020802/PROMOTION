@@ -5,7 +5,7 @@ const value=(v:any)=>v===null||v===undefined||v===''?'—':typeof v==='number'?v
 const date=(v:any)=>typeof v==='number'&&Number.isFinite(v)?new Date(Date.UTC(1899,11,30)+v*86400000).toLocaleDateString('vi-VN',{timeZone:'UTC'}):'—';
 const statuses:any={PENDING:'Chờ bổ sung / duyệt',APPROVED:'Đã duyệt',CLOSED:'Đã đóng · có duyệt',REJECTED:'Từ chối',INACTIVE:'Không áp dụng'};
 export default function ReferenceTable({section,rows,disabled,onVoucherEdit}:any){
- const columns=section==='master'?['Dòng','Group / KOC','Course fee KOC','Giờ/tuần','Gói','Layer','Giá tham chiếu','Nguồn giá','Giá Audit','Giá quan sát Report']
+ const columns=section==='master'?['Dòng','Group / KOC','Course fee KOC','Giờ/tuần','Gói','Layer','Giá tham chiếu','Nguồn giá','Giá gốc / CALC','Giá quan sát Report']
   :section==='prices'?['Dòng','Khóa chính sách','Layer','Giờ/tuần','Gói','Học phí / CALC','Ưu đãi nền / giảm tiền','Kỳ trả góp','Căn cứ / ghi chú']
   :['Dòng','Giftcode No','Học viên / Student ID','Center','Từ ngày','Đến ngày','Trạng thái','Loại giảm','Giá trị / tỷ lệ','Chỉnh sửa'];
  return <div className="reference-scroll"><table key={section} className="reference-table" aria-label={section==='vouchers'?'Danh sách voucher':section==='prices'?'Quy tắc giá':'Bảng giá chung'}>

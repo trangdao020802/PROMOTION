@@ -20,8 +20,8 @@ test('Audit v7 price regimes change on 6 October and preserve the 25/6 hour fact
  assert.equal(price(18,3).gross,56700000);assert.equal(price(18,3).discount,8505000);assert.equal(price(18,3).maxTerms,9);
  assert.equal(p.hourFactor,25/6);assert.equal(p.auditPolicy.moneyTolerance,1000);
 });
-test('Audit v7 one/two/odd-month prices use the approved trial month, with explicit short-package checks',()=>{
- assert.equal(price(1).gross,3600000);assert.equal(price(2).gross,7200000);assert.equal(price(2,3).gross,5200000);assert.equal(price(5,3).gross,13000000);
+test('one/two/odd-month prices multiply the regular month before discount, with explicit policy checks',()=>{
+ assert.equal(price(1).gross,4800000);assert.equal(price(2).gross,9600000);assert.equal(price(2,3).gross,7200000);assert.equal(price(5,3).gross,18000000);
  assert.equal(price(2).maxTerms,0);assert.ok(price(2,4,'2026-11-01').issue.includes('NGOÀI KỲ'));
  assert.ok(price(2,4,'2026-10-10',{L:'Q4 2026 Promotion Discount'}).issue.includes('RULE RIÊNG'));
 });
