@@ -196,17 +196,22 @@ export function buildAccounts(input,{contractSummaries=false}={}) {
 
 export function financialResult(account, cells, tolerance = 1) {
   if (!account) return {status:'XÁC MINH - CHƯA CÓ DỮ LIỆU CT', blocking:true, target:null, calcTarget:null, overpaid:null};
-  const calcTarget = ['M','N','O'].every(c => typeof cells[c] === 'number') && cells.M > 0 && Number(cells.AJ) > 0 && cells.AK
-    ? cells.M - cells.N - cells.O : null;
+  const number = value => typeof value === 'number' && Number.isFinite(value);
+  const calcTarget = number(cells.Q) ? cells.Q : null;
+  const received = number(cells.W) ? cells.W : null;
   const target = typeof account.paid?.target === 'number' && account.paid.target > 0 ? account.paid.target
     : typeof account.snapshot?.target === 'number' && account.snapshot.target > 0 ? account.snapshot.target : null;
+  // Compare the displayed Q (CALC due) and W (funded cash/allocation).
+  // Source warnings stay in the trace; they neither override a completed
+  // amount comparison nor supply a missing amount.
+  const comparison={target,calcTarget,received,difference:calcTarget!==null&&received!==null?received-calcTarget:null};
+  if (comparison.difference !== null) {
+    const difference=comparison.difference;
+    if (difference > tolerance) return {...comparison,status:`CHECK - THỪA TIỀN CT ${Math.round(difference).toLocaleString('vi-VN')} đ`, blocking:true, overpaid:difference};
+    if (difference < -tolerance) return {...comparison,status:`CÒN THIẾU CT ${Math.round(-difference).toLocaleString('vi-VN')} đ`, blocking:true, overpaid:0};
+    return {...comparison,status:'OK', blocking:false, overpaid:0};
+  }
   if (account.warnings.length || !account.ct || account.otherPayments === null)
-    return {status:'XÁC MINH - CHỨNG TỪ / LIÊN KẾT CT', blocking:true, target, calcTarget, overpaid:null};
-  if (target === null) return {status:'XÁC MINH - CHƯA CÓ GIÁ TRỊ CT Ở NGUỒN', blocking:true, target, calcTarget, overpaid:null};
-  const difference = account.net - target;
-  if (difference > tolerance) return {status:`CHECK - THỪA TIỀN CT ${Math.round(difference).toLocaleString('vi-VN')} đ`, blocking:true, target, calcTarget, overpaid:difference};
-  if (difference < -tolerance) return {status:`CÒN THIẾU CT ${Math.round(-difference).toLocaleString('vi-VN')} đ`, blocking:true, target, calcTarget, overpaid:0};
-  if (calcTarget === null) return {status:'KHỚP CT - CẦN XÁC MINH CALC', blocking:true, target, calcTarget, overpaid:0};
-  if (Math.abs(calcTarget-target)>tolerance) return {status:'CHECK - GIÁ TRỊ CT KHÁC CALC', blocking:true, target, calcTarget, overpaid:0};
-  return {status:'KHỚP', blocking:false, target, calcTarget, overpaid:0};
+    return {...comparison,status:'XÁC MINH - CHỨNG TỪ / LIÊN KẾT CT', blocking:true, overpaid:null};
+  return {...comparison,status:calcTarget===null?'KHỚP CT - CẦN XÁC MINH CALC':'XÁC MINH - CHƯA CÓ TỔNG THU / PHÂN BỔ CT', blocking:true, overpaid:null};
 }

@@ -20,6 +20,12 @@ test('recalculates one CT independently from Payment, Export and the roadmap',()
  const b=fixture();assert.equal(validateBundle(b),null);const r=calc(b);
  assert.equal(r.cells.M,103200000);assert.equal(r.cells.N,27864000);assert.equal(r.cells.Q,75336000);assert.equal(r.cells.R,400);assert.equal(r.cells.S,12);assert.equal(r.cells.AF,'OK');
 });
+test('matching CALC and receipts clear the CT comparison while preserving trace warnings and other checks',()=>{
+ const b=fixture();b.exports[0].paid-=2000;let r=calc(b);
+ assert.equal(r.cells.Q,r.cells.W);assert.equal(r.cells.ctCheck,'OK');assert.equal(r.reconciliation.blocking,false);assert.equal(r.cells.AF,'OK');
+ assert.ok(r.reconciliation.warnings.some(w=>w.includes('PAID_BY_CONTRACT')));
+ r=calc(b,{K:'QA-UNAPPROVED'});assert.equal(r.cells.Q,null);assert.equal(r.cells.AF,'CHECK');assert.notEqual(r.cells.CI,'OK');
+});
 test('deduplicates the same invoice across files and leaves child course fields empty',()=>{
  const b=fixture();b.sources.push({...b.sources[0],key:'history',fileIndex:3});b.cash.push({...structuredClone(b.cash[0]),sourceKey:'history'});
  const r=calc(b);assert.equal(r.cells.W,75336000);assert.equal(r.receipts.length,1);assert.deepEqual(r.receipts[0].cells,{H:null,I:null,J:null});

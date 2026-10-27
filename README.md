@@ -86,3 +86,8 @@ Nguồn tham khảo hosting: https://docs.github.com/en/pages/getting-started-wi
 ## Phân loại RULE và kiểm Giftcode
 
 Quy tắc giá và Voucher dùng hai mô hình/bảng riêng: lưu voucher sẽ dựng lại danh sách mã đã nhập, không giữ lẫn các dòng BASE OCT/BASE 2026. Center Times City `HN24.TCY` trong voucher được đối chiếu với `HN24.TC` của PaymentList/Export; học viên, ngày hiệu lực, mức giảm và căn cứ duyệt vẫn kiểm riêng.
+
+
+## Đối chiếu CALC với tổng thu CT
+
+Cột đối chiếu tiền theo CT so trực tiếp `Phải đóng theo CT (CALC)` (Q) với `Tổng thu / phân bổ CT` (W). Hai số khớp theo ngưỡng kỳ thì trả `OK`, kể cả khi còn cảnh báo nguồn/Export; cảnh báo giữ trong truy vết. Ô trống không được coi là 0. Thiếu/thừa tiền và các kiểm tra Giftcode, policy, trả góp, khóa học, duyệt vẫn độc lập.

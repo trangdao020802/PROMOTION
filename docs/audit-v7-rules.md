@@ -25,6 +25,10 @@ Audit chỉ tổng hợp các policy tháng 9–10 và những ca có trong Paym
 
 CT tổng được xác định từ dòng tiền đã được chứng minh, không từ việc hai dòng có cùng Student ID hoặc được sửa thành cùng khóa học. CT chuyển hết tiền đến một CT cuối duy nhất của cùng học viên được đưa vào lịch sử của CT cuối. Giá/gói và chỉnh sửa của CT cuối được giữ riêng. CT chưa chuyển hết, khác học viên, nhiều nhánh, luồng vòng hoặc thiếu hóa đơn gốc tiếp tục cần kiểm tra.
 
+## Đối chiếu tiền theo CT
+
+Cột đối chiếu tiền theo CT so trực tiếp Phải đóng theo CT (CALC, Q) với Tổng thu/phân bổ CT (W). Hai số đã xác định khớp theo ngưỡng kỳ thì trạng thái là OK; cảnh báo chứng từ/Export giữ trong truy vết. Ô chưa tính không được coi là 0. Thiếu/thừa tiền theo Q/W và các kiểm tra policy, voucher, khóa học, trả góp, duyệt vẫn độc lập.
+
 ## Phân loại quy tắc và Giftcode
 
 Bảng giá chung, RULE và Voucher lấy dữ liệu từ ba cấu trúc riêng. Voucher chỉ dùng sổ mã Giftcode đã nhập, gồm cả mã đang chờ bổ sung; không chuyển nhãn chính sách như BASE OCT/BASE 2026 thành mã voucher và không giữ các dòng giá bị lẫn trong danh sách hiển thị cũ.
