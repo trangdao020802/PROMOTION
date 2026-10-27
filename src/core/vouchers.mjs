@@ -1,5 +1,5 @@
 import {dateSerial} from './verification.mjs';
-export const voucherCode=value=>String(value??'').trim().toUpperCase();
+export const voucherCode=value=>{const code=String(value??'').trim().toUpperCase();return code==='0'?'':code;};
 export const EMPTY_VOUCHER={code:'',label:'',studentId:'',studentName:'',center:'',startDate:'',endDate:'',type:'',amount:null,rate:null,minimum:null,maximum:null,status:'PENDING',approvalNote:''};
 const fields=new Set(Object.keys(EMPTY_VOUCHER));
 export function validateVoucher(v){
@@ -37,4 +37,18 @@ export function customVoucherIssue(v,studentId){
  const missing=voucherMissing(v);if(missing)return 'CHECK - '+missing;
  if(voucherCode(v.studentId)!==voucherCode(studentId))return 'CHECK - SAI STUDENT ID VOUCHER';
  return null;
+}
+
+// The voucher system calls Times City HN24.TCY; PaymentList/Export call it
+// HN24.TC. This is an explicit alias, never a match on a contract/code prefix.
+const centerKey=value=>voucherCode(value).normalize('NFC').replace(/[\s._-]+/g,'');
+const centerAliases=new Map([['HN24TCY','HN24TC'],['TIMESCITY','HN24TC']]);
+export const voucherCenterKey=value=>{const key=centerKey(value);return centerAliases.get(key)??key;};
+// Region matching retains the approved Audit voucher-center formula.
+export function voucherCenterApplies(scope,center){
+ const value=voucherCode(scope),code=voucherCenterKey(center),parts=value.split(/[,;|\n]/).map(s=>s.trim()).filter(Boolean);
+ if(!value||!code)return false;
+ if(['ALL','TOÀN QUỐC'].includes(value)||parts.includes('NORTH')&&parts.includes('SOUTH'))return true;
+ if(parts.some(part=>voucherCenterKey(part)===code))return true;
+ return parts.includes('NORTH')&&/^(HN|BN|HY|VP|VI|QN)/.test(code);
 }

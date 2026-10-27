@@ -7,7 +7,7 @@ export function resultReasons(row){
  if(row.kind!=='contract')add('Chưa gắn CT nhận tiền duy nhất.');
  for(const k of ['H','I','J'])if(!String(c[k]??'').trim())add('Thiếu '+labels[k]+'.');
  for(const k of ['M','N','O','Q','R'])if(!number(c[k]))add('Chưa đủ dữ liệu tính '+labels[k]+'.');
- for(const k of ['Z','AA','AB','AC','AD'])if(number(c[k])&&Math.abs(c[k])>1)add(labels[k]+' còn chênh lệch '+c[k].toLocaleString('vi-VN')+'.');
+ for(const k of ['Z','AA','AB','AC','AD'])if(number(c[k])&&Math.abs(c[k])>(k==='AD'?(row.tolerance?.hours??1):(row.tolerance?.money??1)))add(labels[k]+' còn chênh lệch '+c[k].toLocaleString('vi-VN')+'.');
  for(const [k,label]of [['BD','Quy tắc giá'],['BO','Discount'],['AE','Trả góp']])if(c[k]!=='OK')add(label+': '+String(c[k]||'Chưa đủ dữ liệu'));
  if(!['OK','NO GIFTCODE'].includes(c.CI))add(String(c.CI||'Chưa đủ dữ liệu giftcode.'));
  if(row.reconciliation?.blocking)add(row.reconciliation.status);

@@ -35,7 +35,7 @@ test('funded old deposits are allocated once; missing historical cash remains CH
 test('Approved changes only the exceeded installment check and is reversible',()=>{
  const b=fixture();b.cash[0].cells.AJ='18 month';assert.equal(calc(b).cells.AE,'CHECK - VƯỢT KỲ');
  assert.equal(calc(b,{approved:true}).cells.AE,'OK');assert.equal(calc(b,{approved:true}).cells.AF,'OK');assert.equal(calc(b,{approved:false}).cells.AE,'CHECK - VƯỢT KỲ');
- b.cash[0].cells.AF-=100;assert.equal(calc(b,{approved:true}).cells.AF,'CHECK');
+ b.cash[0].cells.AF-=1200;assert.equal(calc(b,{approved:true}).cells.AF,'CHECK');
  b.cash[0].cells.AO='NEW-CODE';const r=calc(b,{approved:true});assert.equal(r.cells.O,null);assert.equal(r.cells.AF,'CHECK');assert.ok(r.cells.CI.includes('CHƯA'));
 });
 test('same-day scholarship requires matching registration dates and evidence even after Approved',()=>{
@@ -54,9 +54,9 @@ test('unknown rules and missing data remain null; explicit zero is a number',()=
  r=calc(fixture());assert.equal(r.cells.O,0);assert.equal(r.cells.AB,0);
 });
 test('approved voucher uses remaining tuition and validates student, center and window',()=>{
- const b=fixture();b.cash[0].cells.AO='COUPON-TEST';b.cash[0].cells.AE=7533600;b.cash[0].cells.AF=67802400;b.exports[0].target=b.exports[0].paid=67802400;
+ const b=fixture();b.cash[0].cells.AO='COUPON-TEST';b.cash[0].cells.AE=10320000;b.cash[0].cells.AF=65016000;b.exports[0].target=b.exports[0].paid=65016000;
  const e=engineFor(b),v={code:'COUPON-TEST',label:'Test',studentId:'ST001',studentName:'Học viên kiểm thử',center:'HN1',startDate:'2026-10-01',endDate:'2026-10-31',status:'APPROVED',type:'percent',rate:.1,amount:null,minimum:0,maximum:0,approvalNote:'Phê duyệt kiểm thử'};
- e.setVouchers([v]);let r=e.calculate({id:e.data.contractGroups[0].id});assert.equal(r.cells.O,7533600);assert.equal(r.cells.Q,67802400);
+ e.setVouchers([v]);let r=e.calculate({id:e.data.contractGroups[0].id});assert.equal(r.cells.O,10320000);assert.equal(r.cells.Q,65016000);
  e.setVouchers([{...v,status:'PENDING'}]);r=e.calculate({id:e.data.contractGroups[0].id},{approved:true});assert.equal(r.cells.O,null);assert.equal(r.cells.AF,'CHECK');
  e.setVouchers([{...v,studentId:'OTHER'}]);r=e.calculate({id:e.data.contractGroups[0].id});assert.ok(r.cells.CI.includes('STUDENT'));
 });

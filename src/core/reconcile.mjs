@@ -97,7 +97,8 @@ export function unionTransfers(sources) {
 
 export function buildAccounts(input,{contractSummaries=false}={}) {
   const cash = unionReceipts(input.cashSources), transfers = unionTransfers(input.transferSources);
-  const cutoff = input.cutoff;
+  const cutoff = input.cutoff,comparisonTolerance=input.moneyTolerance??1;
+  const comparisonAt=date=>!input.moneyToleranceWindow||date>=input.moneyToleranceWindow.from&&date<input.moneyToleranceWindow.to+1?comparisonTolerance:1;
   const receipts = cash.rows.filter(r => r.date < cutoff + 1 && !r.cancelled);
   const movements = transfers.rows.filter(r => r.date < cutoff + 1);
   const funded=invoiceFunding(receipts,movements,input.links);
@@ -166,7 +167,7 @@ export function buildAccounts(input,{contractSummaries=false}={}) {
     const net = sum(list.filter(e=>e.invoiceBacked));
     const sourcePaid = ct ? paid.get(ct) : null, snapshot = ct ? snapshotMap.get(ct) : null;
     if (sourcePaid?.student && sourcePaid.student !== record.student) {const message='CT nhận tiền thuộc học viên khác; cần đối chiếu hồ sơ chuyển nhượng trước khi so CALC của hóa đơn này';problems.push(message);contractProblems.push(message);}
-    if (sourcePaid && typeof sourcePaid.ledger === 'number' && !sameMoney(net, sourcePaid.ledger))
+    if (sourcePaid && typeof sourcePaid.ledger === 'number' && Math.abs(net-sourcePaid.ledger)>comparisonAt(record.date))
       {const message='Tổng tính lại khác PAID_BY_CONTRACT; xem các chứng từ bổ sung/chuyển ra';problems.push(message);contractProblems.push(message);}
     const unlinked = receipts.filter(r => r.student === record.student && !isCT(r.contract) && !(links.get(r.contract)?.length));
     summaries[record.id] = {
@@ -182,11 +183,12 @@ export function buildAccounts(input,{contractSummaries=false}={}) {
   // CT-level projections also cover destinations with no direct Payment row.
   // These are derived balances, never additional cash documents.
   const contracts={};
-  if(contractSummaries)for(const [ct,sourcePaid] of paid){
+  if(contractSummaries)for(const ct of uniq([...paid.keys(),...events.keys()])){
+    const sourcePaid=paid.get(ct);
     const list=[...(events.get(ct)??[])].sort((a,b)=>a.date-b.date||a.payment.localeCompare(b.payment)),net=sum(list.filter(e=>e.invoiceBacked)),problems=[...(warnings.get(ct)??[])];
-    if(typeof sourcePaid.ledger==='number'&&!sameMoney(net,sourcePaid.ledger))problems.push('Tổng tính lại khác PAID_BY_CONTRACT; xem các chứng từ bổ sung/chuyển ra');
+    if(typeof sourcePaid?.ledger==='number'&&Math.abs(net-sourcePaid.ledger)>comparisonAt(list.at(-1)?.date??cutoff))problems.push('Tổng tính lại khác PAID_BY_CONTRACT; xem các chứng từ bổ sung/chuyển ra');
     contracts[ct]={ct,candidates:[ct],origin:ct,net,contribution:net,otherPayments:0,warnings:uniq(problems),contractWarnings:uniq(problems),events:list,paid:sourcePaid,snapshot:snapshotMap.get(ct),unallocatedDeposit:0,
-      unlinkedDeposits:receipts.filter(r=>r.student===sourcePaid.student&&!isCT(r.contract)&&!links.get(r.contract)?.length).map(r=>({payment:r.payment,contract:r.contract,amount:r.amount,date:r.date,refs:r.refs})),cashBefore:0,cutoff};
+      unlinkedDeposits:receipts.filter(r=>r.student===sourcePaid?.student&&!isCT(r.contract)&&!links.get(r.contract)?.length).map(r=>({payment:r.payment,contract:r.contract,amount:r.amount,date:r.date,refs:r.refs})),cashBefore:0,cutoff};
   }
   return {records:summaries,...(contractSummaries?{contracts}:{}),statistics:{receipts:cash.rows.length, receiptCopies:cash.copies, transfers:transfers.rows.length, transferCopies:transfers.copies,
     resolved:Object.values(summaries).filter(r => r.ct).length, unresolved:Object.values(summaries).filter(r => !r.ct).length}};

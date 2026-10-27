@@ -7,7 +7,7 @@ export const identity=row=>[row.kind==='contract'?row.ct:row.paymentCode,String(
 const uniq=a=>[...new Set(a.filter(x=>x!==null&&x!==undefined&&x!==''))];
 const ref=(bundle,r)=>{const s=bundle.sources.find(s=>s.key===r.sourceKey);return {file:s?.fileName||'Nguồn',sheet:s?.sheetName||'',row:r.sourceRow}};
 export function buildModel(bundle,p){
- const data={source:bundle?'Bộ nguồn '+bundle.scope.from+' → '+bundle.scope.to:'Bảng giá & quy tắc 2026',grids:{RAW_REPORT:{},CHECK_INSTALLMENT:{},PROMO_VOUCHER:{},HUONG_DAN:{B9:1},RULE:{Z83:dateSerial('2026-10-06'),Z84:dateSerial('2026-12-31'),Z87:p.loyaltyThreshold,Z88:p.stoppedDays}},records:[],names:{},formulas:{},templates:[],choices:{H:uniq(p.prices.map(r=>r.C)),I:uniq(p.prices.map(r=>r.D)),J:uniq(p.prices.map(r=>r.E)),K:[],L:[]},extensions:{prices:p.prices,roadmap:p.roadmap,catalogue:{programs:p.programs,entries:[]},courseEvidence:[],customVouchers:[]},contractGroups:[],policy:p};
+ const data={source:bundle?'Bộ nguồn '+bundle.scope.from+' → '+bundle.scope.to:'Bảng giá & quy tắc 2026',grids:{RAW_REPORT:{},CHECK_INSTALLMENT:{},PROMO_VOUCHER:{},HUONG_DAN:{B9:p.auditPolicy?.moneyTolerance??1},RULE:{Z83:dateSerial('2026-10-06'),Z84:dateSerial('2026-12-31'),Z87:p.loyaltyThreshold,Z88:p.stoppedDays}},records:[],names:{},formulas:{},templates:[],choices:{H:uniq(p.prices.map(r=>r.C)),I:uniq(p.prices.map(r=>r.D)),J:uniq(p.prices.map(r=>r.E)),K:[],L:[]},extensions:{prices:p.prices,roadmap:p.roadmap,catalogue:{programs:p.programs,entries:[]},courseEvidence:[],customVouchers:[]},contractGroups:[],policy:p};
  if(!bundle){data.extensions.accounts={records:{},contracts:{},statistics:{receipts:0,resolved:0,unresolved:0}};return data}
  const raw=data.grids.RAW_REPORT,main=data.grids.CHECK_INSTALLMENT,rows=new Map(),cashSources=[];
  for(const source of bundle.sources.filter(s=>s.role==='payment')){
@@ -22,11 +22,13 @@ export function buildModel(bundle,p){
  }
  const paid=bundle.exports.map(e=>({ct:e.ct,student:e.student,target:e.target,ledger:e.paid,ref:ref(bundle,e)}));
  const links=bundle.cash.filter(r=>r.cells.CT_TOTAL&&r.cells.CT_TOTAL!==r.cells.E).map(r=>({origin:r.cells.E,ct:r.cells.CT_TOTAL,cashLink:true,ref:ref(bundle,r)}));
- const input={cutoff:bundle.cutoff,cashSources,transferSources:bundle.sources.filter(s=>s.role==='transfer').map(s=>({rows:bundle.transfers.filter(t=>t.sourceKey===s.key).map(t=>({...t,ref:ref(bundle,t)}))})),links,paid,snapshots:paid,records:bundle.records.map(r=>({id:r.cells.D,contract:r.cells.E,student:r.cells.R,date:r.cells.O}))};
+ const input={cutoff:bundle.cutoff,moneyTolerance:p.auditPolicy?.moneyTolerance??1,moneyToleranceWindow:p.auditPolicy?.coverage??null,cashSources,transferSources:bundle.sources.filter(s=>s.role==='transfer').map(s=>({rows:bundle.transfers.filter(t=>t.sourceKey===s.key).map(t=>({...t,ref:ref(bundle,t)}))})),links,paid,snapshots:paid,records:bundle.records.map(r=>({id:r.cells.D,contract:r.cells.E,student:r.cells.R,date:r.cells.O}))};
  data.extensions.accounts=buildAccounts(input,{contractSummaries:true});
  data.extensions.courseEvidence=bundle.exports.map(e=>({ct:e.ct,student:e.student,courseFee:e.courseFee,hoursPerWeek:e.hoursPerWeek,package:e.package,center:e.center,centerName:e.centerName,contractType:e.contractType,ref:ref(bundle,e)}));
  data.input=input;data.bundle=bundle;data.cutoff=bundle.cutoff;
  data.contractGroups=buildContractGroups(data,input,{paymentTrace:true});
+ data.extensions.accounts.statistics.resolved=data.contractGroups.filter(g=>g.kind==='contract').reduce((n,g)=>n+g.memberIds.length,0);
+ data.extensions.accounts.statistics.unresolved=data.records.length-data.extensions.accounts.statistics.resolved;
  // Distinct observed values are never added together or silently selected.
  for(const group of data.contractGroups){
   const direct=bundle.cash.filter(r=>r.cells.E===group.ct&&r.cells.R===group.cells.F);

@@ -32,7 +32,7 @@ test('review scope binds student, giftcode, EPP, full date and financial contrac
  const e=engine(),reviews=allReviews(row);let changed=run(e,{K:'ANOTHER-CODE',reviews});assert.equal(changed.reviewItems.find(i=>i.id==='registration').approved,false);assert.equal(changed.cells.AF,'CHECK');
 });
 test('condition approvals leave money differences and an unapproved voucher blocked',()=>{
- for(const config of [{paid:74335000},{voucherStatus:'PENDING'}]){
+ for(const config of [{paid:74334000},{voucherStatus:'PENDING'}]){
   const e=engine(config),row=run(e),approved=run(e,{approved:true,reviews:allReviews(row)});
   assert.ok(approved.reviewItems.every(i=>i.approved));assert.equal(approved.cells.AF,'CHECK');
   if(config.voucherStatus)assert.notEqual(approved.cells.CI,'OK');else assert.notEqual(approved.cells.AC,0);

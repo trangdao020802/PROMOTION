@@ -18,7 +18,7 @@ Mở `http://localhost:4173/`. Bản web để triển khai nằm trong `dist/`.
 ## Chức năng
 
 - Nhập XLSX/CSV/TSV gồm ba loại nguồn; Audit được đọc từ sheet nguồn, không lấy kết quả Excel đã tính sẵn. Có thể bổ sung PaymentList lịch sử.
-- Gom theo CT tổng, tính học phí độc lập theo bảng giá/quy tắc và đối chiếu dòng thu, phân bổ, chuyển ra. Export không tạo tiền thu.
+- Xác định CT tổng theo luồng Transfer đã có căn cứ. CT trung gian chuyển hết vào CT cuối cùng của học viên được gộp vào lịch sử, không hiện thành khóa học riêng; gói/giờ và chỉnh sửa dùng CT cuối. Chuyển một phần, khác học viên, thiếu căn cứ, nhiều nhánh hoặc luồng vòng tiếp tục được kiểm tra riêng. Export không tạo tiền thu.
 - Sửa Course fee KOC, Hour/week, Package, Giftcode và Discount; Enter/rời ô tự tính lại và lưu.
 - Voucher mới giữ chờ duyệt; kiểm tra học viên, trung tâm, hiệu lực, mức giảm và căn cứ.
 - Duyệt riêng CEO/RCM, sibling, loyalty, ghi danh và thông số gốc. Tích hiện **Đã duyệt**. Duyệt ngoại lệ trả góp là cột riêng. KẾT QUẢ được tổng hợp sau duyệt; nếu còn lỗi có cột **Lý do CHECK còn lại**.
@@ -41,6 +41,14 @@ Hiện web chưa tự nhập file chính sách bất kỳ. **Tải bộ nguồn*
 4. Thêm các ca kiểm thử trước/đúng/sau ngày hiệu lực, đối chiếu hồ sơ mẫu của kỳ cũ và mới; chạy build/test rồi commit, push `main` và deploy.
 
 Trên giao diện có hướng dẫn tại **Quy tắc & voucher → Bảng giá chung / RULE → Cập nhật file chính sách giá mới**. Bạn có thể gửi file mới cùng thông tin hiệu lực trong cuộc trò chuyện để cập nhật bộ quy tắc và xuất bản bản mới.
+
+## Bộ ca Audit tháng 9–10 và nguồn chính sách
+
+`Audit_Promotion_2026_v7_Giftcode_Fix.xlsx` là bộ ca đã thống nhất cho tháng 9–10 có trong PaymentList, **không phải toàn bộ danh mục rule thực tế**. Các bảng giá, lộ trình và chính sách gốc vẫn được giữ; rule vắng trong Audit tiếp tục tra các nguồn đã chuẩn hóa khác.
+
+Dữ liệu tham chiếu nằm tại `reference/rules-source.json` → `auditPolicy` (kèm tên file và SHA-256). Ngưỡng tiền 1.000 ₫ và cơ sở voucher % trên giá trước giảm áp dụng trong phạm vi ca Audit tháng 9–10; không tự thay tham số kỳ khác. Tổng giờ làm tròn theo công thức kiểm chứng. Không chứa danh sách học viên, kết quả giao dịch hay voucher cá nhân của file Audit.
+
+Xem [căn cứ công thức và phạm vi kiểm tra](docs/audit-v7-rules.md). Kiểm thử dùng dữ liệu giả cho CT trung gian, các giới hạn gộp, giá theo kỳ, gói lẻ, voucher, giờ học và duyệt. Đối chiếu giá gốc trên 95 dòng có số trong Audit khớp 95/95; đây không phải khẳng định mọi trạng thái AF trong Excel đã được sao chép hoặc toàn bộ policy thực tế đã được chuẩn hóa.
 
 ## Hosting miễn phí
 
@@ -73,3 +81,8 @@ Build tạo `dist/downloads/promotion-hub-bridge.zip` từ mã nguồn tại `re
 - `tests`: kiểm tra dữ liệu giả cho tính toán, luồng tiền, duyệt và phạm vi xuất bản.
 
 Nguồn tham khảo hosting: https://docs.github.com/en/pages/getting-started-with-github-pages/what-is-github-pages · https://developers.cloudflare.com/pages/get-started/git-integration/ · https://docs.netlify.com/start/quickstarts/deploy-from-repository/
+
+
+## Phân loại RULE và kiểm Giftcode
+
+Quy tắc giá và Voucher dùng hai mô hình/bảng riêng: lưu voucher sẽ dựng lại danh sách mã đã nhập, không giữ lẫn các dòng BASE OCT/BASE 2026. Center Times City `HN24.TCY` trong voucher được đối chiếu với `HN24.TC` của PaymentList/Export; học viên, ngày hiệu lực, mức giảm và căn cứ duyệt vẫn kiểm riêng.

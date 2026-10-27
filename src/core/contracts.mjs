@@ -5,6 +5,8 @@ import {verificationMetadata,calculationIssues} from './verification.mjs';
 import {withVoucherRegistry} from './vouchers.mjs';
 import {applyCourseInfo,withCourseSources} from './course-info.mjs';
 import {upstreamTransfers} from './payment-trace.mjs';
+import {contractSettlements} from './contract-settlements.mjs';
+import {auditPackageKey} from './audit-policy.mjs';
 
 const fields=['H','I','J','K','L'];
 const rawFields={A:'B',B:'C',C:'E',D:'O',E:'P',F:'R',G:'S',H:'Z',I:'AA',J:'AB',K:'AO',L:'AQ',T:'AC',U:'AD',V:'AE',X:'AG'};
@@ -29,7 +31,9 @@ export function buildContractGroups(data,input,{paymentTrace=false}={}){
  const cash=unionReceipts(input.cashSources).rows.filter(r=>!r.cancelled&&r.date<input.cutoff+1);
  const transfers=unionTransfers(input.transferSources).rows.filter(r=>r.date<input.cutoff+1);
  const funded=invoiceFunding(cash,transfers,input.links);
- const aliases=data.contractSettlements??{};
+ const aliases=data.contractSettlements??contractSettlements(input,data.extensions.accounts,{cash,transfers,funded});
+ data.contractSettlements=aliases;
+ const atContract=(record,ct)=>{const a=data.extensions.accounts.records[record.id];return a.ct===ct||a.candidates?.length===1&&a.candidates[0]===ct;};
  const destination=account=>{const candidates=account.ct?[account.ct]:account.candidates??[],resolved=uniq(candidates.map(ct=>aliases[ct]?.target??ct));return resolved.length===1&&candidates.every(ct=>ct===resolved[0]||aliases[ct])?resolved[0]:null;};
  const buckets=new Map();
  for(const record of data.records){
@@ -39,16 +43,16 @@ export function buildContractGroups(data,input,{paymentTrace=false}={}){
  }
  return [...buckets].map(([id,members])=>{
   const first=members[0],ct=destination(data.extensions.accounts.records[first.id]);
-  const anchor=members.find(r=>main['C'+r.sheetRow]===ct)??members.find(r=>data.extensions.accounts.records[r.id].ct===ct)??first;
+  const anchor=members.find(r=>main['C'+r.sheetRow]===ct)??members.find(r=>atContract(r,ct))??first;
   const sourceContracts=ct?Object.keys(aliases).filter(code=>aliases[code].target===ct):[];
-  const sourceAccount=sourceContracts.length?data.extensions.accounts.contracts[ct]:data.extensions.accounts.records[anchor.id];
+  const sourceAccount=(ct?data.extensions.accounts.contracts?.[ct]:null)??data.extensions.accounts.records[anchor.id];
   const student=sourceAccount.paid?.student??main['F'+anchor.sheetRow];
   const ctRows=ct?rawRows.filter(r=>raw['E'+r]===ct&&raw['R'+r]===student):[];
   const rawRow=ctRows.includes(anchor.rawRow)?anchor.rawRow:ctRows[0]??anchor.rawRow;
   const warnings=[],contractContext={},cells=Object.fromEntries(Object.entries(rawFields).map(([c,r])=>[c,raw[r+rawRow]??null]));
   if(ct){
    cells.C=ct;cells.AH=rawRow;
-   const candidates=ctRows.length?ctRows:members.filter(r=>!sourceContracts.length||data.extensions.accounts.records[r.id].ct===ct).map(r=>r.rawRow);
+   const candidates=ctRows.length?ctRows:members.filter(r=>!sourceContracts.length||atContract(r,ct)).map(r=>r.rawRow);
    for(const key of fields){
     const values=uniq(candidates.map(r=>raw[rawFields[key]+r]));
     cells[key]=values.length===1?values[0]:null;
@@ -58,9 +62,10 @@ export function buildContractGroups(data,input,{paymentTrace=false}={}){
   }else{
    for(const key of ['H','I','J'])cells[key]=null;
   }
-  const account=ct?{...sourceAccount,scope:'contract',origin:ct,contribution:sourceAccount.net,otherPayments:0,
-   warnings:uniq([...(sourceContracts.length?sourceAccount.warnings:[]),...members.filter(r=>!sourceContracts.length||data.extensions.accounts.records[r.id].ct===ct).flatMap(r=>data.extensions.accounts.records[r.id].contractWarnings??data.extensions.accounts.records[r.id].warnings)]),
+  const account=ct?{...sourceAccount,ct,candidates:[ct],scope:'contract',origin:ct,contribution:sourceAccount.net,otherPayments:0,
+   warnings:uniq([...(sourceContracts.length?sourceAccount.warnings:[]),...members.filter(r=>!sourceContracts.length||atContract(r,ct)).flatMap(r=>data.extensions.accounts.records[r.id].contractWarnings??data.extensions.accounts.records[r.id].warnings)]),
    unallocatedDeposit:0}:sourceAccount;
+  if(ct)account.cashBefore=sum(cash.filter(r=>invoiceEligible(r)&&r.student===student&&r.date<Math.floor(cells.D)));
   const events=account.events;
   if(sourceContracts.length){account.sourceContracts=sourceContracts;account.movementHistory=transfers.filter(t=>[ct,...sourceContracts].includes(t.from)||[ct,...sourceContracts].includes(t.to)).map(t=>({kind:t.type,amount:t.amount,date:t.date,payment:t.id,...(t.paymentCodes.length?{transferPayments:t.paymentCodes}:{}),from:t.from,to:t.to,refs:t.refs,invoiceBacked:funded.has(t.id),invoiceIds:funded.get(t.id)??[]}));}
   // A wider read-only lineage must not widen the course-input candidates.
@@ -109,10 +114,10 @@ export function buildContractGroups(data,input,{paymentTrace=false}={}){
   if(installment.length&&numericTerms.some(n=>n===null))warnings.push('Có khoản trả góp chưa có kỳ hợp lệ; cần xác minh chứng từ');
   if(receipts.some(r=>r.method===null))warnings.push('Có chứng từ chưa có phương thức thanh toán trong RAW_REPORT');
   const term=installment.length?(numericTerms.every(n=>n!==null)?`${Math.max(...numericTerms)} month`:null):raw['AJ'+rawRow]??null;
-  const group={id,kind:ct?'contract':'unlinked',ct,anchor,rawRow,memberIds:members.map(r=>r.id),...(sourceContracts.length?{sourceContracts,legacyMemberIds:members.filter(r=>data.extensions.accounts.records[r.id].ct===ct).map(r=>r.id)}:{}),cells,account,receipts,
+  const group={id,kind:ct?'contract':'unlinked',ct,anchor,rawRow,memberIds:members.map(r=>r.id),...(sourceContracts.length?{sourceContracts,legacyMemberIds:members.filter(r=>atContract(r,ct)).map(r=>r.id)}:{}),cells,account,receipts,
    warnings:uniq(warnings),raw:{AH:method||(raw['AH'+rawRow]??null),AJ:term,...contractContext},paymentCode:anchor.paymentCode};
   if(ct){
-   const candidates=uniq([...ctRows,...members.filter(r=>!sourceContracts.length||data.extensions.accounts.records[r.id].ct===ct).map(r=>r.rawRow),...included.filter(d=>courseDocument(d)&&!sourceContracts.length&&!isCT(d.contract)&&d.student===student).map(d=>rawByPayment.get(d.payment)).filter(Boolean)]);
+   const candidates=uniq([...ctRows,...members.filter(r=>!sourceContracts.length||atContract(r,ct)).map(r=>r.rawRow),...included.filter(d=>courseDocument(d)&&!sourceContracts.length&&!isCT(d.contract)&&d.student===student).map(d=>rawByPayment.get(d.payment)).filter(Boolean)]);
    group.noCTInvoice=!ctRows.length;
    group.courseCandidates=candidates.map(r=>({...Object.fromEntries(fields.map(k=>[k,raw[rawFields[k]+r]??null])),fallback:raw['E'+r]!==ct,ref:{file:data.source,sheet:data.importInfo?.sheetName??'RAW_REPORT',row:data.sourceRows?.[r]??r}}));
    applyCourseInfo(data,group);
@@ -137,10 +142,11 @@ export class ContractEngine{
     cells:{...group.cells,H:null,I:null,J:null,receiptCount:receipts.length,W:group.cells.W??receipts[0]?.amount??null,contractTotal:'',ctNet:null,ctCheck:'XÁC MINH - LIÊN KẾT CT',AF:'CHECK',AG:'',AN:'Chưa gắn CT duy nhất: giữ chứng từ thu, chưa gắn khóa học hoặc tính học phí.'},
     reconciliation:{...group.account,status:'XÁC MINH - LIÊN KẾT CT',blocking:true,target:null,calcTarget:null,overpaid:null},context:{method:group.raw.AH}};
   }
-  const packageValue=own(patch,'J')?patch.J:group.cells.J;
-  const verification=verificationMetadata(this.data,group,patch.verification,packageKey(packageValue),this.patches);
+  const packageValue=own(patch,'J')?patch.J:group.cells.J,discountValue=own(patch,'L')?patch.L:group.cells.L;
+  const packageRule=auditPackageKey(packageValue,discountValue,group.cells.D,packageKey(packageValue),this.data.policy?.auditPolicy);
+  const verification=verificationMetadata(this.data,group,patch.verification,packageRule,this.patches);
   const row=this.engine.calculate(anchor,patch,{rawRow:group.rawRow,raw:group.raw,account:group.account,
-   cells:{...group.cells,...group.sourceCells,AK:packageKey(packageValue),W:group.account.net,Y:group.raw.AJ,...verification.overrides}});
+   cells:{...group.cells,...group.sourceCells,AK:packageRule,W:group.account.net,Y:group.raw.AJ,...verification.overrides}});
   // Q and its differences were evaluated at the whole-CT grain with no receipt
   // offset. P now reports funded incoming transfers; it is not a second fee
   // deduction. Keep the independent formula-only regression path unchanged.

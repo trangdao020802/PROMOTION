@@ -41,7 +41,7 @@ export function verificationMetadata(data,group,input,packageValue,patches=new M
  const q4=date>=rule.Z83&&date<rule.Z84+1&&!oldPolicyApproved;
  const ownPatch=patches.get(group.id)??{},label=own(ownPatch,'L')?ownPatch.L:group.cells.L;
  const policyMatch=discountPolicyMatch(label,date);
- const needsLoyalty=q4&&current&&[18,24,36,'36 SPLIT'].includes(key)&&(policyMatch.period==='q4'||policyMatch.period==='october'||/Q4|Quý 4|From 06\/10|2026 October - Promotion/i.test(String(label??'')));
+ const needsLoyalty=q4&&current&&!['straight','referral'].includes(policyMatch.kind)&&[18,24,36,'36 SPLIT'].includes(key)&&(policyMatch.period==='q4'||policyMatch.period==='october'||/Q4|Quý 4|From 06\/10|2026 October - Promotion/i.test(String(label??'')));
  const missing=(message)=>{pending.push(message);let c=conditions.find(c=>c.id===conditionId);if(!c){c={id:conditionId,messages:[]};conditions.push(c);}c.messages.push(message);};
  let siblingVerified=false,loyaltyVerified=false,courseVerified=false;
  const partner=data.contractGroups.find(g=>g.kind==='contract'&&identifier(g.ct)===identifier(v.partnerContract)),partnerPatch=partner?patches.get(partner.id)??{}:{};
@@ -75,8 +75,9 @@ export function verificationMetadata(data,group,input,packageValue,patches=new M
  if(needsLoyalty){
   const threshold=Number(rule.Z87),maxDays=Number(rule.Z88),knownFees=typeof v.priorFees==='number',knownGap=typeof v.stoppedDays==='number';
   // A proved ineligible condition is enough to establish zero; missing evidence never becomes zero.
-  const ineligible=knownFees&&v.priorFees<=threshold||knownGap&&v.stoppedDays>maxDays;
-  const complete=proof&&(ineligible||knownFees&&knownGap);
+  const ineligible=knownFees&&v.priorFees<threshold||knownGap&&v.stoppedDays>maxDays;
+  const complete=proof&&(ineligible||knownFees&&knownGap&&v.priorFees>threshold);
+  if(knownFees&&v.priorFees===threshold&&!ineligible)missing('Lịch sử đúng 30 triệu: bản Audit yêu cầu xác minh riêng ngưỡng loyalty trước khi chốt tháng tặng.');
   loyaltyVerified=complete;
   if(!knownFees&&!ineligible)missing('Bổ sung tổng học phí đã đóng trước đợt này để xét loyalty.');
   if(knownFees&&v.priorFees>threshold&&!knownGap)missing('Bổ sung số ngày ngừng học để xét loyalty.');
