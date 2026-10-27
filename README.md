@@ -102,3 +102,5 @@ Bản 1.6.1 đọc đơn vị ngay cạnh Discount amount: `15 %` là 15%, `2.00
 Discount Big Bang Sep giảm tiền lấy cột K theo Layer/giờ/gói trước bảng bổ sung Audit. Chứng từ tháng 10 giữ đúng số giảm, vẫn kiểm tra thời kỳ và điều kiện riêng. Case Layer 1, 3 giờ/tuần, 36 tháng chia đôi: 58.050.000 − 18.000.000 = 40.050.000 trước Giftcode (BẢNG GIÁ!G31/K31/L31). Chi tiết: `docs/big-bang-september-discount.md`.
 
 Gói lẻ dùng đơn giá tháng **chưa giảm** từ bảng giá thường gói 3T để nhân số tháng. Rule 51–56 hiển thị giá đã sửa; giữ giá trải nghiệm cũ trong metadata để truy vết. Layer 1, 3 giờ/tuần: 3.600.000/tháng, 2 tháng 7.200.000. Discount và Giftcode tính riêng. Xem `docs/monthly-gross-price.md`.
+
+Discount apply giữ nguyên chuỗi PaymentList và đọc riêng từng nhãn phân cách bằng `;`. Nhận Siblings 1.000.000/800.000, giảm theo gói và tặng tháng, không cộng trùng hoặc dùng thời hạn tháng 6–7 cho nhãn Q4. Hiển thị đầy đủ các nhãn dưới ô nhập. Vẫn kiểm tra loại/gói, layer, học viên và xác minh riêng. Xem `docs/discount-apply-combinations.md`.

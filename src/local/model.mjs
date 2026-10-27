@@ -1,7 +1,7 @@
 import {buildAccounts} from '../core/reconcile.mjs';
 import {buildContractGroups} from '../core/contracts.mjs';
 import {dateSerial} from '../core/verification.mjs';
-import {discountPolicyMatch} from '../core/promotions.mjs';
+import {discountPolicyMatch,discountOffers} from '../core/promotions.mjs';
 const fields={A:'B',B:'C',C:'E',D:'O',E:'P',F:'R',G:'S',H:'Z',I:'AA',J:'AB',K:'AO',L:'AQ',T:'AC',U:'AD',V:'AE',X:'AG'};
 export const identity=row=>[row.kind==='contract'?row.ct:row.paymentCode,String(row.cells.F??'')].join('|');
 const uniq=a=>[...new Set(a.filter(x=>x!==null&&x!==undefined&&x!==''))];
@@ -40,7 +40,7 @@ export function buildModel(bundle,p){
   const exp=bundle.exports.find(e=>e.ct===group.ct&&e.student===String(group.cells.F));group.export=exp;
   group.cells.X=typeof exp?.totalHours==='number'?exp.totalHours:group.cells.X??null;
  }
- const labels=uniq(bundle.cash.map(r=>r.cells.AQ));data.choices.K=uniq(bundle.cash.map(r=>r.cells.AO));data.choices.L=labels;
+ const labels=uniq(bundle.cash.map(r=>r.cells.AQ));data.choices.K=uniq(bundle.cash.map(r=>r.cells.AO));data.choices.L=uniq([...labels,...labels.flatMap(discountOffers)]);
  data.extensions.catalogue.entries=labels.map((label,i)=>{const found=bundle.cash.filter(r=>r.cells.AQ===label),m=discountPolicyMatch(label,found[0]?.cells.O);return {id:'payment-'+i,label,masterRow:null,family:m.kind||'Cần xác minh',state:m.ruleKey?'confirmed':'unverified',programIds:m.programIds,observedMethod:'PaymentList',observedValue:null,observedFrom:Math.min(...found.map(r=>r.cells.O)),observedTo:Math.max(...found.map(r=>r.cells.O)),observedCount:found.length,paymentObservation:{labels:[label],count:found.length,from:Math.min(...found.map(r=>r.cells.O)),to:Math.max(...found.map(r=>r.cells.O)),refs:found.slice(0,5).map(r=>ref(bundle,r))},policyMatch:m}});
  return data;
 }

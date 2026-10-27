@@ -6,7 +6,24 @@ const inWindow = (p, date) => (p.from == null || date >= serial(p.from)) && (p.t
 // Business keys identify a policy family; the literal PaymentList label is
 // retained. Duration here is descriptive and never supplies Package/AK.
 export const discountLabelKey = value => normalize(value).trim().replace(/\s+/g,' ');
+export const discountOffers=value=>[...new Map(String(value??'').split(';').map(s=>s.trim()).filter(s=>s&&s!=='0').map(label=>[discountLabelKey(label),label])).values()];
+export function fixedSiblingAmount(label){
+ const match=/^siblings?\s*[-–—]\s*siblings?\s+(1[.,]000[.,]000|800[.,]000|1000000|800000)\s+vnd\s*\(\s*agls\s*\/\s*atls\s*\/\s*ielts\s*\)$/i.exec(discountLabelKey(label));
+ return match?Number(match[1].replace(/[.,]/g,'')):null;
+}
 export function discountPolicyMatch(label,date,regime){
+ const offers=discountOffers(label);
+ if(offers.length>1){
+  const matches=offers.map(offer=>discountPolicyMatch(offer,date,regime)),primary=matches.find(m=>m.kind==='cash')??matches.find(m=>m.kind==='months')??matches.find(m=>m.kind==='straight')??matches[0];
+  const issues=[...new Set(matches.flatMap(m=>m.issues))],periods=new Set(matches.filter(m=>m.kind==='cash').map(m=>m.period).filter(Boolean));
+  if(periods.size>1)issues.push('CHECK - KEY DISCOUNT MÂU THUẪN: nhiều kỳ giảm tiền trong cùng Discount apply.');
+  return {...primary,keys:[...new Set(matches.flatMap(m=>m.keys))],programIds:[...new Set(matches.flatMap(m=>m.programIds))],issues,siblings:matches.some(m=>m.siblings),siblingAddon:matches.some(m=>m.siblingAddon),offers};
+ }
+ const fixedAmount=fixedSiblingAmount(offers[0]??label);
+ if(fixedAmount!==null){
+  const q4=typeof date==='number'&&date>=serial('2026-10-06')&&date<serial('2027-01-01');
+  return {keys:['Sibling giảm tiền',fixedAmount+' VND'],kind:'sibling-cash',period:q4?'q4':null,ruleKey:'SIBLING_FIXED_'+fixedAmount,programIds:q4?['ref-q4']:[],issues:q4?[]:['CHECK - SIBLINGS GIẢM TIỀN: cần chính sách đúng thời kỳ; không tự áp quy tắc Q4 ngoài ngày 06/10–31/12/2026.'],siblings:true,siblingAddon:true,fixedAmount};
+ }
  const text=discountLabelKey(label).replace(/[–—_:·-]/g,' ').replace(/\s+/g,' '),keys=[];
  const years=[...new Set(text.match(/\b20\d{2}\b/g)??[])];
  const year2026=years.length===1&&years[0]==='2026';
@@ -52,7 +69,7 @@ export function discountPolicyMatch(label,date,regime){
 // Validate each offer against policy keys, not the PaymentList observation
 // catalogue. A listed observation alone never supplies a financial rule.
 export function discountPolicyCheck(label,date,regime,grid){
- const offers=[...new Map(String(label??'').split(';').map(s=>s.trim()).filter(s=>s&&s!=='0').map(s=>[discountLabelKey(s),s])).values()];
+ const offers=discountOffers(label);
  if(offers.length>4)return 'CHECK - QUÁ 4 ƯU ĐÃI';
  const known=new Set(Object.entries(grid??{}).filter(([key])=>/^B\d+$/.test(key)&&Number(key.slice(1))>=3&&Number(key.slice(1))<=500).map(([,value])=>discountLabelKey(value)));
  for(const offer of offers){
@@ -73,9 +90,14 @@ export function regularTwoMonthPrice(data,{course,hours,package:pkg,group}){
 
 export function matchingPrograms(label, programs, date) {
   if (!label || label === '0') return [];
+  const offers=discountOffers(label);
+  if(offers.length>1)return [...new Map(offers.flatMap(offer=>matchingPrograms(offer,programs,date)).map(p=>[p.id,p])).values()];
   const match=discountPolicyMatch(label,date),text=discountLabelKey(label).replace(/[–—_:-]/g,' ').replace(/\s+/g,' ');
   let found = programs.filter(p => p.match.some(pattern => new RegExp(pattern,'iu').test(label)||new RegExp(normalize(pattern).replace(/ - /g,' ').replace(/ /g,'\\s+'),'iu').test(text)));
   if(match.programIds.length){found=found.filter(p=>!['oct-base','q4','sep-bigbang'].includes(p.id));for(const id of match.programIds){const p=programs.find(p=>p.id===id);if(p&&!found.includes(p))found.push(p);}}
+  // "siblings" in a Q4 price/month label describes the course, not a June/July
+  // referral. Fixed cash and month add-ons keep their own dated program.
+  if(match.ruleKey&&match.period)found=found.filter(p=>!p.id.startsWith('ref-')||match.programIds.includes(p.id));
   if(match.issues.length)found=[];
   if (/2024/.test(label)) found = found.filter(p => ['legacy','summer','premium-legacy'].includes(p.id));
   if (!match.period&&/2026 October - Promotion/i.test(label)) {

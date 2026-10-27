@@ -1,6 +1,6 @@
 import {ContractEngine,packageKey} from '../core/contracts.mjs';
 import {financialResult} from '../core/reconcile.mjs';
-import {discountPolicyMatch,discountPolicyCheck,promotionResult,regularTwoMonthPrice} from '../core/promotions.mjs';
+import {discountPolicyMatch,discountPolicyCheck,discountOffers,promotionResult,regularTwoMonthPrice} from '../core/promotions.mjs';
 import {voucherCode,customVoucherIssue,withVoucherRegistry,voucherCenterApplies} from '../core/vouchers.mjs';
 import {dateSerial,fullPaymentDay} from '../core/verification.mjs';
 import {reviewAccepted,applyReviews} from '../core/reviews.mjs';
@@ -16,7 +16,7 @@ export function priceFor(data,cells,context){
  const layer=Number(/^(?:ATLS|AGLS) - New Price 2026 - Layer ([123])$/i.exec(course)?.[1]);
  // A named September cash offer owns its fixed VND column. An October
  // invoice can require approval, but cannot change that offer into Q4's rate.
- const septemberCash=text(cells.L).split(';').some(label=>discountPolicyMatch(label,date).ruleKey==='BBSEP26_CASH');
+ const septemberCash=discountOffers(cells.L).some(label=>discountPolicyMatch(label,date).ruleKey==='BBSEP26_CASH');
  if(septemberCash){
   const row=data.policy.roadmap.find(r=>r.A===`${layer}|${hours}|${pkg}`);
   if(!row||!/^ATLS\b/i.test(course)||text(context.group).toUpperCase()!=='ATLS'||/VTDH|vững tin/i.test([course,cells.J,cells.L].join(' '))||!['G','K','N','E'].every(k=>number(row[k])))return null;
@@ -48,9 +48,9 @@ class IndependentCalculator{
   cells.AJ=pricing?.hours??null;cells.AK=pricing?.pkg??packageKey(cells.J);cells.AO=pricing?.phase==='q4'?'BBQ426':pricing?.phase==='october'?'OCT_BASE':'BASE2026';
   cells.M=pricing?.gross??null;cells.N=pricing?.short?pricing.discount:label&&label!=='0'?null:pricing?0:null;cells.O=0;cells.S=pricing?(/installment/i.test(text(context.method))?pricing.maxTerms:0):null;cells.BD=pricing?.issue??(pricing?'OK':/VTDH|vững tin/i.test([cells.H,cells.J,cells.L].join(' '))?'CHECK - VTDH CÓ POLICY RIÊNG':'CHECK - CHƯA CÓ RULE / ĐỦ ĐẦU VÀO');
   cells.AL=label&&label!=='0'?match.ruleKey||'OTHER':'NONE';cells.BO=match.issues[0]||'OK';cells.CH='OK';
-  let bonus=0,loyaltyMissing=false;
+  let bonus=0,loyaltyMissing=false;const discountComponents=[];
   if(label&&label!=='0'&&pricing&&!pricing.short){
-   const terms=label.split(';').map(s=>s.trim()).filter(Boolean),matches=terms.map(s=>discountPolicyMatch(s,cells.D));
+   const terms=discountOffers(label),matches=terms.map(s=>discountPolicyMatch(s,cells.D));
    const base=/học bổng (đồng hành|ghi danh)|new price 2026.*(đồng hành|ghi danh)/i.test(label)&&pricing.phase==='base';
    const september=pricing.policyKey==='BBSEP26_CASH';
    const special=/Special (?:30%|Support)/i.test(label)&&between(cells.D,'2026-06-24','2026-12-31');
@@ -59,6 +59,18 @@ class IndependentCalculator{
     const cashOffer=base||september||special||matches.some(m=>m.kind==='cash');
     cells.N=special?Math.round(cells.M*.3):cashOffer?pricing.discount:0;
     cells.AL=special?'SPECIAL30':base?'BASE2026':september?'BBSEP26_CASH':match.ruleKey||matches.find(m=>m.ruleKey)?.ruleKey||'OTHER';
+    for(const [i,m]of matches.entries())if(m.kind!=='sibling-cash')discountComponents.push({label:terms[i],ruleKey:m.ruleKey,kind:m.kind,amount:m.kind==='months'||m.kind==='straight'?0:m.kind==='cash'?cells.N:null});
+    const fixed=[...new Map(matches.filter(m=>m.kind==='sibling-cash').map(m=>[m.ruleKey,m])).values()];
+    if(fixed.length>1){cells.N=null;checks.push('CHECK - NHIỀU MỨC GIẢM SIBLINGS TRONG CÙNG HỒ SƠ');}
+    for(const m of fixed){
+     if(number(cells.N))cells.N+=m.fixedAmount;
+     discountComponents.push({label:terms[matches.indexOf(m)],ruleKey:m.ruleKey,kind:m.kind,amount:m.fixedAmount});
+     if(!/^new$/i.test(text(context.contractType)))checks.push('CHECK - SIBLINGS GIẢM TIỀN Q4 DÀNH CHO HỌC VIÊN NEW');
+     if(m.fixedAmount!==(pricing.layer===3?800000:1000000))checks.push('CHECK - SỐ TIỀN SIBLINGS KHÔNG ĐÚNG LAYER');
+     if(pricing.phase==='q4'&&![3,6,9].includes(pricing.pkg))checks.push('CHECK - SIBLINGS GIẢM TIỀN Q4: rule gói 3/6/9 tháng; gói dài/chia đôi cần đối chiếu chính sách, không tự đổi sang tiền giảm.');
+     const v=patch.verification,proven=v?.siblingRelationship==='yes'&&text(v.partnerContract)&&text(v.partnerStudentId)&&v.evidenceIds?.length;
+     if(!proven&&!reviewed('referral'))checks.push('XÁC MINH - REFERRAL/SIBLING: xác nhận học viên New, anh/chị/em đối ứng và thời điểm còn học/ngừng ≤120 ngày.');
+    }
     if(special){cells.S=0;if(!/RGI|TPU|LNQ|LBB/i.test(text(cells.B)))checks.push('CHECK - NGOÀI 4 TRUNG TÂM');checks.push('XÁC MINH - HỌC BỔNG ĐẶC BIỆT: cần căn cứ cấp code đúng học viên/gói.');}
     if(/Flash Sale/i.test(label)){
      if(Math.floor(cells.D)!==dateSerial('2026-08-26'))checks.push('CHECK - NGOÀI NGÀY FLASH SALE');
@@ -123,7 +135,7 @@ class IndependentCalculator{
   const complete=['Z','AA','AB','AC','AD'].every(k=>number(cells[k])&&Math.abs(cells[k])<=1);
   cells.AF=complete&&cells.AE==='OK'&&cells.BD==='OK'&&cells.BO==='OK'&&['OK','NO GIFTCODE'].includes(cells.CI)&&!promotion.blocking&&!reconciliation.blocking?'OK':'CHECK';
   cells.AN=unique([pricing?pricing.refs.map(r=>r.file+' · '+r.sheet+' · dòng '+r.row+(r.cell?' · ô '+r.cell:'')).join('; '):'Chưa có quy tắc giá đúng Course fee / giờ / gói / ngày.',pricing?.short&&number(pricing.monthly)?'Giá gốc gói lẻ = '+pricing.monthly.toLocaleString('vi-VN')+' VND/tháng chưa giảm × '+pricing.months+' tháng. Discount và Giftcode tính riêng.':'',number(cells.Q)?'Phải đóng = giá niêm yết − discount − giftcode. Transfer là phân bổ tiền, không trừ học phí lần hai.':'Chưa đủ dữ liệu để tính; ô trống không được coi là 0.',code?(voucherBasisFor(data,cells.D)==='gross'?'Giftcode % trên giá trước giảm: ca đối chiếu Audit v7 tháng 9–10 / cột O.':'Giftcode % theo cơ sở trước giảm trừ discount của bảng giá nguồn ngoài phạm vi ca Audit.'):'',loyaltyMissing?'Cần lịch sử học phí và ngày dừng học để xét loyalty.':'',...promotion.checks]).join(' | ');
-  return {...record,cells,context,errors:[],reconciliation,promotion,pricing,tolerance};
+  return {...record,cells,context,errors:[],reconciliation,promotion,pricing,tolerance,discountComponents};
  }
 }
 export class AuditEngine extends ContractEngine{
