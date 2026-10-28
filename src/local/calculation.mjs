@@ -1,3 +1,4 @@
+import {courseHourTotals} from '../core/course-hours.mjs';
 import {ContractEngine,packageKey} from '../core/contracts.mjs';
 import {financialResult} from '../core/reconcile.mjs';
 import {discountPolicyMatch,discountPolicyCheck,discountOffers,promotionResult,regularTwoMonthPrice} from '../core/promotions.mjs';
@@ -52,7 +53,8 @@ class IndependentCalculator{
   cells.AJ=pricing?.hours??null;cells.AK=pricing?.pkg??packageKey(cells.J);cells.AO=pricing?.phase==='q4'?'BBQ426':pricing?.phase==='october'?'OCT_BASE':'BASE2026';
   cells.M=pricing?.gross??null;cells.N=pricing?.short?pricing.discount:label&&label!=='0'?null:pricing?0:null;cells.O=0;cells.S=pricing?(/installment/i.test(text(context.method))?pricing.maxTerms:0):null;cells.BD=pricing?.issue??(pricing?'OK':/VTDH|vững tin/i.test([cells.H,cells.J,cells.L].join(' '))?'CHECK - VTDH CÓ POLICY RIÊNG':'CHECK - CHƯA CÓ RULE / ĐỦ ĐẦU VÀO');
   cells.AL=label&&label!=='0'?match.ruleKey||'OTHER':'NONE';cells.BO=match.issues[0]||'OK';cells.CH='OK';
-  let bonus=0,loyaltyMissing=false;const discountComponents=[];
+  let loyaltyMissing=false,straightMissing=false;const discountComponents=[],monthComponents=[];
+  const awardMonths=(kind,months)=>{if(number(months)&&months>0)monthComponents.push({kind,months});};
   if(label&&label!=='0'&&pricing&&!pricing.short){
    const terms=discountOffers(label),matches=terms.map(s=>discountPolicyMatch(s,cells.D));
    const base=/học bổng (đồng hành|ghi danh)|new price 2026.*(đồng hành|ghi danh)/i.test(label)&&pricing.phase==='base';
@@ -63,6 +65,8 @@ class IndependentCalculator{
     const cashOffer=base||september||special||matches.some(m=>m.kind==='cash');
     cells.N=special?Math.round(cells.M*.3):cashOffer?pricing.discount:0;
     cells.AL=special?'SPECIAL30':base?'BASE2026':september?'BBSEP26_CASH':match.ruleKey||matches.find(m=>m.ruleKey)?.ruleKey||'OTHER';
+    if(match.sharedSepOct&&pricing.phase==='base'&&match.kind==='straight')cells.AL='BBSEP26_STRAIGHT';
+    if(match.sharedSepOct&&pricing.phase==='october'&&match.kind==='straight')cells.AL='OCT26_BASE';
     for(const [i,m]of matches.entries())if(m.kind!=='sibling-cash')discountComponents.push({label:terms[i],ruleKey:m.ruleKey,kind:m.kind,amount:m.ruleKey==='BBSEP26_STRAIGHT'?cells.N:m.kind==='months'||m.kind==='straight'?0:m.kind==='cash'?cells.N:null});
     const fixed=[...new Map(matches.filter(m=>m.kind==='sibling-cash').map(m=>[m.ruleKey,m])).values()];
     if(fixed.length>1){cells.N=null;checks.push('CHECK - NHIỀU MỨC GIẢM SIBLINGS TRONG CÙNG HỒ SƠ');}
@@ -85,7 +89,7 @@ class IndependentCalculator{
      if(!proven)checks.push('XÁC MINH - REFERRAL/SIBLING: bổ sung CT đối ứng, quan hệ, ngày full và minh chứng.');
      if(!/^new$/i.test(text(context.contractType)))checks.push('CHECK - REFERRAL CẦN NEW VÀ XÁC NHẬN');
      else if([3,6,9].includes(Number(pricing.pkg))&&number(cells.N)&&(proven||reviewed('referral'))&&!fixed.length)cells.N+=pricing.layer===3?800000:1000000;
-     else if(proven||reviewed('referral'))bonus+=pricing.referral||0;
+     else if(proven||reviewed('referral'))awardMonths('referral',pricing.referral||0);
     }
     if(/On Top 5%/i.test(label)){
      const v=patch.verification,proven=v?.evidenceIds?.length&&number(v.priorFees)&&v.priorFees>100000000;
@@ -96,11 +100,17 @@ class IndependentCalculator{
     // Fixed sibling money is subtracted after progressive offers (Flash row 19).
     if(fixed.length===1&&number(cells.N))cells.N+=fixed[0].fixedAmount;
     if(pricing.phase==='q4'&&['BBQ426_CASH','BBQ426_LOYALTY'].includes(cells.AL)&&!/^new$/i.test(text(context.contractType))&&[18,24,36,'36 SPLIT'].includes(pricing.pkg)){
-     if(options.cells?.BB===0){}else if(reviewed('loyalty')||number(options.cells?.AR)&&options.cells.AR>30000000&&number(options.cells?.AS)&&options.cells.AS<=120)bonus+=pricing.loyalty||0;else loyaltyMissing=true;
+     if(options.cells?.BB===0){}else if(reviewed('loyalty')||number(options.cells?.AR)&&options.cells.AR>30000000&&number(options.cells?.AS)&&options.cells.AS<=120)awardMonths('loyalty',pricing.loyalty||0);else loyaltyMissing=true;
     }
-    if((['BBQ426_CASH','OCT26_BASE','BBQ426_STRAIGHT'].includes(cells.AL)||september)&&!/installment/i.test(text(context.method))&&text(context.method)&&fullPaymentDay(account)!==null)bonus+=pricing.straight||0;
+    const sharedStraight=matches.some(m=>m.sharedSepOct&&m.kind==='straight');
+    const straightMonths=sharedStraight&&pricing.regime==='base'?pricing.row?.M??0:pricing.straight||0;
+    const hasStraight=['BBQ426_CASH','BBQ426_LOYALTY','OCT26_BASE','BBQ426_STRAIGHT'].includes(cells.AL)||september||matches.some(m=>m.kind==='straight');
+    if(hasStraight&&straightMonths>0&&!/installment/i.test(text(context.method))){
+     if(text(context.method)&&fullPaymentDay(account)!==null)awardMonths('straight',straightMonths);
+     else {straightMissing=true;checks.push('XÁC MINH - GIỜ TẶNG TRẢ THẲNG: cần phương thức thanh toán và ngày full từ chứng từ để chốt tháng tặng.');}
+    }
    }else {cells.N=null;cells.BO='CHECK - DISCOUNT CHƯA CÓ RULE ĐẦY ĐỦ';checks.push(cells.BO);}
-   if(match.period==='september'&&pricing.phase!=='base'||match.period==='q4'&&pricing.phase!=='q4'||match.period==='october'&&!['q4','october'].includes(pricing.phase)){cells.BO='CHECK - NGOÀI THỜI KỲ DISCOUNT';checks.push(cells.BO)}
+   if(!(match.sharedSepOct&&between(cells.D,'2026-09-01','2026-10-31'))&&(match.period==='september'&&pricing.phase!=='base'||match.period==='q4'&&pricing.phase!=='q4'||match.period==='october'&&!['q4','october'].includes(pricing.phase))){cells.BO='CHECK - NGOÀI THỜI KỲ DISCOUNT';checks.push(cells.BO)}
   }
   if(cells.BD!=='OK')checks.push(cells.BD);
   cells.CI=code||hasDescription?'CHECK - GIFTCODE CHƯA ĐƯỢC DUYỆT / ĐỦ HỒ SƠ':'NO GIFTCODE';
@@ -121,7 +131,13 @@ class IndependentCalculator{
   if(number(cells.M)&&number(cells.N)&&number(cells.O)&&cells.N+cells.O>cells.M)checks.push('CHECK - TỔNG DISCOUNT VÀ GIFTCODE VƯỢT GIÁ GỐC: kiểm tra trùng học bổng hoặc sai cơ sở %.');
   cells.P=number(account.transferIn)?account.transferIn:0;
   cells.Q=number(cells.M)&&number(cells.N)&&number(cells.O)?Math.max(0,cells.M-cells.N-cells.O):null;
-  cells.R=pricing&&number(pricing.months)&&number(pricing.hours)&&!loyaltyMissing&&(pricing.pkg!=='36 SPLIT'||options.cells?.AT==='YES'||reviewed('sibling'))?Math.round((pricing.months+bonus)*pricing.hours*data.policy.hourFactor):null;
+  const hoursPending=[];
+  if(discountOffers(label).some(offer=>{const item=discountPolicyMatch(offer,cells.D);return ['straight','months','referral'].includes(item.kind)&&(!item.ruleKey||item.issues.length);}))hoursPending.push('Nhãn tháng tặng chưa khớp quy tắc được xác minh.');
+  if(loyaltyMissing)hoursPending.push('Chưa chốt điều kiện tháng loyalty.');
+  if(straightMissing)hoursPending.push('Chưa xác minh trả thẳng và ngày đóng đủ.');
+  if(pricing?.pkg==='36 SPLIT'&&options.cells?.AT!=='YES'&&!reviewed('sibling'))hoursPending.push('Chưa đủ điều kiện gói sibling chia đôi.');
+  const courseHours=courseHourTotals(pricing,monthComponents,data.policy.hourFactor,hoursPending);
+  cells.extraHours=courseHours.extraHours;cells.R=courseHours.totalHours;
   cells.W=number(account.net)?account.net:null;cells.Y=group.raw.AJ??null;
   const actualTerm=typeof cells.Y==='number'?cells.Y:/^\d+(?:\.\d+)?/.test(text(cells.Y))?parseFloat(cells.Y):null;
   if(!text(context.method))cells.AE='CHECK - THIẾU PHƯƠNG THỨC';
@@ -141,8 +157,8 @@ class IndependentCalculator{
   cells.ctCheck=reconciliation.status;cells.promoCheck=promotion.status;cells.contractTotal=account.ct||'';cells.ctNet=account.ct?account.net:null;
   const complete=['Z','AA','AB','AC','AD'].every(k=>number(cells[k])&&Math.abs(cells[k])<=1);
   cells.AF=complete&&cells.AE==='OK'&&cells.BD==='OK'&&cells.BO==='OK'&&['OK','NO GIFTCODE'].includes(cells.CI)&&!promotion.blocking&&!reconciliation.blocking?'OK':'CHECK';
-  cells.AN=unique([pricing?pricing.refs.map(r=>r.file+' · '+r.sheet+' · dòng '+r.row+(r.cell?' · ô '+r.cell:'')).join('; '):'Chưa có quy tắc giá đúng Course fee / giờ / gói / ngày.',pricing?.short&&number(pricing.monthly)?'Giá gốc gói lẻ = '+pricing.monthly.toLocaleString('vi-VN')+' VND/tháng chưa giảm × '+pricing.months+' tháng. Discount và Giftcode tính riêng.':'',number(cells.Q)?'Phải đóng = giá niêm yết − discount − giftcode. Transfer là phân bổ tiền, không trừ học phí lần hai.':'Chưa đủ dữ liệu để tính; ô trống không được coi là 0.',code?((context.voucherBasis&&context.voucherBasis!=='policy-default'?context.voucherBasis:voucherBasisFor(data,cells.D))==='gross'?'Giftcode % trên giá gốc trước Discount; kiểm tra căn cứ phê duyệt của mã.':'Giftcode % trên giá gốc trừ Discount; theo căn cứ phê duyệt của mã.'):'',loyaltyMissing?'Cần lịch sử học phí và ngày dừng học để xét loyalty.':'',...promotion.checks]).join(' | ');
-  return {...record,cells,context,errors:[],reconciliation,promotion,pricing,tolerance,discountComponents};
+  cells.AN=unique([pricing?pricing.refs.map(r=>r.file+' · '+r.sheet+' · dòng '+r.row+(r.cell?' · ô '+r.cell:'')).join('; '):'Chưa có quy tắc giá đúng Course fee / giờ / gói / ngày.',pricing?.short&&number(pricing.monthly)?'Giá gốc gói lẻ = '+pricing.monthly.toLocaleString('vi-VN')+' VND/tháng chưa giảm × '+pricing.months+' tháng. Discount và Giftcode tính riêng.':'',number(cells.Q)?'Phải đóng = giá niêm yết − discount − giftcode. Transfer là phân bổ tiền, không trừ học phí lần hai.':'Chưa đủ dữ liệu để tính; ô trống không được coi là 0.',code?((context.voucherBasis&&context.voucherBasis!=='policy-default'?context.voucherBasis:voucherBasisFor(data,cells.D))==='gross'?'Giftcode % trên giá gốc trước Discount; kiểm tra căn cứ phê duyệt của mã.':'Giftcode % trên giá gốc trừ Discount; theo căn cứ phê duyệt của mã.'):'',number(cells.extraHours)?'Giờ tặng = '+courseHours.bonusMonths+' tháng × '+courseHours.weeklyHours+' giờ/tuần × '+(courseHours.factor===25/6?'25/6':courseHours.factor)+'; tổng giờ làm tròn sau khi cộng, không cộng lại giờ tặng lần hai.':'',loyaltyMissing?'Cần lịch sử học phí và ngày dừng học để xét loyalty.':'',...promotion.checks]).join(' | ');
+  return {...record,cells,context,errors:[],reconciliation,promotion,pricing,tolerance,discountComponents,courseHours};
  }
 }
 export class AuditEngine extends ContractEngine{

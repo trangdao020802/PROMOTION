@@ -152,3 +152,10 @@ Tiến độ CT đã lưu được giữ; hết giờ hoặc hủy rồi bấm l
 ## Tìm kiếm và chọn tất cả trong bộ lọc
 
 Bảng đối chiếu dùng biểu tượng kính lúp; bấm để mở ô tìm kiếm. Khi đóng ô, từ khóa và kết quả lọc được giữ. Bộ lọc nhiều giá trị có **Chọn tất cả**, trạng thái chọn một phần và **Chọn tất cả kết quả** khi đang tìm giá trị; các mục đã chọn ngoài kết quả tìm vẫn được giữ.
+
+
+## Extra hours và tổng giờ khóa học
+
+Chi tiết CT có **Extra hours · CALC** ngay dưới **Total fee · CALC**. Giờ tặng = tổng tháng tặng đủ điều kiện × Hour/week × hệ số 25/6 tuần/tháng. Tổng giờ khóa học đã cộng giờ tặng và chỉ làm tròn sau khi cộng; không cộng lại từng ưu đãi vào tổng đã tính. Một tháng tặng ở lớp 3 giờ/tuần là 12,5 giờ, ở lớp 4 giờ/tuần khoảng 16,67 giờ. Gói 24 tháng tương ứng có tổng 313 hoặc 417 giờ sau khi tặng một tháng.
+
+Tháng trả thẳng / loyalty / referral theo cùng bảng chính sách, không tự cấp theo số bất kỳ trong nhãn. Gói 36 chia đôi có nửa tháng trả thẳng cho mỗi CT khi đủ điều kiện. Nhãn `1 Months (Sep/Oct2026 ... Tặng 1 tháng)` mô tả tháng tặng, không biến Package thành một tháng. Thiếu dữ liệu / căn cứ thì **Chưa tính**; số 0 là không có tháng tặng đã xác định. Giữ tổng giờ nguồn từ Export/PaymentList để đối chiếu chênh lệch. 169 kiểm thử đạt, gồm 16 ca mới cho giờ tặng; đã kiểm tra giao diện bằng 2 CT giả 3/4 giờ/tuần. Xem [cách tính giờ tặng](docs/extra-hours.md).

@@ -24,7 +24,8 @@ export function discountPolicyMatch(label,date,regime){
   const q4=typeof date==='number'&&date>=serial('2026-10-06')&&date<serial('2027-01-01');
   return {keys:['Sibling giảm tiền',fixedAmount+' VND'],kind:'sibling-cash',period:q4?'q4':null,ruleKey:'SIBLING_FIXED_'+fixedAmount,programIds:q4?['ref-q4']:[],issues:q4?[]:['CHECK - SIBLINGS GIẢM TIỀN: cần chính sách đúng thời kỳ; không tự áp quy tắc Q4 ngoài ngày 06/10–31/12/2026.'],siblings:true,siblingAddon:true,fixedAmount};
  }
- const text=discountLabelKey(label).replace(/[–—_:·-]/g,' ').replace(/\s+/g,' '),keys=[];
+ const text=discountLabelKey(label).replace(/\b(sep|sept|oct)(?=20\d{2}\b)/g,'$1 ').replace(/[–—_:·-]/g,' ').replace(/\s+/g,' '),keys=[];
+ const sharedSepOct=/\bsep\s*\/\s*oct\s+2026\b/.test(text);
  const years=[...new Set(text.match(/\b20\d{2}\b/g)??[])];
  const year2026=years.length===1&&years[0]==='2026';
  const q4=/\b(?:q\s*4|quy\s*4|bbq\s*4(?:26)?)\b/.test(text);
@@ -42,10 +43,17 @@ export function discountPolicyMatch(label,date,regime){
  const duration=/\b(\d{1,2})\s*(?:\/\s*\1|months?\b|thang\b)/.exec(text);
  if(siblings)keys.push('siblings');if(duration)keys.push(duration[0].trim());
  const kind=cash?'cash':referral?'referral':explicitMonths?'months':straight?'straight':months?'months':/\bpromotion\b/.test(text)?'cash':null;
+ // An awarded month is not the purchased Package. Keep the displayed quantity
+ // for validation; the approved schedule still supplies the actual entitlement.
+ const awarded=/\b(?:tang|gift|bonus)\s+(\d+(?:[.,]\d+)?)\s*(?:months?|thang)\b/.exec(text);
+ const prefix=/^(\d+(?:[.,]\d+)?)\s+months?\s*\(/.exec(text);
+ const monthAddon=['straight','months','referral'].includes(kind)&&!!(awarded||prefix);
+ const addonMonths=monthAddon?Number((awarded?.[1]??prefix[1]).replace(',','.')):null;
  if(kind)keys.unshift({cash:'Promotion Discount',months:'Promotion Month',straight:'Trả thẳng',referral:'Referral'}[kind]);
  const dated2026=typeof date==='number'&&date>=serial('2026-01-01')&&date<serial('2027-01-01');
  const currentYear=year2026||!years.length&&dated2026;
  const issues=[];
+ if(monthAddon&&(!(addonMonths>0)||addonMonths>12||awarded&&prefix&&Number(awarded[1].replace(',','.'))!==Number(prefix[1].replace(',','.'))))issues.push('CHECK - SỐ THÁNG TẶNG TRONG NHÃN MÂU THUẪN / KHÔNG HỢP LỆ');
  if((q4||fromOctober||october)&&years.some(y=>y!=='2026'))issues.push('CHECK - KEY DISCOUNT KHÁC NĂM: không áp dụng quy tắc tháng 10/Q4 2026 cho năm ghi trong Discount.');
  if(currentYear&&september&&(october||q4||fromOctober))issues.push('CHECK - KEY DISCOUNT MÂU THUẪN: có cả kỳ tháng 9 và tháng 10/Q4.');
  const period=currentYear&&!issues.length?(q4||fromOctober?'q4':october?'october':september&&/\bbig\s*bang\b/.test(text)?'september':null):null;
@@ -63,7 +71,8 @@ export function discountPolicyMatch(label,date,regime){
   }
  }
  if(siblingAddon&&period&&period!=='september'&&!programIds.includes('ref-q4'))programIds.push('ref-q4');
- return {keys,kind,period,ruleKey,programIds,issues,siblings,siblingAddon};
+ if(sharedSepOct&&kind==='straight'&&typeof date==='number'&&date>=serial('2026-09-01')&&date<serial('2026-10-01'))programIds=['sep-bigbang'];
+ return {keys,kind,period,ruleKey,programIds,issues,siblings,siblingAddon,monthAddon,addonMonths,sharedSepOct};
 }
 
 // Validate each offer against policy keys, not the PaymentList observation

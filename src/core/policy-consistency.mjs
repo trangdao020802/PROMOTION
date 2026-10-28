@@ -13,15 +13,22 @@ export function offerConsistencyChecks(cells,context,pricing){
  for(const [i,m]of matches.entries()){
   const label=discountLabelKey(offers[i]);checks.push(...m.issues);
   if(m.siblingAddon&&pricing?.pkg==='36 SPLIT')checks.push('XÁC MINH - REFERRAL/SIBLING: gói 36 chia đôi có câu hỏi Sibling New tặng thêm chưa được trả lời tại Q4 dòng 112; cần căn cứ riêng.');
+  if(m.monthAddon&&pricing){
+   const expected=m.kind==='months'?pricing.loyalty:m.kind==='referral'?pricing.referral:m.sharedSepOct&&pricing.regime==='base'?pricing.row?.M:pricing.straight;
+   if(!num(expected)||m.addonMonths!==expected)checks.push('CHECK - SỐ THÁNG TẶNG KHÁC RULE CỦA GÓI: '+offers[i]);
+   if(m.kind==='months'&&/^new$/i.test(text(context.contractType)))checks.push('CHECK - THÁNG LOYALTY CHỈ DÀNH CHO HỌC VIÊN CURRENT ĐỦ ĐIỀU KIỆN');
+  }
   if(['sibling-cash','referral'].includes(m.kind)||/on\s*top|flash\s*sale/.test(label))continue;
   const layer=/\blayer\s*([123])\b/.exec(label),hours=/\b([34])\s*(?:hrs?|hours?|gio)\s*\/\s*(?:week|tuan)\b/.exec(label);
   if(layer&&Number(layer[1])!==pricing?.layer)checks.push('CHECK - LAYER TRONG DISCOUNT KHÁC COURSE FEE KOC: '+offers[i]);
   if(hours&&Number(hours[1])!==pricing?.hours)checks.push('CHECK - GIỜ TRONG DISCOUNT KHÁC HOUR/WEEK: '+offers[i]);
   const duration=/\b(\d+)\s*(?:\/\s*\1\b|months?\b|thang\b)/.exec(label);
-  if(duration&&pricing){
+  if(duration&&pricing&&!m.monthAddon){
    const allowed=pricing.pkg==='36 SPLIT'?[18,36]:[Number(pricing.pkg)];
    if(!allowed.includes(Number(duration[1])))checks.push('CHECK - GÓI TRONG DISCOUNT KHÁC PACKAGE: '+offers[i]);
   }
+  if(m.sharedSepOct&&!window(cells.D,'2026-09-01','2026-10-31'))checks.push('CHECK - ƯU ĐÃI TẶNG THÁNG SEP/OCT NGOÀI THỜI KỲ 01/09–31/10/2026');
+  if(m.kind==='straight'&&/installment/i.test(text(context.method)))checks.push('CHECK - TẶNG THÁNG TRẢ THẲNG KHÔNG ÁP DỤNG TRẢ GÓP');
   if(m.ruleKey==='BBSEP26_STRAIGHT'&&/installment/i.test(text(context.method)))checks.push('CHECK - BIG BANG SEP TẶNG THÁNG YÊU CẦU TRẢ THẲNG');
   if(['BBSEP26_CASH','BBSEP26_STRAIGHT'].includes(m.ruleKey)&&pricing&&![12,18,24,36,'36 SPLIT'].includes(pricing.pkg))checks.push('CHECK - BIG BANG SEP CHỈ ÁP DỤNG GÓI 12 / 18 / 24 / 36 THÁNG VÀ 36 CHIA ĐÔI');
  }
