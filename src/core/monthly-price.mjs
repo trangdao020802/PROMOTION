@@ -1,13 +1,13 @@
+import {pricingIdentity} from './pricing-key.mjs';
 const text=value=>String(value??'').trim();
 const positive=value=>typeof value==='number'&&Number.isFinite(value)&&value>0;
 
 // A month before discount is the regular three-month schedule's monthly
 // price. The Audit trial/promotion price is never a multiplication base.
 export function regularMonthlyPrice(data,{course,hours,group}){
- const match=/^(ATLS|AGLS) - New Price 2026 - Layer ([123])$/i.exec(text(course));
- const weekly=/^([34])\s*(?:hrs|hours|giờ)\s*\/\s*(?:week|tuần)$/i.exec(text(hours));
- if(!match||!weekly||!['ATLS','AGLS'].includes(text(group).toUpperCase()))return null;
- const policy=data.policy??data.extensions??{},layer=Number(match[2]),hour=Number(weekly[1]);
+ const identity=pricingIdentity(course,hours,'3 months',{group});
+ if(identity.year!==2026||!['standard','ahp'].includes(identity.variant)||identity.conflicts.length||!['ATLS','AGLS','AHP'].includes(identity.group)||![3,4].includes(identity.hours))return null;
+ const policy=data.policy??data.extensions??{},layer=identity.layer,hour=identity.hours;
  const rows=(policy.roadmap??[]).filter(r=>r.A===`${layer}|${hour}|3`),row=rows[0];
  if(rows.length!==1||!positive(row.F)||row.E!==3||row.G!==row.F*3)return null;
  const corrected=(policy.monthlyRates??[]).filter(r=>r.layer===layer&&r.hours===hour);

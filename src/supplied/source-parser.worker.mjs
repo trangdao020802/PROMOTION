@@ -1421,6 +1421,15 @@
   $.onmessage = async ({ data: e2 }) => {
     let { type: t2, requestId: n2 } = e2;
     try {
+      if(t2===`policy-read`){
+        const file=e2.file;if(!file?.size||file.size>20971520)throw Error(`File chính sách tối đa 20 MB.`);
+        const buffer=await file.arrayBuffer();let tables;
+        if(/\.xlsx$/i.test(file.name)){const book=V(buffer,{sourceOnly:false});if(book.sheets.length>100)throw Error(`Chọn workbook chính sách tối đa 100 sheet.`);tables=book.sheets.map(s=>({name:s.name,rows:book.readSheet(s.name)}));}
+        else if(/\.(csv|tsv)$/i.test(file.name))tables=[{name:file.name,rows:ge(new TextDecoder().decode(buffer))}];
+        else throw Error(`Chọn .xlsx, .csv hoặc .tsv.`);
+        if(tables.some(t=>t.rows.length>5000))throw Error(`Sheet chính sách tối đa 5.000 dòng. Chọn sheet giá đã chuẩn hóa.`);
+        $.postMessage({type:`policy-read`,requestId:n2,tables});return;
+      }
       if (t2 === `read`) {
         let t3 = ++Ie, r2 = e2.files;
         if (Fe = [], !r2.length || r2.length > 8) throw Error(`Chọn từ 1 đến 8 file.`);

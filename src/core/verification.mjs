@@ -34,7 +34,7 @@ export function verificationInput(patch){return {...EMPTY_VERIFICATION,...patch,
 export function verificationMetadata(data,group,input,packageValue,patches=new Map()){
  const v=verificationInput(input),hasInput=!!input,proof=v.evidenceIds.length>0,pending=[],overrides={},conditions=[];
  let conditionId='sibling';
- const key=packageValue,split=key==='36 SPLIT',current=!/^new$/i.test(String(group.raw?.G??data.grids.RAW_REPORT['G'+group.rawRow]??''));
+ const key=packageValue,split=/^(12|18|24|36) SPLIT$/.test(String(key)),splitMonths=split?Number(String(key).split(' ')[0]):null,current=!/^new$/i.test(String(group.raw?.G??data.grids.RAW_REPORT['G'+group.rawRow]??''));
  const date=Number(group.cells.D),rule=data.grids.RULE,guide=data.grids.HUONG_DAN,payment=data.grids.RAW_REPORT['D'+group.rawRow];
  const guideRows=Object.keys(guide).filter(k=>/^E\d+$/.test(k)&&guide[k]===payment).map(k=>k.slice(1));
  const oldPolicyApproved=guideRows.length===1&&guide['P'+guideRows[0]]==='YES'&&String(guide['Q'+guideRows[0]]??'').trim();
@@ -53,13 +53,13 @@ export function verificationMetadata(data,group,input,packageValue,patches=new M
   if(partner&&identifier(partner.cells.F)!==identifier(v.partnerStudentId))missing('Student ID đối ứng không khớp CT trong nguồn.');
   if(partner){
    const course=String(own(partnerPatch,'H')?partnerPatch.H:partner.cells.H??'').trim();
-   if(!/^ATLS/i.test(course))missing('Course fee tại CT đối ứng không phải ATLS trong dữ liệu đang dùng.');
+   if(!/^(?:ATLS|AGLS)/i.test(course))missing('Course fee tại CT đối ứng không phải ATLS/AGLS trong dữ liệu đang dùng.');
    const pkg=String(own(partnerPatch,'J')?partnerPatch.J:partner.cells.J??'').trim();
-   if(!/^(?:18\s+(?:months?|tháng)\s+siblings|36\b.*(?:SPLIT|chia đôi|siblings))/i.test(pkg))missing('CT đối ứng chưa được ghi nhận là nửa gói 36 tháng.');
+   const expected=new RegExp('^(?:'+splitMonths/2+'\\s*(?:months?|tháng)\\s+siblings?|'+splitMonths+'\\b.*(?:SPLIT|chia đôi|siblings))','i');if(!expected.test(pkg))missing('CT đối ứng chưa được ghi nhận là nửa gói '+splitMonths+' tháng.');
   }
   const ownDay=dateSerial(v.ownFullDate),partnerDay=dateSerial(v.partnerFullDate);
   if(ownDay===null||partnerDay===null)missing('Ghi ngày đóng đủ phí của cả hai CT.');
-  else if(ownDay!==partnerDay)missing('Hai CT đóng đủ phí khác ngày; chưa đủ điều kiện gói 36 chia đôi.');
+  else if(ownDay!==partnerDay)missing('Hai CT đóng đủ phí khác ngày; chưa đủ điều kiện gói '+splitMonths+' chia đôi.');
   if(q4&&ownDay!==null&&(ownDay<rule.Z83||ownDay>=rule.Z84+1))missing('Ngày full nằm ngoài thời hạn Q4 của bảng giá đang dùng.');
   if(ownDay!==null&&ownDay>Math.floor(group.account.cutoff))missing('Ngày full sau ngày chốt dữ liệu; cập nhật PaymentList để đối chiếu đúng phạm vi.');
   const actualDay=fullPaymentDay(group.account),partnerActual=partner?fullPaymentDay(partner.account):null;

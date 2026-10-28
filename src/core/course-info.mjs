@@ -1,15 +1,22 @@
 // Course evidence is independent of receipts. Never infer hours from cash or
 // total hours, nor copy the package of a retired/intermediate CT.
+import {pricingIdentity,weeklyHours,priceText} from './pricing-key.mjs';
 const columns={H:'courseFee',I:'hoursPerWeek',J:'package',K:'giftcode',L:'discount'};
 const text=v=>String(v??'').trim();
 const present=v=>v!==null&&v!==undefined&&!['','0','-','—','N/A'].includes(text(v).toUpperCase());
 const NO_CT='Chưa có dòng hóa đơn CT trong RAW_REPORT';
+function valueKey(col,value){
+ if(col==='H'){const c=pricingIdentity(value,'','');if(c.group&&c.year&&c.layer&&!c.conflicts.length)return [c.group,c.year,c.layer,c.variant,weeklyHours(value)??''].join('|');}
+ if(col==='I'){const h=weeklyHours(value);if(h)return String(h);}
+ if(col==='J'){const s=priceText(value),m=/^(\d+)\s*(?:months?|thang)(\s+siblings?)?$/.exec(s);if(m)return m[1]+(m[2]?' siblings':' months');}
+ return text(value);
+}
 export function resolveCourseInfo(candidates){
  const values={},fields={},warnings=[];
  for(const col of Object.keys(columns)){
   const available=candidates.filter(r=>present(r[col]));
-  const rows=available.some(r=>!r.fallback)?available.filter(r=>!r.fallback):available,distinct=[...new Set(rows.map(r=>text(r[col])))];
-  values[col]=distinct.length===1?distinct[0]:null;
+  const rows=available.some(r=>!r.fallback)?available.filter(r=>!r.fallback):available,distinct=[...new Set(rows.map(r=>valueKey(col,r[col])))];
+  values[col]=distinct.length===1?text(rows[0][col]):null;
   fields[col]=rows.map(r=>({value:text(r[col]),ref:r.ref}));
   if(distinct.length>1)warnings.push(`${col}: thông tin khóa học/ưu đãi khác nhau trong cùng CT; cần đối chiếu nguồn tại dòng tổng`);
  }
@@ -34,6 +41,7 @@ export function applyCourseInfo(book,group,hubSources=[]){
 export function withCourseSources(book,sources){
  // Callers load their own freshly built workbook. Original source grids and
  // stored manual patches remain untouched; sources are scoped before this call.
- for(const group of book.contractGroups)applyCourseInfo(book,group,sources);
+ const indexed=new Map();for(const source of sources){const key=source.ct+'|'+source.student;const bucket=indexed.get(key)??[];bucket.push(source);indexed.set(key,bucket);}
+ for(const group of book.contractGroups)applyCourseInfo(book,group,indexed.get(group.ct+'|'+String(group.cells.F))??[]);
  return book;
 }

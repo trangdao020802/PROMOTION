@@ -111,3 +111,24 @@ test('a frame timeout cleans up and keeps the existing Hub URL unchanged',()=>{
  const r=isolatedRuntime();r.send({type:'hub-agent-run',id:'qa-isolated',agentKey:'qa-agent',kind:'index',codes:[course.ct]});r.tick(31000);
  assert.equal(r.messages[0].code,'hub_frame_unavailable');assert.equal(r.frames[0].removed,true);assert.equal(r.timers.size,0);assert.equal(r.context.location.href,origin+'/home');
 });
+function inertCourseDocument({empty=false,wrongStudent=false}={}){
+ const element=(textContent,extra={})=>({tagName:'DIV',textContent,hidden:false,getAttribute:()=>null,getClientRects:()=>[],querySelectorAll:()=>[],...extra});
+ const pairs=[['Contract No.',course.ct],['Student ID',wrongStudent?'QA-OTHER':course.student],['Price name','ATLS New Price 2026 Layer1'],['Hour/week','4 hrs/week'],['Package before discount','18 months'],['Giftcode No.','0'],['Discount apply','0']];
+ const nodes=empty?[]:pairs.map(([label,value])=>element(label,{tagName:'LABEL',nextElementSibling:element(value)}));
+ return {documentElement:{},querySelector:()=>null,querySelectorAll:s=>s.startsWith('h1,')?[element('Contract '+course.ct)]:s.startsWith('label,dt')?nodes:[]};
+}
+test('a static Course info page is fetched as inert HTML and completes without starting its app or creating an iframe',async()=>{
+ const r=isolatedRuntime(),calls=[];r.context.AbortController=AbortController;r.context.DOMParser=class{parseFromString(){return inertCourseDocument();}};
+ r.context.fetch=async(url,options)=>{calls.push({url,options});return {ok:true,url,headers:{get:()=>null},text:async()=>'<html>synthetic Course info</html>'};};
+ r.send({type:'hub-agent-run',id:'qa-isolated',agentKey:'qa-agent',kind:'course',course});r.packet({type:'route-missing'});await drain();
+ assert.equal(calls.length,1);assert.equal(calls[0].url,course.url);assert.equal(calls[0].options.credentials,'same-origin');assert.equal(r.frames.length,0);assert.equal(r.messages.length,1);assert.equal(r.messages[0].payload.student,course.student);assert.equal(r.messages[0].payload.package,'18 months');assert.equal(r.timers.size,0);
+});
+test('inert HTML with a different student fails without storing inputs or opening a fallback tab',async()=>{
+ const r=isolatedRuntime();r.context.AbortController=AbortController;r.context.DOMParser=class{parseFromString(){return inertCourseDocument({wrongStudent:true});}};r.context.fetch=async url=>({ok:true,url,headers:{get:()=>null},text:async()=>'<html>synthetic mismatch</html>'});
+ r.send({type:'hub-agent-run',id:'qa-isolated',agentKey:'qa-agent',kind:'course',course});r.packet({type:'route-missing'});await drain();assert.equal(r.frames.length,0);assert.equal(r.messages[0].code,'course_unavailable');assert.equal(r.messages[0].payload,undefined);
+});
+test('DOM mutation completes a background iframe read without waiting for a polling timer',async()=>{
+ const r=isolatedRuntime(),observers=[];r.context.MutationObserver=class{constructor(fn){this.fn=fn;observers.push(this);}observe(){}disconnect(){this.disconnected=true;}};
+ r.send({type:'hub-agent-run',id:'qa-isolated',agentKey:'qa-agent',kind:'course',course});r.packet({type:'route-missing'});const f=r.frames[0];f.contentWindow.location.href=course.url;f.contentDocument=inertCourseDocument({empty:true});f.load();assert.equal(r.messages.length,0);assert.equal(observers.length,1);
+ const full=inertCourseDocument();const queries=full.querySelectorAll;f.contentDocument.querySelectorAll=s=>queries(s).map(e=>({...e,getClientRects:()=>[{}],...(e.nextElementSibling?{nextElementSibling:{...e.nextElementSibling,getClientRects:()=>[{}]}}:{})}));observers[0].fn([]);await drain();assert.equal(r.messages.length,1);assert.equal(r.messages[0].payload.courseFee,'ATLS New Price 2026 Layer1');assert.equal(f.removed,true);assert.equal(observers[0].disconnected,true);
+});

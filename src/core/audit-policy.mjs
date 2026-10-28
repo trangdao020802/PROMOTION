@@ -34,7 +34,7 @@ export function auditPolicyChecks(data,cells,context,account,receipts=[]){
   if(!(rule.AV&&rule.AV===cells.AL||rule.AW&&normalize(label).includes(normalize(rule.AW))))continue;
   const prefix=rule.BE==='CHECK'?'CHECK':'XÁC MINH';
   if(cells.D<rule.AX||cells.D>=rule.AY+1)checks.push(`${prefix} - THỜI KỲ CHÍNH SÁCH ${rule.AU}: ngoài ngày áp dụng trong RULE dòng ${rule.row}.`);
-  if(rule.BB===1&&text(context.group).toUpperCase()!=='ATLS')checks.push(`CHECK - ${rule.AU} CHỈ ÁP DỤNG ATLS`);
+  if(rule.BB===1&&text(context.priceGroup??context.group).toUpperCase()!=='ATLS')checks.push(`CHECK - ${rule.AU} CHỈ ÁP DỤNG ATLS`);
   const installment=/installment/i.test(text(context.method));
   if(rule.BA==='INSTALLMENT'&&!installment)checks.push(`CHECK - ${rule.AU} YÊU CẦU THANH TOÁN TRẢ GÓP`);
   if(rule.BA==='DIRECT'&&installment)checks.push(`CHECK - ${rule.AU} YÊU CẦU TRẢ THẲNG`);
@@ -58,6 +58,7 @@ export function auditPolicyChecks(data,cells,context,account,receipts=[]){
 export function auditPackageKey(value,label,date,base,audit){
  if(!audit||typeof base==='string'&&base.endsWith('SPLIT'))return base;
  const input=text(value),offer=text(label),q4=date>=audit.octoberFrom&&date<audit.q4To+1||/Q4|Quý 4|From 06\/10|6\.10/i.test(offer);
+ const explicit=/^(6|9|12|18)\s*(?:months?|tháng)\s+siblings?\b/i.exec(input);if(explicit)return Number(explicit[1])*2+' SPLIT';
  if(q4&&(/chia đôi/i.test(offer)||/siblings/i.test(input)||/36\/36/.test(offer)))return /36\/36/.test(offer)||/36\s*(?:months?|tháng)/i.test(offer+' '+input)?'36 SPLIT':'18 SPLIT';
  if(!q4&&(/chia đôi/i.test(offer)||/siblings/i.test(input)))return '36 SPLIT';
  return base;

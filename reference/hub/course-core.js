@@ -61,8 +61,8 @@ var PromotionHubCourse = (() => {
     "contract code": "contract",
     "contract number": "contract"
   };
-  function coursePageFromDocument(root) {
-    const visible = (e) => !!e && !e.hidden && e.getAttribute?.("aria-hidden") !== "true" && (!e.getClientRects || e.getClientRects().length > 0);
+  function coursePageFromDocument(root, { staticDocument = false } = {}) {
+    const visible = (e) => !!e && !e.hidden && e.getAttribute?.("aria-hidden") !== "true" && (!staticDocument ? !e.getClientRects || e.getClientRects().length > 0 : !e.closest?.('[hidden],[aria-hidden="true"],script,template'));
     const query = (e, s) => [...e?.querySelectorAll?.(s) ?? []];
     const controls = 'input:not([type="hidden"]):not([type="password"]),select,textarea';
     const valueOf = (element, key) => {

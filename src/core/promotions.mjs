@@ -119,9 +119,10 @@ export function matchingPrograms(label, programs, date) {
 
 export function promotionResult(cells, context, account, programs) {
   const label = String(cells.L ?? '').trim();
-  const found = matchingPrograms(label,programs,Number(cells.D));
-  const match=discountPolicyMatch(label,cells.D,cells.AO),checks=[...match.issues];
-  if(match.kind==='straight'&&/installment/i.test(String(context.method??'')))checks.push('CHECK - TRẢ GÓP KHÔNG TẶNG TRẢ THẲNG');
+  const legacy=context.customPolicy||context.priceYear===2024&&String(cells.AL).startsWith('LEGACY');
+  const found = legacy?[]:matchingPrograms(label,programs,Number(cells.D));
+  const match=discountPolicyMatch(label,cells.D,cells.AO),checks=legacy?[]:[...match.issues];
+  if(!legacy&&match.kind==='straight'&&/installment/i.test(String(context.method??'')))checks.push('CHECK - TRẢ GÓP KHÔNG TẶNG TRẢ THẲNG');
   if(label&&label!=='0'&&cells.AL==='OTHER')checks.push('XÁC MINH - CHƯA ĐỦ BỘ GIÁ/CÔNG THỨC CHO DISCOUNT NÀY; xem quy tắc và chứng từ');
   if(context.voucherType==='PHẦN TRĂM'&&Number(cells.N)>0&&cells.CI==='OK'&&(!context.voucherBasis||context.voucherBasis==='policy-default'))checks.push('XÁC MINH - CƠ SỞ % GIFTCODE: nguồn có cả Before − Discount và Before; chọn cơ sở % theo căn cứ phê duyệt của mã khi cộng giảm tiền.');
   for (const p of found) {

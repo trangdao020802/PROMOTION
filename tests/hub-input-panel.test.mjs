@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
+import fs from 'node:fs';
 import {build} from 'esbuild';
 import {policyData} from '../scripts/policy-data.mjs';
 import {parseDate} from '../src/core/source-parser.mjs';
@@ -15,6 +16,7 @@ export const useState=initial=>{const i=globalThis.qa.states.length;globalThis.q
 const React={createElement:(type,props,...children)=>({type,props:props||{},children})};export default React;
 `;
 const databaseStub=`
+export const activatePolicy=async()=>{throw Error("Not part of Input panel tests");};
 export const all=async store=>[...(globalThis.qa.stores[store]||new Map()).values()];
 export const get=async(store,id)=>globalThis.qa.stores[store]?.get(id);
 export const put=async(store,value)=>{(globalThis.qa.stores[store]??=new Map()).set(value.id,value);return value;};
@@ -23,6 +25,7 @@ export const versioned=async(store,id,version,create)=>{const values=globalThis.
 const bundled=build({stdin:{contents:`export {default} from ${JSON.stringify(new URL('../src/local/HubInputAutofill.tsx',import.meta.url).pathname)};export {localFetch} from ${JSON.stringify(new URL('../src/local/api.mjs',import.meta.url).pathname)};`,resolveDir:new URL('..',import.meta.url).pathname,loader:'js'},bundle:true,write:false,format:'cjs',platform:'node',target:'es2022',jsx:'transform',plugins:[{name:'panel-test-boundaries',setup(b){
  b.onResolve({filter:/^react$/},()=>({path:'react',namespace:'qa'}));
  b.onResolve({filter:/^\.\/db\.mjs$/},()=>({path:'db',namespace:'qa'}));
+ b.onLoad({filter:/local\/model\.mjs$/},a=>({contents:fs.readFileSync(a.path,'utf8').replace('export function buildModel(bundle,p){','export function buildModel(bundle,p){globalThis.qa.modelBuilds=(globalThis.qa.modelBuilds||0)+1;'),loader:'js'}));
  b.onLoad({filter:/.*/,namespace:'qa'},a=>({contents:a.path==='react'?reactStub:databaseStub,loader:'js'}));
 }}]});
 function nodes(node){return node&&typeof node==='object'?[node,...(node.children||[]).flatMap(nodes)]:[];}
@@ -31,7 +34,7 @@ function dataset(rows){
  const day=parseDate('2026-10-10'),records=rows.map((r,i)=>({sourceKey:'p',sourceRow:i+2,cells:{B:'QA CENTER',C:'QA1',D:'QA2610-PAY-'+String(i+4).padStart(6,'0'),E:r.ct,R:r.cells.F,S:'DỮ LIỆU GIẢ',O:day,P:'QA00'+i,I:'Paid',F:'Payment',G:'New',X:'ATLS',Z:'',AA:'',AB:'',AQ:'',AO:'',AH:'Online Payments',AJ:'',AC:7200000,AD:0,AE:0,AF:7200000,AG:25}}));
  return {id:'qa-local',fileIds:[],bundle:{kind:'source-bundle-v1',scope:{from:'2026-10-01',to:'2026-10-31',center:''},cutoff:parseDate('2026-10-31'),records,cash:records,transfers:[],exports:records.map(r=>({sourceKey:'e',sourceRow:r.sourceRow,ct:r.cells.E,student:r.cells.R,target:7200000,paid:7200000,totalHours:25,contractType:'New',center:'QA1'})),sources:['payment','export','transfer'].map((role,fileIndex)=>({key:['p','e','t'][fileIndex],role,fileIndex,fileName:'QA-'+role+'.csv',sheetName:'CSV',headerRow:1,rowCount:records.length}))}};
 }
-async function runPanel({existing=false,count=1,lookupError=false,version='1.6.5',timeoutOnce=false,partialOnce=false,persisted=null}={}){
+async function runPanel({existing=false,count=1,lookupError=false,version='1.6.6',timeoutOnce=false,partialOnce=false,persisted=null}={}){
  const qa={states:[],stores:{links:new Map(),datasets:new Map(),courseSources:new Map()},network:[],lookups:[],reads:[],saved:[],links:[],busy:[],attempts:new Map()};
  if(persisted)qa.stores=persisted;
  const ct='QA2610-CT-000004',student='QA-INPUTS',url='https://hub24.apollo.vn:7777/contract/detail/12345';
@@ -53,11 +56,14 @@ test('Input panel uses browser-local JSON to resolve and save missing links befo
 test('Input panel reuses the existing browser link without a static-host API request',{timeout:5000},async()=>{
  const {qa,ct}=await runPanel({existing:true});assert.equal(qa.saved.length,1);assert.equal(qa.lookups.length,0);assert.equal(qa.links.length,0);assert.equal(qa.stores.links.get(ct).version,3);assert.equal(qa.network.length,0);
 });
+test('a batch reuses one source identity index instead of rebuilding the workbook for every CT write',{timeout:5000},async()=>{
+ const {qa}=await runPanel({count:12});assert.equal(qa.saved.length,12);assert.equal(qa.modelBuilds,1);assert.equal(qa.reads.length,12);assert.equal(qa.network.length,0);
+});
 test('Input panel reports an interrupted batch without claiming all contracts were read',{timeout:5000},async()=>{
  const {qa}=await runPanel({count:2,lookupError:true});assert.equal(qa.saved.length,0);assert.equal(qa.lookups.length,1);assert.match(qa.states[2],/Đã dừng/);assert.match(qa.states[2],/1\/2 CT/);assert.equal(qa.network.length,0);
 });
 test('the old Course info reader must be updated before starting a bulk read',{timeout:5000},async()=>{
- for(const version of ['1.6.2','1.6.3','1.6.4']){const {qa}=await runPanel({version});assert.match(qa.states[2],/1.6.5/);assert.equal(qa.states[4],true);assert.equal(qa.lookups.length,0);assert.equal(qa.reads.length,0);assert.equal(qa.saved.length,0);}
+ for(const version of ['1.6.2','1.6.3','1.6.4']){const {qa}=await runPanel({version});assert.match(qa.states[2],/1.6.6/);assert.equal(qa.states[4],true);assert.equal(qa.lookups.length,0);assert.equal(qa.reads.length,0);assert.equal(qa.saved.length,0);}
 });
 test('retry after a timeout skips completed contracts and continues the failed and untouched contracts',{timeout:5000},async()=>{
  const {qa,retry}=await runPanel({count:3,timeoutOnce:true});assert.equal(qa.saved.length,1);assert.equal(qa.reads.length,2);assert.match(qa.states[2],/2\/3 CT/);await retry();assert.equal(qa.saved.length,3);assert.equal(qa.reads.length,4);assert.equal(qa.attempts.get('QA2610-CT-000004'),1);assert.equal(qa.attempts.get('QA2610-CT-000005'),2);assert.equal(qa.attempts.get('QA2610-CT-000006'),1);await retry();assert.equal(qa.reads.length,4);assert.equal(qa.network.length,0);

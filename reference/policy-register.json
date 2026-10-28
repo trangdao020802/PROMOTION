@@ -1,6 +1,12 @@
 {
   "version": 1,
-  "sourceOrder": ["Văn bản chính sách đúng thời kỳ và đối tượng", "Lộ trình giá có ô nguồn đã đối chiếu", "Bảng giá chung: tham chiếu giá gốc đúng khóa", "Audit: bộ ca kiểm chứng tháng 9–10", "PaymentList / Report: dữ liệu thực tế để so sánh"],
+  "sourceOrder": [
+    "Văn bản chính sách đúng thời kỳ và đối tượng",
+    "Lộ trình giá có ô nguồn đã đối chiếu",
+    "Bảng giá chung: tham chiếu giá gốc đúng khóa",
+    "Audit: bộ ca kiểm chứng tháng 9–10",
+    "PaymentList / Report: dữ liệu thực tế để so sánh"
+  ],
   "stacking": {
     "base": "Một ưu đãi nền; referral/sibling và tái phí sớm chỉ khi văn bản cho phép; gói lẻ 1–2 tháng không có ưu đãi tự động.",
     "september": "Giảm tiền Big Bang Sep; trả thẳng cộng tháng theo gói; On Top 5% cần lịch sử >100 triệu. Ngoài ra không tự cộng ưu đãi khác.",
@@ -8,31 +14,549 @@
     "q4": "Một mức giảm Q4 + trả thẳng + loyalty đúng từng học viên + referral/sibling đúng loại gói. Không nhân đôi khi nhiều nhãn mô tả cùng khoản giảm."
   },
   "voucherPolicies": [
-    {"id":"case-specific","label":"Phê duyệt riêng của mã / chưa phân loại chính sách"},
-    {"id":"ceo","label":"CEO / RCM cứu Net Gain · 18/09–31/10/2026"},
-    {"id":"four-centers","label":"Hỗ trợ 30% · RGI / TPU / LNQ / LBB"},
-    {"id":"referral-points","label":"Điểm giới thiệu / Apo · trừ sau cùng"},
-    {"id":"local-scholarship","label":"Học bổng Local / đặc quyền cụm · cần căn cứ riêng"},
-    {"id":"staff","label":"Học bổng nhân viên · cần hồ sơ mã cụ thể"}
+    {
+      "id": "case-specific",
+      "label": "Phê duyệt riêng của mã / chưa phân loại chính sách"
+    },
+    {
+      "id": "ceo",
+      "label": "CEO / RCM cứu Net Gain · 18/09–31/10/2026"
+    },
+    {
+      "id": "four-centers",
+      "label": "Hỗ trợ 30% · RGI / TPU / LNQ / LBB"
+    },
+    {
+      "id": "referral-points",
+      "label": "Điểm giới thiệu / Apo · trừ sau cùng"
+    },
+    {
+      "id": "local-scholarship",
+      "label": "Học bổng Local / đặc quyền cụm · cần căn cứ riêng"
+    },
+    {
+      "id": "staff",
+      "label": "Học bổng nhân viên · cần hồ sơ mã cụ thể"
+    }
   ],
   "programs": [
-    {"id":"sep-bigbang","title":"Big Bang Sep 2026","from":"2026-09-01","to":"2026-09-30","state":"confirmed","match":["Big Bang Sep 2026"],"benefit":"Giảm cố định theo lộ trình; trả thẳng cộng tháng; On Top 5% theo lịch sử đủ điều kiện.","conditions":["New / EPP tháng 10 trở về trước / upgrade đúng điều kiện.","Full trong 14 ngày; kiểm tra ngoại lệ 60 ngày và thời điểm chương trình kết thúc.","Chỉ gói 12/18/24/36 tháng, gồm chia đôi 36."],"stacking":"Trả thẳng và On Top đủ điều kiện; không tự cộng ưu đãi khác.","refs":[{"file":"2026 Price & Promotion - update 10.10.26.xlsx","sheet":"Big bang promotion 1.9.2026 - 3","rows":[2,3,5,6,9,10,11]}]},
-    {"id":"oct-base","title":"Giá nền tháng 10/2026","from":"2026-10-01","to":"2026-10-05","state":"confirmed","match":["BASE OCT"],"benefit":"Giá nền và mức giảm cột P; tháng trả thẳng cột R; kỳ tối đa cột S.","conditions":["Đúng Course fee 2026, Layer, giờ và gói.","Từ 06/10 chuyển Q4; giữ policy cũ cần căn cứ riêng."],"stacking":"Theo quy tắc giá nền tháng 10.","refs":[{"file":"Lo_trinh_san_pham_CTKM_ATLS_2026.xlsx","sheet":"BẢNG GIÁ","rows":[4,5]},{"file":"2026 Price & Promotion - update 10.10.26.xlsx","sheet":"Big bang promotion 6.10 - 31.12","rows":[107]}]},
-    {"id":"base2026","title":"Giá nền ATLS 2026","from":"2026-03-01","renewFrom":"2026-03-17","to":"2026-09-30","state":"confirmed","match":["Học bổng Đồng hành","Học bổng Ghi danh"],"benefit":"Giá gốc và học bổng nền theo gói; không dùng giá trải nghiệm làm đơn giá tháng thường.","conditions":["New từ 01/03; Current từ 17/03.","Ghi danh trong ngày / thanh toán đúng hạn; gói và ưu đãi có điều kiện riêng."],"stacking":"Học bổng nền, referral/sibling và tái phí sớm theo văn bản.","refs":[{"file":"2026 Price & Promotion - update 10.10.26.xlsx","sheet":"2026 ATLS Price đến 3092026","rows":[3,4,18,21,22,23,118,119]}]}
+    {
+      "id": "sep-bigbang",
+      "title": "Big Bang Sep 2026",
+      "from": "2026-09-01",
+      "to": "2026-09-30",
+      "state": "confirmed",
+      "match": [
+        "Big Bang Sep 2026"
+      ],
+      "benefit": "Giảm cố định theo lộ trình; trả thẳng cộng tháng; On Top 5% theo lịch sử đủ điều kiện.",
+      "conditions": [
+        "New / EPP tháng 10 trở về trước / upgrade đúng điều kiện.",
+        "Full trong 14 ngày; kiểm tra ngoại lệ 60 ngày và thời điểm chương trình kết thúc.",
+        "Chỉ gói 12/18/24/36 tháng, gồm chia đôi 36."
+      ],
+      "stacking": "Trả thẳng và On Top đủ điều kiện; không tự cộng ưu đãi khác.",
+      "refs": [
+        {
+          "file": "2026 Price & Promotion - update 10.10.26.xlsx",
+          "sheet": "Big bang promotion 1.9.2026 - 3",
+          "rows": [
+            2,
+            3,
+            5,
+            6,
+            9,
+            10,
+            11
+          ]
+        }
+      ]
+    },
+    {
+      "id": "oct-base",
+      "title": "Giá nền tháng 10/2026",
+      "from": "2026-10-01",
+      "to": "2026-10-05",
+      "state": "confirmed",
+      "match": [
+        "BASE OCT"
+      ],
+      "benefit": "Giá nền và mức giảm cột P; tháng trả thẳng cột R; kỳ tối đa cột S.",
+      "conditions": [
+        "Đúng Course fee 2026, Layer, giờ và gói.",
+        "Từ 06/10 chuyển Q4; giữ policy cũ cần căn cứ riêng."
+      ],
+      "stacking": "Theo quy tắc giá nền tháng 10.",
+      "refs": [
+        {
+          "file": "Lo_trinh_san_pham_CTKM_ATLS_2026.xlsx",
+          "sheet": "BẢNG GIÁ",
+          "rows": [
+            4,
+            5
+          ]
+        },
+        {
+          "file": "2026 Price & Promotion - update 10.10.26.xlsx",
+          "sheet": "Big bang promotion 6.10 - 31.12",
+          "rows": [
+            107
+          ]
+        }
+      ]
+    },
+    {
+      "id": "base2026",
+      "title": "Giá nền ATLS 2026",
+      "from": "2026-03-01",
+      "renewFrom": "2026-03-17",
+      "to": "2026-09-30",
+      "state": "confirmed",
+      "match": [
+        "Học bổng Đồng hành",
+        "Học bổng Ghi danh"
+      ],
+      "benefit": "Giá gốc và học bổng nền theo gói; không dùng giá trải nghiệm làm đơn giá tháng thường.",
+      "conditions": [
+        "New từ 01/03; Current từ 17/03.",
+        "Ghi danh trong ngày / thanh toán đúng hạn; gói và ưu đãi có điều kiện riêng."
+      ],
+      "stacking": "Học bổng nền, referral/sibling và tái phí sớm theo văn bản.",
+      "refs": [
+        {
+          "file": "2026 Price & Promotion - update 10.10.26.xlsx",
+          "sheet": "2026 ATLS Price đến 3092026",
+          "rows": [
+            3,
+            4,
+            18,
+            21,
+            22,
+            23,
+            118,
+            119
+          ]
+        }
+      ]
+    }
   ],
   "rules": [
-    {"id":"rule-q4-loyalty","ruleKey":"Q4_LOYALTY","regimeLabel":"Loyalty Q4","group":"ATLS","package":"18 / 24 / 36 tháng; 36 chia đôi","from":"2026-10-06","to":"2026-12-31","benefit":"+2 / +3 / +4 tháng; chia đôi: chỉ Current đủ điều kiện +2 tháng/con.","conditions":"Current; học phí trước đợt này >30 triệu; ngừng học ≤120 ngày. Đúng 30 triệu cần xác minh. New không nhận loyalty; không lấy lịch sử học viên đối ứng thay cho học viên này.","stacking":"Cộng Q4 và trả thẳng; không cộng lặp khi có cả nhãn Promotion Discount và Promotion Month.","requiredEvidence":"Lịch sử học phí, ngày ngừng học, minh chứng theo đúng Student ID.","status":"ready","refs":[{"file":"2026 Price & Promotion - update 10.10.26.xlsx","sheet":"Big bang promotion 6.10 - 31.12","rows":[24,25,111,114,118]}]},
-    {"id":"rule-q4-split","ruleKey":"Q4_SPLIT_36","regimeLabel":"36 tháng chia đôi Q4","group":"ATLS","package":"Mỗi con 18 tháng","from":"2026-10-06","to":"2026-12-31","benefit":"Giá tháng của gói 36 × 18; giảm 30%; trả thẳng +0,5 tháng; loyalty xét riêng.","conditions":"Hai con ruột, hai Student ID, hai CT và cùng ngày full. Không ghép ATLS với IELTS. Không suy loại gói chỉ từ số tiền thu.","stacking":"Sibling New tặng thêm trên gói chia đôi có câu hỏi chưa có trả lời ở dòng 112; phải có căn cứ riêng.","requiredEvidence":"CT và học viên đối ứng; quan hệ; chương trình; ngày full; chứng từ.","status":"ready","refs":[{"file":"2026 Price & Promotion - update 10.10.26.xlsx","sheet":"Big bang promotion 6.10 - 31.12","rows":[25,111,112,114,115]}]},
-    {"id":"rule-q4-sibling-cash","ruleKey":"SIBLING_FIXED","regimeLabel":"Sibling New giảm tiền Q4","group":"ATLS","package":"3 / 6 / 9 tháng","from":"2026-10-06","to":"2026-12-31","benefit":"Layer 1/2: 1.000.000 VND; Layer 3: 800.000 VND.","conditions":"New; anh/chị/em ruột còn học hoặc dừng ≤120 ngày. Không đổi ưu đãi tháng của gói dài thành giảm tiền.","stacking":"Theo Q4; khoản giảm cố định tính một lần.","requiredEvidence":"Học viên đối ứng, quan hệ và tình trạng học/ngày dừng.","status":"ready","refs":[{"file":"2026 Price & Promotion - update 10.10.26.xlsx","sheet":"Big bang promotion 6.10 - 31.12","rows":[99,100,101]}]},
-    {"id":"rule-oct-referral","ruleKey":"REFERRAL_OCT_DEC","regimeLabel":"Student / Staff Referral","group":"ATLS","package":"3 / 6 / 9; từ 12 tháng","from":"2026-10-01","to":"2026-12-31","benefit":"New gói 3/6/9 giảm 1 triệu / 800 nghìn; từ 12 tháng +1 tháng. Người giới thiệu hưởng theo lần giới thiệu và đợt tái phí.","conditions":"Phân biệt người giới thiệu và người được giới thiệu; không chuyển tháng thưởng sang học viên khác. Sibling New theo dòng 99–101.","stacking":"Cộng theo chương trình hiện hành; không dùng kỳ tháng 6–8 cho tháng 10.","requiredEvidence":"Vai trò, học viên đối ứng, số lần giới thiệu, thời điểm thưởng.","status":"manual-policy","refs":[{"file":"2026 Price & Promotion - update 10.10.26.xlsx","sheet":"Big bang promotion 6.10 - 31.12","rows":[93,94,95,96,97,98,117]}]},
-    {"id":"rule-special30","ruleKey":"SPECIAL30","regimeLabel":"Hỗ trợ 4 trung tâm","group":"ATLS","package":"6 / 9; gói 3 cần RCM/GCM","from":"2026-06-24","to":"2026-12-31","benefit":"30% giá gốc; đúng đối tượng/center/giờ học và coupon được cấp.","conditions":"New ở RGI/TPU/LNQ/LBB, 4 giờ/tuần. Current ở RGI/TPU/LNQ. New 3 giờ ở ba center mới cần RCM/GCM. Gói 3 cần duyệt riêng.","stacking":"Không cộng ưu đãi khác ngoài điểm giới thiệu; Flash Sale 26/08 là ngoại lệ ghi rõ trong guideline Flash Sale dòng 20.","requiredEvidence":"Coupon đúng học viên; duyệt trường hợp 3 giờ/gói 3/trả góp nếu có.","status":"ready","refs":[{"file":"Hỗ trợ đặc biệt cho 4 trung tâm - RGI_TPU_LNQ_LBB - Cấp code tối T2_4_6_CN.xlsx","sheet":"Guidelines","rows":[8,9,10,13,14]},{"file":"Flash Sale 26_08_2026.xlsx","sheet":"Guideline áp dụng","rows":[20]}]},
-    {"id":"rule-ceo","ruleKey":"CEO_RCM","regimeLabel":"CEO cứu Net Gain","group":"ATLS / IELTS","package":"ATLS 6 / 9 / 12; IELTS 1 level","from":"2026-09-18","to":"2026-10-31","benefit":"ATLS 30%; IELTS 45%. Không suy tỷ lệ/đối tượng từ tiền tố Giftcode.","conditions":"EPP tháng 5–8/2026, dừng ≤120 ngày; full trong kỳ; case RCM validate đúng học viên. Không mặc định New đủ điều kiện.","stacking":"Không ưu đãi khác ngoài điểm giới thiệu. Trả góp chỉ có suất cụm 3 tháng được duyệt.","requiredEvidence":"Case RCM, EPP, ngày dừng, ngày full, coupon và suất cụm nếu dùng.","status":"ready","refs":[{"file":"Hỗ trợ từ CEO cứu Net Gain từ 18_9_2026 trở đi.xlsx","sheet":"Guideline hỗ trợ EPP tháng 8 đổ","rows":[3,4,5,6,7,8,9,10]}]},
-    {"id":"rule-flash","ruleKey":"FLASH_2608","regimeLabel":"Flash Sale 26/08","group":"ATLS / IELTS","package":"Theo học phí và ưu đãi nền hợp lệ","from":"2026-08-26","to":"2026-08-26","benefit":"Giảm thêm 10% lũy tiến sau ưu đãi nền; referral/sibling tiền cố định trừ sau cùng.","conditions":"EPP tháng 8/quá khứ; full 26/08 hoặc cọc ≥2 tháng ngày 26/08 và full ≤31/08. Không tính thêm 10% trên khoản referral đã trừ.","stacking":"Có thể cộng Local và 4 center theo dòng 18,20; không dùng ngoại lệ này ngoài 26/08.","requiredEvidence":"EPP, ngày cọc, số tiền cọc, ngày full; giá nền có nguồn.","status":"ready","refs":[{"file":"Flash Sale 26_08_2026.xlsx","sheet":"Guideline áp dụng","rows":[6,7,10,12,14,16,17,18,19,20,21,26]}]},
-    {"id":"rule-sep","ruleKey":"BBSEP26","regimeLabel":"Big Bang Sep","group":"ATLS","package":"12 / 18 / 24 / 36; 36 chia đôi","from":"2026-09-01","to":"2026-09-30","benefit":"Giảm tiền theo cột K lộ trình; nhãn Tặng tháng vẫn có học phí sau giảm, cộng tháng trả thẳng riêng.","conditions":"New / EPP tháng 10 trở về trước / upgrade có điều kiện; full trong 14 ngày; trường hợp cọc 03–06/09 kiểm tra ngoại lệ 60 ngày. Có thể kết thúc sớm theo nguồn.","stacking":"Trả thẳng +1 tháng hoặc chia đôi +0,5 tháng; On Top 5% cần >100 triệu; ngoài ra không tự cộng.","requiredEvidence":"EPP, ngày cọc/full; lịch sử thu thật nếu On Top; nguồn giữ policy cũ khi ngoài kỳ.","status":"ready","refs":[{"file":"2026 Price & Promotion - update 10.10.26.xlsx","sheet":"Big bang promotion 1.9.2026 - 3","rows":[2,3,5,6,9,10,11,23,26,40]}]},
-    {"id":"rule-odd","ruleKey":"MONTHLY_GROSS","regimeLabel":"Gói lẻ","group":"ATLS / AGLS 2026","package":"1 / 2 tháng","from":"2026-03-01","to":null,"benefit":"Giá tháng CHƯA GIẢM của gói 3/6/9 × số tháng; không nhân đơn giá trải nghiệm đã giảm.","conditions":"Nguồn mô tả Current muốn học nốt khóa. Các gói lẻ khác, trải nghiệm New hoặc ưu đãi riêng cần kiểm tra văn bản.","stacking":"Không tự cộng khuyến mãi; voucher phê duyệt riêng phải có điều kiện cho đúng gói.","requiredEvidence":"Loại gói, khóa học và giá tháng; căn cứ riêng khi ngoại lệ.","status":"ready","refs":[{"file":"2026 Price & Promotion - update 10.10.26.xlsx","sheet":"2026 ATLS Price đến 3092026","rows":[117,118,119]}]},
-    {"id":"rule-ref-history","ruleKey":"REFERRAL_HISTORY","regimeLabel":"Referral / Sibling lịch sử","group":"ATLS / IELTS theo nguồn","package":"Gói thường / chia đôi","from":"2026-06-15","to":"2026-09-16","benefit":"Từng gói tặng tháng hoặc 1 triệu / 800 nghìn; ngày 17–30/09 chưa có kỳ được xác nhận.","conditions":"Chọn đúng bản 14/06–31/08 hoặc 01–16/09. Không dùng quan sát Siblings trên Report làm căn cứ cho khoảng trống chính sách.","stacking":"Theo bảng từng giai đoạn; không tự kéo dài ngày hiệu lực.","requiredEvidence":"Quan hệ/giới thiệu, vai trò, ngày full, đúng kỳ.","status":"manual-policy","refs":[{"file":"2026 Price & Promotion - update 10.10.26.xlsx","sheet":"ReferralSibling 14.6 - 31.8.202","rows":[2,4,8,9,10]},{"file":"2026 Price & Promotion - update 10.10.26.xlsx","sheet":"ReferralSibling 1.9.2026 - 16.9","rows":[2,4,8,9,10]}]},
-    {"id":"rule-vtdh","ruleKey":"VTDH_SEPARATE","regimeLabel":"Vững tin đồng hành","group":"ATLS","package":"18 tháng; 5 lần thanh toán","from":null,"to":null,"benefit":"Lộ trình thanh toán riêng tại Apollo; ưu đãi đúng hạn tại đợt cuối.","conditions":"Không dùng giá Big Bang Q4; một học viên, không chia đôi; cần đơn cam kết và lịch thanh toán.","stacking":"Chỉ cộng theo guideline VTDH; không lấy số tiền đã thu để suy giá.","requiredEvidence":"Cam kết, lịch thanh toán, thời điểm thu từng đợt.","status":"missing","refs":[{"file":"2026 Price & Promotion - update 10.10.26.xlsx","sheet":"Vững tin đồng hành 2026","rows":[2,3,4,5,6,7,15,16]},{"file":"2026 Price & Promotion - update 10.10.26.xlsx","sheet":"Big bang promotion 6.10 - 31.12","rows":[108]}]},
-    {"id":"rule-upgrade","ruleKey":"UPGRADE","regimeLabel":"Upgrade","group":"ATLS","package":"Gói ngắn lên 18 / 24 / 36","from":"2026-07-24","to":null,"benefit":"Giá gói đích trừ phần học phí đủ điều kiện; không trừ transfer thêm lần nữa.","conditions":"Theo thời kỳ và lịch sử gói cũ; file danh sách học viên chỉ xác nhận case, không tạo rule chung.","stacking":"Đối chiếu chính sách gói đích và loại contract theo ngày học/thu.","requiredEvidence":"CT cũ/đích, ngày thu và ngày bắt đầu học; danh sách được duyệt.","status":"manual-policy","refs":[{"file":"2026 Price & Promotion - update 10.10.26.xlsx","sheet":"Upgrade gói 3 hoặc 2 tháng","rows":[3,4,5,7,8,9,10]},{"file":"2026 Price & Promotion - update 10.10.26.xlsx","sheet":"Big bang promotion 6.10 - 31.12","rows":[116]}]},
-    {"id":"rule-other","ruleKey":"SEPARATE_PRICE_VERSION","regimeLabel":"2024 / IELTS / Summer / Premium / CLC","group":"Theo khóa và phiên bản giá","package":"Theo bảng riêng","from":null,"to":null,"benefit":"Cần bảng riêng đúng phiên bản, khóa, giờ, đối tượng và thời kỳ.","conditions":"Không ánh xạ sang giá ATLS 2026 chỉ vì tên gói, Layer hoặc số tiền giống nhau. Chưa đủ công thức phải CHECK.","stacking":"Không suy mức giảm từ Report/PaymentList hoặc tiền tố mã voucher.","requiredEvidence":"Bảng gốc, điều kiện, ngày hiệu lực và phê duyệt áp dụng nếu có.","status":"missing","refs":[{"file":"2026 Price & Promotion - update 10.10.26.xlsx","sheet":"IELTS Price & Promotion","rows":[1,2,3]},{"file":"2026 ATLS + Summer Price Proposal.xlsx","sheet":"B1. 2026 Summer price proposal","rows":[1,2,3]},{"file":"Hỗ trợ Sale_Renew Tháng 6 & 7_2026.xlsx","sheet":"2.1 Học sinh Apollo thi đậu trư","rows":[1,2,3]}]}
+    {
+      "id": "rule-q4-loyalty",
+      "ruleKey": "Q4_LOYALTY",
+      "regimeLabel": "Loyalty Q4",
+      "group": "ATLS",
+      "package": "18 / 24 / 36 tháng; 36 chia đôi",
+      "from": "2026-10-06",
+      "to": "2026-12-31",
+      "benefit": "+2 / +3 / +4 tháng; chia đôi: chỉ Current đủ điều kiện +2 tháng/con.",
+      "conditions": "Current; học phí trước đợt này >30 triệu; ngừng học ≤120 ngày. Đúng 30 triệu cần xác minh. New không nhận loyalty; không lấy lịch sử học viên đối ứng thay cho học viên này.",
+      "stacking": "Cộng Q4 và trả thẳng; không cộng lặp khi có cả nhãn Promotion Discount và Promotion Month.",
+      "requiredEvidence": "Lịch sử học phí, ngày ngừng học, minh chứng theo đúng Student ID.",
+      "status": "ready",
+      "refs": [
+        {
+          "file": "2026 Price & Promotion - update 10.10.26.xlsx",
+          "sheet": "Big bang promotion 6.10 - 31.12",
+          "rows": [
+            24,
+            25,
+            111,
+            114,
+            118
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rule-q4-split",
+      "ruleKey": "Q4_SPLIT_36",
+      "regimeLabel": "36 tháng chia đôi Q4",
+      "group": "ATLS",
+      "package": "Mỗi con 18 tháng",
+      "from": "2026-10-06",
+      "to": "2026-12-31",
+      "benefit": "Giá tháng của gói 36 × 18; giảm 30%; trả thẳng +0,5 tháng; loyalty xét riêng.",
+      "conditions": "Hai con ruột, hai Student ID, hai CT và cùng ngày full. Không ghép ATLS với IELTS. Không suy loại gói chỉ từ số tiền thu.",
+      "stacking": "Sibling New tặng thêm trên gói chia đôi có câu hỏi chưa có trả lời ở dòng 112; phải có căn cứ riêng.",
+      "requiredEvidence": "CT và học viên đối ứng; quan hệ; chương trình; ngày full; chứng từ.",
+      "status": "ready",
+      "refs": [
+        {
+          "file": "2026 Price & Promotion - update 10.10.26.xlsx",
+          "sheet": "Big bang promotion 6.10 - 31.12",
+          "rows": [
+            25,
+            111,
+            112,
+            114,
+            115
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rule-q4-sibling-cash",
+      "ruleKey": "SIBLING_FIXED",
+      "regimeLabel": "Sibling New giảm tiền Q4",
+      "group": "ATLS",
+      "package": "3 / 6 / 9 tháng",
+      "from": "2026-10-06",
+      "to": "2026-12-31",
+      "benefit": "Layer 1/2: 1.000.000 VND; Layer 3: 800.000 VND.",
+      "conditions": "New; anh/chị/em ruột còn học hoặc dừng ≤120 ngày. Không đổi ưu đãi tháng của gói dài thành giảm tiền.",
+      "stacking": "Theo Q4; khoản giảm cố định tính một lần.",
+      "requiredEvidence": "Học viên đối ứng, quan hệ và tình trạng học/ngày dừng.",
+      "status": "ready",
+      "refs": [
+        {
+          "file": "2026 Price & Promotion - update 10.10.26.xlsx",
+          "sheet": "Big bang promotion 6.10 - 31.12",
+          "rows": [
+            99,
+            100,
+            101
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rule-oct-referral",
+      "ruleKey": "REFERRAL_OCT_DEC",
+      "regimeLabel": "Student / Staff Referral",
+      "group": "ATLS",
+      "package": "3 / 6 / 9; từ 12 tháng",
+      "from": "2026-10-01",
+      "to": "2026-12-31",
+      "benefit": "New gói 3/6/9 giảm 1 triệu / 800 nghìn; từ 12 tháng +1 tháng. Người giới thiệu hưởng theo lần giới thiệu và đợt tái phí.",
+      "conditions": "Phân biệt người giới thiệu và người được giới thiệu; không chuyển tháng thưởng sang học viên khác. Sibling New theo dòng 99–101.",
+      "stacking": "Cộng theo chương trình hiện hành; không dùng kỳ tháng 6–8 cho tháng 10.",
+      "requiredEvidence": "Vai trò, học viên đối ứng, số lần giới thiệu, thời điểm thưởng.",
+      "status": "manual-policy",
+      "refs": [
+        {
+          "file": "2026 Price & Promotion - update 10.10.26.xlsx",
+          "sheet": "Big bang promotion 6.10 - 31.12",
+          "rows": [
+            93,
+            94,
+            95,
+            96,
+            97,
+            98,
+            117
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rule-special30",
+      "ruleKey": "SPECIAL30",
+      "regimeLabel": "Hỗ trợ 4 trung tâm",
+      "group": "ATLS",
+      "package": "6 / 9; gói 3 cần RCM/GCM",
+      "from": "2026-06-24",
+      "to": "2026-12-31",
+      "benefit": "30% giá gốc; đúng đối tượng/center/giờ học và coupon được cấp.",
+      "conditions": "New ở RGI/TPU/LNQ/LBB, 4 giờ/tuần. Current ở RGI/TPU/LNQ. New 3 giờ ở ba center mới cần RCM/GCM. Gói 3 cần duyệt riêng.",
+      "stacking": "Không cộng ưu đãi khác ngoài điểm giới thiệu; Flash Sale 26/08 là ngoại lệ ghi rõ trong guideline Flash Sale dòng 20.",
+      "requiredEvidence": "Coupon đúng học viên; duyệt trường hợp 3 giờ/gói 3/trả góp nếu có.",
+      "status": "ready",
+      "refs": [
+        {
+          "file": "Hỗ trợ đặc biệt cho 4 trung tâm - RGI_TPU_LNQ_LBB - Cấp code tối T2_4_6_CN.xlsx",
+          "sheet": "Guidelines",
+          "rows": [
+            8,
+            9,
+            10,
+            13,
+            14
+          ]
+        },
+        {
+          "file": "Flash Sale 26_08_2026.xlsx",
+          "sheet": "Guideline áp dụng",
+          "rows": [
+            20
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rule-ceo",
+      "ruleKey": "CEO_RCM",
+      "regimeLabel": "CEO cứu Net Gain",
+      "group": "ATLS / IELTS",
+      "package": "ATLS 6 / 9 / 12; IELTS 1 level",
+      "from": "2026-09-18",
+      "to": "2026-10-31",
+      "benefit": "ATLS 30%; IELTS 45%. Không suy tỷ lệ/đối tượng từ tiền tố Giftcode.",
+      "conditions": "EPP tháng 5–8/2026, dừng ≤120 ngày; full trong kỳ; case RCM validate đúng học viên. Không mặc định New đủ điều kiện.",
+      "stacking": "Không ưu đãi khác ngoài điểm giới thiệu. Trả góp chỉ có suất cụm 3 tháng được duyệt.",
+      "requiredEvidence": "Case RCM, EPP, ngày dừng, ngày full, coupon và suất cụm nếu dùng.",
+      "status": "ready",
+      "refs": [
+        {
+          "file": "Hỗ trợ từ CEO cứu Net Gain từ 18_9_2026 trở đi.xlsx",
+          "sheet": "Guideline hỗ trợ EPP tháng 8 đổ",
+          "rows": [
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rule-flash",
+      "ruleKey": "FLASH_2608",
+      "regimeLabel": "Flash Sale 26/08",
+      "group": "ATLS / IELTS",
+      "package": "Theo học phí và ưu đãi nền hợp lệ",
+      "from": "2026-08-26",
+      "to": "2026-08-26",
+      "benefit": "Giảm thêm 10% lũy tiến sau ưu đãi nền; referral/sibling tiền cố định trừ sau cùng.",
+      "conditions": "EPP tháng 8/quá khứ; full 26/08 hoặc cọc ≥2 tháng ngày 26/08 và full ≤31/08. Không tính thêm 10% trên khoản referral đã trừ.",
+      "stacking": "Có thể cộng Local và 4 center theo dòng 18,20; không dùng ngoại lệ này ngoài 26/08.",
+      "requiredEvidence": "EPP, ngày cọc, số tiền cọc, ngày full; giá nền có nguồn.",
+      "status": "ready",
+      "refs": [
+        {
+          "file": "Flash Sale 26_08_2026.xlsx",
+          "sheet": "Guideline áp dụng",
+          "rows": [
+            6,
+            7,
+            10,
+            12,
+            14,
+            16,
+            17,
+            18,
+            19,
+            20,
+            21,
+            26
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rule-sep",
+      "ruleKey": "BBSEP26",
+      "regimeLabel": "Big Bang Sep",
+      "group": "ATLS",
+      "package": "12 / 18 / 24 / 36; 36 chia đôi",
+      "from": "2026-09-01",
+      "to": "2026-09-30",
+      "benefit": "Giảm tiền theo cột K lộ trình; nhãn Tặng tháng vẫn có học phí sau giảm, cộng tháng trả thẳng riêng.",
+      "conditions": "New / EPP tháng 10 trở về trước / upgrade có điều kiện; full trong 14 ngày; trường hợp cọc 03–06/09 kiểm tra ngoại lệ 60 ngày. Có thể kết thúc sớm theo nguồn.",
+      "stacking": "Trả thẳng +1 tháng hoặc chia đôi +0,5 tháng; On Top 5% cần >100 triệu; ngoài ra không tự cộng.",
+      "requiredEvidence": "EPP, ngày cọc/full; lịch sử thu thật nếu On Top; nguồn giữ policy cũ khi ngoài kỳ.",
+      "status": "ready",
+      "refs": [
+        {
+          "file": "2026 Price & Promotion - update 10.10.26.xlsx",
+          "sheet": "Big bang promotion 1.9.2026 - 3",
+          "rows": [
+            2,
+            3,
+            5,
+            6,
+            9,
+            10,
+            11,
+            23,
+            26,
+            40
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rule-odd",
+      "ruleKey": "MONTHLY_GROSS",
+      "regimeLabel": "Gói lẻ",
+      "group": "ATLS / AGLS 2026",
+      "package": "1 / 2 tháng",
+      "from": "2026-03-01",
+      "to": null,
+      "benefit": "Giá tháng CHƯA GIẢM của gói 3/6/9 × số tháng; không nhân đơn giá trải nghiệm đã giảm.",
+      "conditions": "Nguồn mô tả Current muốn học nốt khóa. Các gói lẻ khác, trải nghiệm New hoặc ưu đãi riêng cần kiểm tra văn bản.",
+      "stacking": "Không tự cộng khuyến mãi; voucher phê duyệt riêng phải có điều kiện cho đúng gói.",
+      "requiredEvidence": "Loại gói, khóa học và giá tháng; căn cứ riêng khi ngoại lệ.",
+      "status": "ready",
+      "refs": [
+        {
+          "file": "2026 Price & Promotion - update 10.10.26.xlsx",
+          "sheet": "2026 ATLS Price đến 3092026",
+          "rows": [
+            117,
+            118,
+            119
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rule-ref-history",
+      "ruleKey": "REFERRAL_HISTORY",
+      "regimeLabel": "Referral / Sibling lịch sử",
+      "group": "ATLS / IELTS theo nguồn",
+      "package": "Gói thường / chia đôi",
+      "from": "2026-06-15",
+      "to": "2026-09-16",
+      "benefit": "Từng gói tặng tháng hoặc 1 triệu / 800 nghìn; ngày 17–30/09 chưa có kỳ được xác nhận.",
+      "conditions": "Chọn đúng bản 14/06–31/08 hoặc 01–16/09. Không dùng quan sát Siblings trên Report làm căn cứ cho khoảng trống chính sách.",
+      "stacking": "Theo bảng từng giai đoạn; không tự kéo dài ngày hiệu lực.",
+      "requiredEvidence": "Quan hệ/giới thiệu, vai trò, ngày full, đúng kỳ.",
+      "status": "manual-policy",
+      "refs": [
+        {
+          "file": "2026 Price & Promotion - update 10.10.26.xlsx",
+          "sheet": "ReferralSibling 14.6 - 31.8.202",
+          "rows": [
+            2,
+            4,
+            8,
+            9,
+            10
+          ]
+        },
+        {
+          "file": "2026 Price & Promotion - update 10.10.26.xlsx",
+          "sheet": "ReferralSibling 1.9.2026 - 16.9",
+          "rows": [
+            2,
+            4,
+            8,
+            9,
+            10
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rule-vtdh",
+      "ruleKey": "VTDH_SEPARATE",
+      "regimeLabel": "VTDH2026 · đã có giá theo từng CT",
+      "group": "ATLS",
+      "package": "18 tháng; 5 lần thanh toán",
+      "from": "2026-03-01",
+      "to": null,
+      "benefit": "CT kỳ 1–4: 2 tháng theo đơn giá18T; CT cuối: 10 tháng và xét học bổng đúng hạn. Giá/giờ/layer tại các dòng VTDH bổ sung.",
+      "conditions": "Không dùng giá Big Bang Q4; một học viên, không chia đôi; cần đơn cam kết và lịch thanh toán.",
+      "stacking": "Chỉ cộng theo guideline VTDH; không lấy số tiền đã thu để suy giá.",
+      "requiredEvidence": "Cam kết, lịch thanh toán, thời điểm thu từng đợt.",
+      "status": "manual-policy",
+      "refs": [
+        {
+          "file": "2026 Price & Promotion - update 10.10.26.xlsx",
+          "sheet": "Vững tin đồng hành 2026",
+          "rows": [
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            15,
+            16
+          ]
+        },
+        {
+          "file": "2026 Price & Promotion - update 10.10.26.xlsx",
+          "sheet": "Big bang promotion 6.10 - 31.12",
+          "rows": [
+            108
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rule-upgrade",
+      "ruleKey": "UPGRADE",
+      "regimeLabel": "Upgrade",
+      "group": "ATLS",
+      "package": "Gói ngắn lên 18 / 24 / 36",
+      "from": "2026-07-24",
+      "to": null,
+      "benefit": "Giá gói đích trừ phần học phí đủ điều kiện; không trừ transfer thêm lần nữa.",
+      "conditions": "Theo thời kỳ và lịch sử gói cũ; file danh sách học viên chỉ xác nhận case, không tạo rule chung.",
+      "stacking": "Đối chiếu chính sách gói đích và loại contract theo ngày học/thu.",
+      "requiredEvidence": "CT cũ/đích, ngày thu và ngày bắt đầu học; danh sách được duyệt.",
+      "status": "manual-policy",
+      "refs": [
+        {
+          "file": "2026 Price & Promotion - update 10.10.26.xlsx",
+          "sheet": "Upgrade gói 3 hoặc 2 tháng",
+          "rows": [
+            3,
+            4,
+            5,
+            7,
+            8,
+            9,
+            10
+          ]
+        },
+        {
+          "file": "2026 Price & Promotion - update 10.10.26.xlsx",
+          "sheet": "Big bang promotion 6.10 - 31.12",
+          "rows": [
+            116
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rule-other",
+      "ruleKey": "SEPARATE_PRICE_VERSION",
+      "regimeLabel": "Phiên bản và gói đặc thù",
+      "group": "Theo khóa và phiên bản giá",
+      "package": "Theo bảng riêng",
+      "from": null,
+      "to": null,
+      "benefit": "Giá thường2024, gói ngắn, chia đôi, IELTS và VTDH2026 đã được bổ sung. Các gói Summer, upsell và VTDH2024 cần đúng kỳ/loại sản phẩm.",
+      "conditions": "Không thay giá lịch sử bằng proposal Full Experience2026; gói đặc thù thiếu điều kiện cần bản gốc đúng phạm vi.",
+      "stacking": "Không suy mức giảm từ Report/PaymentList hoặc tiền tố mã voucher.",
+      "requiredEvidence": "Bảng gốc, điều kiện, ngày hiệu lực và phê duyệt áp dụng nếu có.",
+      "status": "manual-policy",
+      "refs": [
+        {
+          "file": "2026 Price & Promotion - update 10.10.26.xlsx",
+          "sheet": "IELTS Price & Promotion",
+          "rows": [
+            1,
+            2,
+            3
+          ]
+        },
+        {
+          "file": "2026 ATLS + Summer Price Proposal.xlsx",
+          "sheet": "B1. 2026 Summer price proposal",
+          "rows": [
+            1,
+            2,
+            3
+          ]
+        },
+        {
+          "file": "Hỗ trợ Sale_Renew Tháng 6 & 7_2026.xlsx",
+          "sheet": "2.1 Học sinh Apollo thi đậu trư",
+          "rows": [
+            1,
+            2,
+            3
+          ]
+        }
+      ]
+    }
   ]
 }

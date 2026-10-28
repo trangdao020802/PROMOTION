@@ -6,7 +6,7 @@
  const visible=e=>!e.hidden&&e.getAttribute?.('aria-hidden')!=='true'&&(!e.getClientRects||e.getClientRects().length>0);
  const post=(j,type,extra={})=>window.postMessage({channel,type,id:j.id,...extra},P.HUB);
  function stop(j){
-  if(job!==j)return;job=null;clearInterval(j.timer);clearTimeout(j.routeTimer);post(j,'stop');j.frame?.remove();
+  if(job!==j)return;job=null;clearInterval(j.timer);clearTimeout(j.routeTimer);clearTimeout(j.settleTimer);j.observer?.disconnect();j.abort?.abort();post(j,'stop');j.frame?.remove();
  }
  function finish(j,result){if(job!==j)return;stop(j);void chrome.runtime.sendMessage({...result,type:'agent-complete',id:j.id,agentKey}).catch(()=>{});}
  const failure=(j,code,message)=>finish(j,{error:true,code,message});
@@ -20,6 +20,30 @@
    for(const e of inputs){if(e===keys[0])continue;const m=/^\s*\d{2}([-\/])\d{2}\1\d{4}( to | - )\d{2}\1\d{2}\1\d{4}\s*$/.exec(e.value??'');if(m){const f=P.depositFields({keyword:keys[0].name,dateRange:e.name,separator:m[1],join:m[2]});if(f)fields.push(f);}}
   }
   return fields.length===1?fields[0]:null;
+ }
+ // Fetch the saved detail/list URL as inert HTML first. Static read-only Course
+ // info needs no full app/JS boot. Dynamic pages retain the managed iframe path.
+ function readPage(j){
+  if(job!==j||j.readingHTML||j.frame)return;
+  if(typeof fetch!=='function'||typeof DOMParser!=='function'){frame(j);return;}
+  j.readingHTML=true;j.abort=new AbortController();
+  const url=j.course?.url||I.indexURL(j.codes,j.id,j.fields);
+  void fetch(url,{credentials:'same-origin',cache:'no-store',signal:j.abort.signal}).then(async response=>{
+   if(job!==j)return;
+   if(!response.ok||response.url&&response.url!==url||Number(response.headers.get('content-length'))>2*1024*1024){frame(j);return;}
+   const html=await response.text();if(job!==j)return;if(html.length>2*1024*1024){frame(j);return;}
+   const root=new DOMParser().parseFromString(html,'text/html');
+   if(root.querySelector('input[type="password"]')){failure(j,'hub_login','Đăng nhập trong tab Hub đang mở rồi bấm lấy tiếp.');return;}
+   if(j.course){const parsed=C.parseCoursePage({...C.coursePageFromDocument(root,{staticDocument:true}),url},j.course),result=j.projection?N.parseContractDetailProjection(j.projection,j.course,parsed.payload):parsed;
+    if(result.error&&['student','conflict'].includes(result.error)){finish(j,C.courseFailure(result.error));return;}
+    if(result.payload&&['courseFee','hoursPerWeek','package','giftcode','discount'].every(k=>result.payload[k]!=null)){finish(j,{payload:result.payload});return;}
+   }else{
+    const anchors=[...root.querySelectorAll('table tbody a[href]')].map(a=>({text:a.textContent.trim(),href:new URL(a.getAttribute('href'),url).href})),links=[];
+    for(const ct of j.codes){const result=I.selectIndexCandidate(anchors,ct);if(result.status==='conflict'){failure(j,'mismatch','Mã CT / DEP khớp nhiều ID; chưa lưu link.');return;}if(result.status==='found')links.push({ct,url:result.url});}
+    if(links.length===j.codes.length&&I.indexLinks(links,j.codes)){finish(j,{links});return;}
+   }
+   frame(j);
+  }).catch(()=>{if(job===j)frame(j);});
  }
  function frame(j){
   if(job!==j||j.frame||!document.documentElement)return;
@@ -44,18 +68,23 @@
   let root,url;
   try{root=j.frame.contentDocument;url=j.frame.contentWindow.location.href;}catch{if(j.loaded||expired)failure(j,'hub_frame_unavailable','Hub yêu cầu đăng nhập hoặc không cho phép đọc trong nền. Kiểm tra tab Hub đang mở rồi thử lại; không tạo tab mới.');return;}
   if(!root||url==='about:blank'){if(expired)failure(j,'hub_frame_unavailable','Hub chưa cho phép đọc trong nền. Kiểm tra tab Hub rồi thử lại; không tạo tab mới.');return;}
+  if(root!==j.observedRoot&&typeof MutationObserver==='function'){
+   j.observer?.disconnect();j.observedRoot=root;
+   j.observer=new MutationObserver(()=>{if(!j.inspectQueued){j.inspectQueued=true;Promise.resolve().then(()=>{j.inspectQueued=false;inspect(j);});}});
+   j.observer.observe(root.documentElement||root,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['value','selected','aria-busy','aria-hidden']});
+  }
   if([...root.querySelectorAll('input[type="password"]')].some(visible)||/\/(?:login|signin|sign-in)(?:\/|$)/i.test(new URL(url).pathname)){failure(j,'hub_login','Đăng nhập trong tab Hub đang mở rồi bấm lấy tiếp. Tiến độ đã lưu được giữ.');return;}
   if(j.course){
    if(url!==j.course.url){failure(j,'course_unavailable','Hub chuyển khỏi CT cần đọc; chưa lưu dữ liệu.');return;}
-   j.frame.contentWindow.postMessage({channel,type:'activate',id:j.id,course:j.course},P.HUB);
+   if(j.activatedRoot!==root){j.activatedRoot=root;j.frame.contentWindow.postMessage({channel,type:'activate',id:j.id,course:j.course},P.HUB);}
    const result=courseResult(j,root,url),signature=JSON.stringify(result);
-   if(signature!==j.signature){j.signature=signature;j.stableAt=Date.now();}
+   if(signature!==j.signature){j.signature=signature;j.stableAt=Date.now();clearTimeout(j.settleTimer);j.settleTimer=setTimeout(()=>inspect(j),350);}
    const complete=result.payload&&['courseFee','hoursPerWeek','package','giftcode','discount'].every(k=>result.payload[k]!=null);
-   if(result.payload&&(complete||Date.now()-j.stableAt>=1500)||expired){finish(j,result.payload?{payload:result.payload}:C.courseFailure(result.error,result.fields));return;}
+   if(result.payload&&(complete||Date.now()-j.stableAt>=350)||expired){finish(j,result.payload?{payload:result.payload}:C.courseFailure(result.error,result.fields));return;}
   }else{
    if(j.codes[0].includes('-DEP-')&&!j.fields){const fields=discover(root,url);if(fields&&!I.indexURLMatches(url,j.codes,j.id,fields)){j.fields=fields;j.loaded=false;j.frame.src=I.indexURL(j.codes,j.id,fields);return;}}
    if(!I.indexURLMatches(url,j.codes,j.id,j.fields)){failure(j,'index_navigation','Hub không giữ đúng tháng / loại hồ sơ cần đọc; chưa lưu link.');return;}
-   j.frame.contentWindow.postMessage({channel,type:'activate',id:j.id,codes:j.codes,fields:j.fields},P.HUB);
+   if(j.activatedRoot!==root){j.activatedRoot=root;j.frame.contentWindow.postMessage({channel,type:'activate',id:j.id,codes:j.codes,fields:j.fields},P.HUB);}
    const rx=j.codes[0].includes('-DEP-')?/Deposit\s*(?:no\.?|code)/i:/Contract\s*(?:no\.?|code)/i;
    const tables=[...root.querySelectorAll('table')].filter(t=>visible(t)&&rx.test(t.querySelector('thead')?.textContent||[...t.querySelectorAll('th')].map(e=>e.textContent).join(' ')));
    const anchors=tables.flatMap(t=>[...t.querySelectorAll('tbody a[href]')].slice(0,I.INDEX_LIMIT*3).map(a=>({text:a.textContent.trim(),href:a.href}))),pairs=new Map((j.network?.pairs??[]).map(p=>[p.ct,p])),links=[];
@@ -74,7 +103,7 @@
  window.addEventListener('message',event=>{
   const j=job,m=event.data;if(!j||event.origin!==P.HUB||m?.channel!==channel||m.id!==j.id)return;
   const child=j.frame&&event.source===j.frame.contentWindow;if(event.source!==window&&!child)return;
-  if(m.type==='route-missing'&&!child&&j.course){clearTimeout(j.routeTimer);frame(j);return;}
+  if(m.type==='route-missing'&&!child&&j.course){clearTimeout(j.routeTimer);readPage(j);return;}
   if(m.type==='course'&&j.course){
    if(!m.projection||!N.courseDetailEndpoint(m.projection.source,j.course.url))return;
    const result=N.parseContractDetailProjection(m.projection,j.course);
@@ -83,7 +112,7 @@
    j.projection=m.projection;
    if(child&&typeof m.route==='string'&&m.route===new URL(m.projection.source).pathname)post(j,'learn-route',{course:j.course,route:m.route});
    if(result.payload&&['courseFee','hoursPerWeek','package','giftcode','discount'].every(k=>result.payload[k]!=null)){finish(j,{payload:result.payload});return;}
-   clearTimeout(j.routeTimer);frame(j);inspect(j);
+   clearTimeout(j.routeTimer);readPage(j);inspect(j);
   }
   if(m.type==='index'&&child&&!j.course&&Array.isArray(m.pairs)&&m.pairs.length<=I.INDEX_LIMIT&&Array.isArray(m.conflicts)&&m.conflicts.length<=I.INDEX_LIMIT){
    const p=I.projectContractPairs(m.pairs.map(v=>({ContractNo:v.ct,ContractId:v.id})));if(!p||m.pairs.some(v=>!I.contractPairURL(v))||m.conflicts.some(v=>!P.code(v)))return;
@@ -99,8 +128,8 @@
   const course=m.kind==='course'&&C.courseRequest(m.course);let codes;
   try{if(!course){const groups=I.indexGroups(m.codes);if(groups.length!==1)throw Error();codes=groups[0].codes;}}catch{respond({error:'Danh sách CT / DEP không hợp lệ.'});return;}
   job={id:m.id,course:course||null,codes,deadline:Date.now()+30_000};const j=job;
-  j.timer=setInterval(()=>inspect(j),500);respond({accepted:true});
-  if(course){post(j,'read-course',{course});j.routeTimer=setTimeout(()=>frame(j),800);}else frame(j);
+  j.timer=setInterval(()=>inspect(j),1000);respond({accepted:true});
+  if(course){post(j,'read-course',{course});j.routeTimer=setTimeout(()=>readPage(j),150);}else readPage(j);
  });
  window.addEventListener('pagehide',()=>{if(job)stop(job);});
 })();

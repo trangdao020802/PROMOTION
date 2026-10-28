@@ -159,3 +159,12 @@ Bảng đối chiếu dùng biểu tượng kính lúp; bấm để mở ô tìm
 Chi tiết CT có **Extra hours · CALC** ngay dưới **Total fee · CALC**. Giờ tặng = tổng tháng tặng đủ điều kiện × Hour/week × hệ số 25/6 tuần/tháng. Tổng giờ khóa học đã cộng giờ tặng và chỉ làm tròn sau khi cộng; không cộng lại từng ưu đãi vào tổng đã tính. Một tháng tặng ở lớp 3 giờ/tuần là 12,5 giờ, ở lớp 4 giờ/tuần khoảng 16,67 giờ. Gói 24 tháng tương ứng có tổng 313 hoặc 417 giờ sau khi tặng một tháng.
 
 Tháng trả thẳng / loyalty / referral theo cùng bảng chính sách, không tự cấp theo số bất kỳ trong nhãn. Gói 36 chia đôi có nửa tháng trả thẳng cho mỗi CT khi đủ điều kiện. Nhãn `1 Months (Sep/Oct2026 ... Tặng 1 tháng)` mô tả tháng tặng, không biến Package thành một tháng. Thiếu dữ liệu / căn cứ thì **Chưa tính**; số 0 là không có tháng tặng đã xác định. Giữ tổng giờ nguồn từ Export/PaymentList để đối chiếu chênh lệch. 169 kiểm thử đạt, gồm 16 ca mới cho giờ tặng; đã kiểm tra giao diện bằng 2 CT giả 3/4 giờ/tuần. Xem [cách tính giờ tặng](docs/extra-hours.md).
+
+
+## Lấy Input nhanh và cập nhật chính sách ngay trên web
+
+Cầu nối 1.6.6 đọc nền trong tab Hub hiện có, ưu tiên API/HTML đã xác minh và theo dõi DOM để giảm chờ. Lưu từng CT dùng lại chỉ mục nguồn; không dựng lại toàn bộ luồng tiền. Tiến độ tiếp tục sau khi dừng/hết giờ.
+
+Giá ghép bằng khóa chương trình, năm, layer, giờ và loại gói; không cần Course Fee trùng nguyên văn. Bổ sung 160 dòng chính sách có cấu trúc cho giá lịch sử2024, gói chia đôi, VTDH2026, trải nghiệm, IELTS, Premium và giá tuần. Quy tắc cũ/mới và điều kiện của từng CT được kiểm tra riêng.
+
+Quy tắc & voucher → Bảng giá chung / RULE → Cập nhật chính sách giá trên web: tải mẫu CSV hoặc nhập XLSX/JSON, xem trước, kiểm tra và áp dụng. Có lịch sử phiên bản, khôi phục, xuất JSON; dữ liệu chính sách cập nhật lưu tại trình duyệt. Xem [nguồn, cách cập nhật và giới hạn đã xác minh](docs/policy-updates.md).

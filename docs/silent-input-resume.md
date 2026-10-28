@@ -1,6 +1,6 @@
-# Đọc nền và tiếp tục lấy Input · cầu nối 1.6.5
+# Đọc nền và tiếp tục lấy Input · cầu nối 1.6.6
 
-1. Cập nhật cầu nối 1.6.5, tải lại Promotion và các tab Hub. Đăng nhập chỉ tại Hub khi cần.
+1. Cập nhật cầu nối 1.6.6, tải lại Promotion và các tab Hub. Đăng nhập chỉ tại Hub khi cần.
 2. Lọc các CT cần đọc rồi bấm **Tự lấy Input**. Chọn **Đọc lại cả CT đã đủ Input** nếu muốn đối chiếu lại tất cả CT đang lọc.
 3. Dùng một tab Hub đã mở và đăng nhập; không tạo, chuyển, đổi URL hay đóng tab trình duyệt. Cầu nối học đường dẫn **GetContractDetail?contractId=...** từ request thực tế rồi đọc **ListCourseInfo** bằng GET cùng origin và phiên Hub hiện có. Khi chưa có đường dẫn hoặc thiếu trường có tên, một iframe ẩn trong tab Hub đọc đúng trang chi tiết / danh sách theo tháng. Khung được dọn sau lượt đọc; không cần mở F12.
 4. Sau khi dữ liệu CT được lưu và tính lại, tiến độ hoàn tất mới được ghi. Nếu hết giờ, dừng hoặc đóng trang, bấm **Tiếp tục lấy Input** để đọc các CT chưa hoàn tất. Chế độ đọc lại toàn bộ được khôi phục khi mở lại trang.
@@ -28,7 +28,7 @@ Kiểm thử JSON/DOM và Chrome API dùng dữ liệu giả: GET/XHR đúng ID,
 Đã kiểm tra giao diện với 3 CT giả, bật đọc lại toàn bộ, giả lập timeout tại CT thứ hai rồi tải lại trang. Tiến độ và chế độ được khôi phục; lần tiếp tục chỉ đọc CT thứ hai và thứ ba. Bộ đếm CT thứ nhất giữ nguyên 1 lượt. Toàn bộ 142 kiểm thử đạt.
 
 
-## Không tạo tab mới · 1.6.5
+## Không tạo tab mới · 1.6.6
 
 Cả Tự gắn link, tìm một mã và Tự lấy Input đều chọn tab Hub có sẵn đã tải cầu nối. Nếu chưa có tab sẵn sàng, báo `hub_tab_missing`; không mở tab thay thế. Tác vụ gắn với tab, document agent và mã lượt đọc. Hub chuyển trang hoặc đóng thì lượt đọc dừng và giữ tiến độ đã lưu. Khung đọc bị Hub chặn sẽ báo rõ, không tìm cách vượt chính sách frame. Trạng thái URL, focus và việc mở/đóng tab do người dùng giữ quyền điều khiển. Voucher / lấy báo cáo theo yêu cầu tiếp tục dùng luồng riêng.
 

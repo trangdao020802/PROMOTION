@@ -21,3 +21,17 @@ export async function versioned(store,id,version,create){
  });
 }
 export async function backup(){const pairs=await Promise.all(STORES.map(async s=>[s,await all(s)]));return Object.fromEntries(pairs)}
+
+// Pointer + immutable version are committed together; an interrupted save
+// cannot leave a half-applied price book. The lease also covers other tabs.
+export async function activatePolicy(pack,version,{restore=false}={}){
+ const d=await database();return new Promise((resolve,reject)=>{
+  const tx=d.transaction('settings','readwrite'),s=tx.objectStore('settings');let result,error;
+  const request=s.get('policy-active');request.onsuccess=()=>{
+   if((request.result?.version??0)!==version){error=Object.assign(Error('Chính sách đã đổi ở tab khác. Xem trước lại để tránh ghi đè.'),{conflict:true});tx.abort();return;}
+   if(!restore)s.put(pack);
+   result={id:'policy-active',packId:pack?.id??null,version:version+1,updatedAt:new Date().toISOString()};s.put(result);
+  };
+  tx.oncomplete=()=>resolve(result);tx.onerror=()=>reject(error||tx.error);tx.onabort=()=>reject(error||tx.error||Error('Chưa áp dụng được chính sách.'));
+ });
+}

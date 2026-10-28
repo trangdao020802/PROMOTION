@@ -11,9 +11,9 @@ export function offerConsistencyChecks(cells,context,pricing){
  const cash=matches.filter(m=>m.kind==='cash'&&m.ruleKey);
  if(cash.length>1)checks.push('CHECK - NHIỀU ƯU ĐÃI GIẢM NỀN: chỉ một mức giảm theo gói; cần điều chỉnh các nhãn trùng/xung đột.');
  for(const [i,m]of matches.entries()){
-  const label=discountLabelKey(offers[i]);checks.push(...m.issues);
+  const label=discountLabelKey(offers[i]);if(!context.customPolicy)checks.push(...m.issues);
   if(m.siblingAddon&&pricing?.pkg==='36 SPLIT')checks.push('XÁC MINH - REFERRAL/SIBLING: gói 36 chia đôi có câu hỏi Sibling New tặng thêm chưa được trả lời tại Q4 dòng 112; cần căn cứ riêng.');
-  if(m.monthAddon&&pricing){
+  if(m.monthAddon&&pricing&&!context.customPolicy){
    const expected=m.kind==='months'?pricing.loyalty:m.kind==='referral'?pricing.referral:m.sharedSepOct&&pricing.regime==='base'?pricing.row?.M:pricing.straight;
    if(!num(expected)||m.addonMonths!==expected)checks.push('CHECK - SỐ THÁNG TẶNG KHÁC RULE CỦA GÓI: '+offers[i]);
    if(m.kind==='months'&&/^new$/i.test(text(context.contractType)))checks.push('CHECK - THÁNG LOYALTY CHỈ DÀNH CHO HỌC VIÊN CURRENT ĐỦ ĐIỀU KIỆN');
@@ -22,9 +22,9 @@ export function offerConsistencyChecks(cells,context,pricing){
   const layer=/\blayer\s*([123])\b/.exec(label),hours=/\b([34])\s*(?:hrs?|hours?|gio)\s*\/\s*(?:week|tuan)\b/.exec(label);
   if(layer&&Number(layer[1])!==pricing?.layer)checks.push('CHECK - LAYER TRONG DISCOUNT KHÁC COURSE FEE KOC: '+offers[i]);
   if(hours&&Number(hours[1])!==pricing?.hours)checks.push('CHECK - GIỜ TRONG DISCOUNT KHÁC HOUR/WEEK: '+offers[i]);
-  const duration=/\b(\d+)\s*(?:\/\s*\1\b|months?\b|thang\b)/.exec(label);
+  const duration=/\b(\d+)\s*(?:\/\s*\1\b|months?\b|thang\b)/.exec(label.replace(/\btra\s+gop\b.*$/,''));
   if(duration&&pricing&&!m.monthAddon){
-   const allowed=pricing.pkg==='36 SPLIT'?[18,36]:[Number(pricing.pkg)];
+   const split=/^(12|18|24|36) SPLIT$/.exec(String(pricing.pkg)),allowed=split?[Number(split[1])/2,Number(split[1])]:[Number(pricing.pkg)];
    if(!allowed.includes(Number(duration[1])))checks.push('CHECK - GÓI TRONG DISCOUNT KHÁC PACKAGE: '+offers[i]);
   }
   if(m.sharedSepOct&&!window(cells.D,'2026-09-01','2026-10-31'))checks.push('CHECK - ƯU ĐÃI TẶNG THÁNG SEP/OCT NGOÀI THỜI KỲ 01/09–31/10/2026');
@@ -78,7 +78,7 @@ export function voucherPolicyChecks({cells,context,pricing,patch={},account,vouc
  }
  if(voucher?.policyId==='local-scholarship'||voucher?.policyId==='staff')checks.push('XÁC MINH - VOUCHER CHÍNH SÁCH RIÊNG: đối chiếu đúng đối tượng, gói và quyền cộng gộp theo căn cứ của mã.');
  const v=patch.verification;
- if(pricing?.pkg==='36 SPLIT'&&v){
+ if(/^(12|18|24|36) SPLIT$/.test(String(pricing?.pkg))&&v){
   if(v.siblingRelationship==='no')checks.push('CHECK - GÓI CHIA ĐÔI: hồ sơ xác nhận không phải hai con ruột.');
   if(v.partnerCourse&&v.partnerCourse!=='ATLS')checks.push('CHECK - GÓI CHIA ĐÔI: học viên đối ứng không học ATLS.');
   if(v.partnerStudentId&&text(v.partnerStudentId).toUpperCase()===text(cells.F).toUpperCase())checks.push('CHECK - GÓI CHIA ĐÔI: hai CT cùng Student ID.');

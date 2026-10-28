@@ -20,7 +20,7 @@ const own=(obj,key)=>Object.hasOwn(obj,key);
 export function packageKey(value){
  const text=String(value??'').trim(),match=text.match(/^(\d+(?:\.\d+)?)\b/);
  if(!match)return 0;
- if(/^18\s+(?:months?|tháng)\s+siblings\b/i.test(text))return '36 SPLIT';
+ if(/^(?:6|9|12|18)\s+(?:months?|tháng)\s+siblings?\b/i.test(text))return `${Number(match[1])*2} SPLIT`;
  return /SPLIT|chia đôi|siblings/i.test(text)?`${Number(match[1])} SPLIT`:Number(match[1]);
 }
 
@@ -131,6 +131,7 @@ export class ContractEngine{
  setPatches(patches){this.patches=new Map(Object.entries(patches));}
  setVouchers(vouchers){this.data=withVoucherRegistry(this.data,vouchers);this.engine=new WorkbookEngine(this.data);}
  setCourseSources(sources){withCourseSources(this.data,sources);}
+ updateCourseSource(source){const group=this.groups.get('CT::'+source.ct);if(group&&String(group.cells.F)===source.student)applyCourseInfo(this.data,group,[source]);}
  dependentIds(id){const ct=this.groups.get(id)?.ct;return [...this.patches].filter(([key,p])=>key!==id&&ct&&String(p.verification?.partnerContract??'').toUpperCase()===ct.toUpperCase()).map(([key])=>key);}
  calculate(record,patch={}){
   // Resolve geometry from trusted source, never from the client-supplied row.

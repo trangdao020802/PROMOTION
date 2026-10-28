@@ -3,7 +3,7 @@
   const HUB = 'https://hub24.apollo.vn:7777';
   const SITE = 'https://promotion-installment.trangdao2802.chatgpt.site';
   const CHANNEL = 'promotion-hub/v1';
-  const VERSION = '1.6.5';
+  const VERSION = '1.6.6';
   function ct(value) {
     const code = typeof value === 'string' ? value.trim().toUpperCase() : '';
     return /^[A-Z0-9]+-CT-\d{4,20}$/.test(code) ? code : null;

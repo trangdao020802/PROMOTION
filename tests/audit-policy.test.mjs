@@ -25,9 +25,10 @@ test('one/two/odd-month prices multiply the regular month before discount, with 
  assert.equal(price(2).maxTerms,0);assert.ok(price(2,4,'2026-11-01').issue.includes('NGOÀI KỲ'));
  assert.ok(price(2,4,'2026-10-10',{L:'Q4 2026 Promotion Discount'}).issue.includes('RULE RIÊNG'));
 });
-test('VTDH and non-ATLS long packages do not acquire ordinary Q4 terms',()=>{
- assert.equal(price(18,3,'2026-10-26',{J:'18 months (VTDH-Full)'}),null);
- const agls=price(24,4,'2026-10-10',{H:'AGLS - New Price 2026 - Layer 1'});assert.equal(agls.gross,103200000);assert.equal(agls.maxTerms,null);assert.equal(agls.discount,null);
+test('VTDH stages stay separate, while full payment and AGLS use the newly supplied schedules',()=>{
+ const vtdh=price(18,3,'2026-10-26',{H:'ATLS New Price 2026 Layer1 VTDH',J:'18 months'});assert.equal(vtdh.gross,null);assert.match(vtdh.issue,/VTDH/);
+ assert.equal(price(18,3,'2026-10-26',{J:'18 months (VTDH-Full)'}).gross,56700000);
+ const agls=price(24,4,'2026-10-10',{H:'AGLS - New Price 2026 - Layer 1'});assert.equal(agls.gross,103200000);assert.equal(agls.maxTerms,12);assert.equal(agls.discount,27864000);
 });
 test('Audit v7 rounds 13 months at 3 hours/week to 163 hours and a straight payment has zero installment months',()=>{
  const {engine}=fixture({pkg:'12 months',hours:'3 hrs/week',method:'Online Payments',term:'',gross:38700000,discount:3870000,net:34830000,totalHours:163});

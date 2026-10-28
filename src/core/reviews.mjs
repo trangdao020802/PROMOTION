@@ -5,12 +5,12 @@ export const REVIEW_LABELS={ceo:'CEO / RCM',registration:'Ghi danh trong ngày',
 const hash=s=>{let n=2166136261;for(const c of s)n=Math.imul(n^c.charCodeAt(0),16777619);return(n>>>0).toString(16)};
 export function manualCheckKey(message){
  if(!/^XÁC MINH - /.test(message))return null;
- for(const [pattern,id]of [[/CEO:/,'ceo'],[/FLASH SALE/i,'flash'],[/SPECIAL 30%|HỌC BỔNG ĐẶC BIỆT/,'special'],[/REFERRAL\/SIBLING/,'referral'],[/ON TOP 5%/,'ontop'],[/BIG BANG SEP/,'bigbang'],[/CLC:/,'clc'],[/TÁI PHÍ SỚM/,'early-renew'],[/IELTS:/,'ielts'],[/UPGRADE:/,'upgrade'],[/CƠ SỞ % GIFTCODE/,'gift-basis'],[/36 tháng chia đôi/i,'sibling']])if(pattern.test(message))return id;
+ for(const [pattern,id]of [[/LOYALTY:/,'loyalty'],[/GHI DANH 2024:/,'registration'],[/CEO:/,'ceo'],[/FLASH SALE/i,'flash'],[/SPECIAL 30%|HỌC BỔNG ĐẶC BIỆT/,'special'],[/REFERRAL\/SIBLING/,'referral'],[/ON TOP 5%/,'ontop'],[/BIG BANG SEP/,'bigbang'],[/CLC:/,'clc'],[/TÁI PHÍ SỚM/,'early-renew'],[/IELTS:/,'ielts'],[/UPGRADE:/,'upgrade'],[/CƠ SỞ % GIFTCODE/,'gift-basis'],[/(?:18|24|36) tháng chia đôi|^XÁC MINH - SIBLING:/i,'sibling']])if(pattern.test(message))return id;
  return 'policy-'+hash(message);
 }
 export function reviewScope(row){
  const c=row.cells??{},a=row.reconciliation??row.account,context=row.context??{};
- return JSON.stringify(['review-v1',a?.ct??c.contractTotal??c.C,String(c.F??''),c.D,...['H','I','J','K','L'].map(k=>String(c[k]??'').trim()),context.method??'',context.term??'',context.contractType??'',fullPaymentDay(a),a?.paid?.target??a?.snapshot?.target??null,a?.net??null,...(context.voucherPolicyScope?[context.voucherPolicyScope]:[])]);
+ return JSON.stringify(['review-v1',a?.ct??c.contractTotal??c.C,String(c.F??''),c.D,...['H','I','J','K','L'].map(k=>String(c[k]??'').trim()),context.method??'',context.term??'',context.contractType??'',fullPaymentDay(a),a?.paid?.target??a?.snapshot?.target??null,a?.net??null,...(context.voucherPolicyScope?[context.voucherPolicyScope]:[]),...(context.policyRevision&&context.policyRevision!=='published'?[context.policyRevision]:[])]);
 }
 const itemScope=(row,id)=>reviewScope(row)+(id==='source-comparison'?JSON.stringify(['T','U','V','X'].map(k=>row.cells[k]??null)):'');
 export const reviewAccepted=(patch,id,row)=>patch?.reviews?.[id]?.approved===true&&patch.reviews[id].scope===itemScope(row,id);
