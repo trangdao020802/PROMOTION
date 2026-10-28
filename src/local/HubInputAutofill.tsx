@@ -1,6 +1,7 @@
 import React,{useEffect,useMemo,useRef,useState} from 'react';
 import {contractInputPlan,fillContractInputs} from '../core/hub-course.mjs';
 import {assetPath} from './paths.mjs';
+import {localFetch as fetch} from './api.mjs';
 const names:any={courseFee:'Course fee KOC',hoursPerWeek:'Hour/week',package:'Package',giftcode:'Giftcode No',discount:'Discount apply',groupKoc:'Group KOC',contractType:'Contract type'};
 export default function HubInputAutofill({rows,datasetId,disabled,checkBridge,makeLookup,readInputs,onSave,onLinkSaved,onBusyChange}:any){
  const [refresh,setRefresh]=useState(false),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[results,setResults]=useState<any[]>([]),[bridgeNeeded,setBridgeNeeded]=useState(false);
@@ -19,7 +20,7 @@ export default function HubInputAutofill({rows,datasetId,disabled,checkBridge,ma
     lookup,
     saveLink:async(link:any)=>{const data=await json('/api/hub-links',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(link),signal:task.signal});onLinkSaved?.(data.link);return data.link;},
     read:(expected:any)=>readInputs(expected,setMessage,task.signal),save:onSave});
-   setResults(results);setMessage((task.signal.aborted?'Đã dừng. ':'Hoàn tất lượt đọc. ')+results.filter((r:any)=>r.status==='saved').length+' CT đã lưu và tính lại; '+results.filter((r:any)=>r.status==='check').length+' CT cần kiểm tra.');
+   setResults(results);setMessage((task.signal.aborted?'Đã dừng. ':results.length<selected.length?'Đã dừng để kiểm tra lỗi. ':'Hoàn tất lượt đọc. ')+'Đã xử lý '+results.length+'/'+selected.length+' CT; '+results.filter((r:any)=>r.status==='saved').length+' CT đã lưu và tính lại; '+results.filter((r:any)=>r.status==='check').length+' CT cần kiểm tra.');
   }catch(e:any){setBridgeNeeded(e.code==='bridge'||String(e.message).includes('1.6.2'));setMessage(task.signal.aborted?'Đã dừng đọc Input.':e.message);}
   finally{if(controller.current===task)controller.current=null;setBusy(false);onBusyChange?.(false);}
  };
