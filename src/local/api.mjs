@@ -7,7 +7,8 @@ import {validateVerification} from '../core/verification.mjs';
 import {validateReviews} from '../core/reviews.mjs';
 import {assetPath} from './paths.mjs';
 import {resolveCourseInfo} from '../core/course-info.mjs';
-import {coursePayload} from '../core/hub-course.mjs';
+import {coursePayload,COURSE_FIELDS} from '../core/hub-course.mjs';
+import {validInputTargets,newInputRun,completeInputRun} from '../core/hub-input-progress.mjs';
 import {buildPriceCatalogue,policyRuleCatalogue} from '../core/price-catalog.mjs';
 let policies;
 const nativeFetch=globalThis.fetch.bind(globalThis);
@@ -71,12 +72,30 @@ export async function localFetch(input,options={}){
    const ct=String(body.ct||'').trim().toUpperCase();if(!/^[A-Z0-9]+-(?:CT|DEP)-\d{4,20}$/.test(ct)||!validHubURL(body.url,ct))throw fail('Dán đúng URL chi tiết Contract/Deposit trên https://hub24.apollo.vn:7777.');
    const saved=await versioned('links',ct,body.version||0,()=>({ct,url:body.url,source:body.source||'manual'}));return response({link:saved,...saved});
   }
+  if(path==='/api/hub-input-progress'&&method==='GET'){
+   const dataset=await currentDataset(url.searchParams.get('dataset'));if(!dataset)throw fail('Cần mở bộ nguồn trước khi lấy Input.');
+   return response({run:await get('settings','hub-input-run:'+dataset.id)||null});
+  }
+  if(path==='/api/hub-input-progress'&&method==='PATCH'){
+   const dataset=await currentDataset(body.datasetId);if(!dataset)throw fail('Cần mở bộ nguồn trước khi lưu tiến độ.');const key='hub-input-run:'+dataset.id,old=await get('settings',key);
+   if(body.operation==='start'){
+    if(typeof body.refresh!=='boolean'||!validInputTargets(body.targets))throw fail('Lượt đọc Input không hợp lệ.');
+    const model=await loadWorkbook(dataset.id);if(body.targets.some(t=>!model.contractGroups.some(g=>g.ct===t.ct&&String(g.cells.F)===t.student)))throw fail('Có CT / học viên không thuộc bộ nguồn đang mở.');
+    const next=newInputRun(old,body.targets,body.refresh,id(),!!body.reset),saved=await versioned('settings',key,body.version||0,()=>next);return response({run:saved});
+   }
+   if(body.operation==='complete'){
+    if(!old||old.runId!==body.runId)throw fail('Lượt đọc đã thay đổi; bấm tiếp tục để tải tiến độ mới.',409);
+    const source=await get('courseSources',body.ct);if(!source||source.version!==body.sourceVersion)throw fail('Cần lưu nguồn Input của CT trước khi lưu tiến độ.');
+    const result=completeInputRun(old,body.ct,body.student,source),saved=await versioned('settings',key,body.version||0,()=>result.run);return response({run:saved,complete:result.complete,missing:result.missing});
+   }
+   throw fail('Thao tác lưu tiến độ không hợp lệ.');
+  }
   if(path==='/api/course-sources'&&method==='PATCH'){
    const {model}=await recordFor(body.datasetId,'CT::'+body.payload?.ct);const payload=body.payload;
    if(body.hash!==model.hash||!model.contractGroups.some(g=>g.ct===payload.ct&&String(g.cells.F)===String(payload.student)))throw fail('Nguồn Course info không khớp CT/học viên hiện tại.');
    const normalized=coursePayload(payload,payload);if(!normalized)throw fail('Thông tin đầu vào từ Hub không hợp lệ.');
    await ensureVouchers([normalized.giftcode??'']);
-   const saved=await versioned('courseSources',payload.ct,body.version||0,()=>normalized);return response({source:saved,vouchers:await all('vouchers')});
+   const saved=await versioned('courseSources',payload.ct,body.version||0,old=>({...normalized,...Object.fromEntries(COURSE_FIELDS.map(k=>[k,normalized[k]??(old?.student===normalized.student&&old?.url===normalized.url?old[k]:null)??null]))}));return response({source:saved,vouchers:await all('vouchers')});
   }
   if(path==='/api/evidence'&&method==='GET'){
    const {key}=await recordFor(url.searchParams.get('dataset'),url.searchParams.get('record'));const files=(await all('evidence')).filter(e=>e.recordKey===key).map(({blob,...e})=>e);return response({files});

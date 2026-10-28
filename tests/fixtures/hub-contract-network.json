@@ -1,0 +1,22 @@
+{
+  "ContractId": 12345,
+  "ContractNo": "QA2610-CT-000002",
+  "StudentCode": "QA-RESUME-1",
+  "ContractTypeName": "New",
+  "ListGiftCode": [],
+  "ListDiscount": [],
+  "ListCourseInfo": [
+    {
+      "ContractDetailId": 11,
+      "ProductPackageId": 71,
+      "PriceId": 589,
+      "HowweekId": 8,
+      "ProductId": 139,
+      "ProductGroupName": "ATLS",
+      "PriceName": "ATLS - New Price 2026 - Layer 1",
+      "HowWeekName": "3 hrs/week",
+      "ProductPackageName": "2 months",
+      "CourseFee": 7200000
+    }
+  ]
+}

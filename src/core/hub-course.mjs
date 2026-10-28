@@ -97,10 +97,11 @@ export function missingContractInputs(row){
  if(!text(c.L)&&Number(c.U)>0)missing.push('L');
  return missing;
 }
-export function contractInputPlan(rows,{refresh=false}={}){
+export function contractInputPlan(rows,{refresh=false,completed=[]}={}){
  const unique=new Map(),students=new Map();
  for(const row of rows??[]){const ct=text(row.ct||row.cells?.contractTotal),student=text(row.cells?.F);if(row.kind!=='contract'||!/^[A-Z0-9]+-CT-\d{4,20}$/.test(ct)||!/^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,149}$/.test(student)||Object.hasOwn(Object.prototype,student))continue;(students.get(ct)??(students.set(ct,new Set()),students.get(ct))).add(student);unique.set(ct+'|'+student,row);}
- return [...unique.values()].filter(r=>(refresh||missingContractInputs(r).length>0)&&students.get(text(r.ct||r.cells.contractTotal)).size===1);
+ const done=new Set(completed);
+ return [...unique.values()].filter(r=>(refresh||missingContractInputs(r).length>0)&&students.get(text(r.ct||r.cells.contractTotal)).size===1&&!done.has(text(r.ct||r.cells.contractTotal)+'|'+text(r.cells.F)));
 }
 export async function fillContractInputs(rows,io){
  const results=[];
@@ -119,7 +120,8 @@ export async function fillContractInputs(rows,io){
    const expected={ct,student,url:link.url},payload=coursePayload(await io.read(expected),expected);
    if(!payload)throw Error('Thông tin trả về không khớp CT / Student ID.');
    if(io.signal?.aborted)break;
-   await io.save(row,payload);results.push({ct,status:'saved',fields:COURSE_FIELDS.filter(k=>payload[k]!==null)});io.saved?.(row,payload);
+   const saved=await io.save(row,payload),checkpoint=await io.checkpoint?.(row,payload,saved);
+   results.push({ct,status:checkpoint?.complete===false?'partial':'saved',fields:COURSE_FIELDS.filter(k=>payload[k]!==null),missing:checkpoint?.missing??[]});io.saved?.(row,payload);
   }catch(e){
    if(io.signal?.aborted)break;
    results.push({ct,status:'check',message:String(e.message??e)});

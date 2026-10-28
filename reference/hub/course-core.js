@@ -160,7 +160,7 @@ var PromotionHubCourse = (() => {
     if (!text(c.L) && Number(c.U) > 0) missing.push("L");
     return missing;
   }
-  function contractInputPlan(rows, { refresh = false } = {}) {
+  function contractInputPlan(rows, { refresh = false, completed = [] } = {}) {
     const unique = /* @__PURE__ */ new Map(), students = /* @__PURE__ */ new Map();
     for (const row of rows ?? []) {
       const ct = text(row.ct || row.cells?.contractTotal), student = text(row.cells?.F);
@@ -168,7 +168,8 @@ var PromotionHubCourse = (() => {
       (students.get(ct) ?? (students.set(ct, /* @__PURE__ */ new Set()), students.get(ct))).add(student);
       unique.set(ct + "|" + student, row);
     }
-    return [...unique.values()].filter((r) => (refresh || missingContractInputs(r).length > 0) && students.get(text(r.ct || r.cells.contractTotal)).size === 1);
+    const done = new Set(completed);
+    return [...unique.values()].filter((r) => (refresh || missingContractInputs(r).length > 0) && students.get(text(r.ct || r.cells.contractTotal)).size === 1 && !done.has(text(r.ct || r.cells.contractTotal) + "|" + text(r.cells.F)));
   }
   async function fillContractInputs(rows, io) {
     const results = [];
@@ -188,8 +189,8 @@ var PromotionHubCourse = (() => {
         const expected = { ct, student, url: link.url }, payload = coursePayload(await io.read(expected), expected);
         if (!payload) throw Error("Th\xF4ng tin tr\u1EA3 v\u1EC1 kh\xF4ng kh\u1EDBp CT / Student ID.");
         if (io.signal?.aborted) break;
-        await io.save(row, payload);
-        results.push({ ct, status: "saved", fields: COURSE_FIELDS.filter((k) => payload[k] !== null) });
+        const saved = await io.save(row, payload), checkpoint = await io.checkpoint?.(row, payload, saved);
+        results.push({ ct, status: checkpoint?.complete === false ? "partial" : "saved", fields: COURSE_FIELDS.filter((k) => payload[k] !== null), missing: checkpoint?.missing ?? [] });
         io.saved?.(row, payload);
       } catch (e) {
         if (io.signal?.aborted) break;

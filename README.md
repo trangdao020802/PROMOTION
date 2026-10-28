@@ -95,7 +95,7 @@ Cột đối chiếu tiền theo CT so trực tiếp `Phải đóng theo CT (CAL
 
 ## Tự điền Voucher từ Hub
 
-Cầu nối Hub 1.6.3 tự tra Giftcode đầy đủ tại `/giftcode/manage`, mở link chi tiết có trong kết quả và xác nhận đúng mã trong List gift code. Voucher còn thiếu sẽ tự điền khi mở hồ sơ nếu cầu nối sẵn sàng; có nút Tìm & tự điền từ Hub để đọc lại. Student ID/tên lấy từ CT đang mở và phải khớp thông tin riêng trên Hub nếu có. Phạm vi, ngày hiệu lực, kiểu/mức giảm, sàn/trần, căn cứ và link/thời điểm nguồn được lưu cùng voucher. Kiểm tra trạng thái duyệt rồi bấm Lưu voucher & tính lại. Không tự duyệt ngoại lệ hoặc bấm Create/Update trên Hub. Cần cập nhật tiện ích và đăng nhập Hub trên máy người dùng. Chi tiết tại `docs/hub-voucher-import.md`; kiểm thử dùng dữ liệu/DOM giả, chưa xác nhận đọc tài khoản Hub thật trong phiên này.
+Cầu nối Hub 1.6.4 tự tra Giftcode đầy đủ tại `/giftcode/manage`, mở link chi tiết có trong kết quả và xác nhận đúng mã trong List gift code. Voucher còn thiếu sẽ tự điền khi mở hồ sơ nếu cầu nối sẵn sàng; có nút Tìm & tự điền từ Hub để đọc lại. Student ID/tên lấy từ CT đang mở và phải khớp thông tin riêng trên Hub nếu có. Phạm vi, ngày hiệu lực, kiểu/mức giảm, sàn/trần, căn cứ và link/thời điểm nguồn được lưu cùng voucher. Kiểm tra trạng thái duyệt rồi bấm Lưu voucher & tính lại. Không tự duyệt ngoại lệ hoặc bấm Create/Update trên Hub. Cần cập nhật tiện ích và đăng nhập Hub trên máy người dùng. Chi tiết tại `docs/hub-voucher-import.md`; kiểm thử dùng dữ liệu/DOM giả, chưa xác nhận đọc tài khoản Hub thật trong phiên này.
 
 Bản 1.6.3 đọc đơn vị ngay cạnh Discount amount: `15 %` là 15%, `2.000.000 đ` là số tiền 2.000.000 VND. Không có đơn vị rõ thì dừng tự điền. Center ưu tiên cột Center code của đúng mã hoặc bảng Center code tại trang chi tiết, đọc tiếp nếu phân trang; không thay bằng North/South khi đã có mã center. Cần cập nhật cầu nối rồi bấm Tìm & tự điền từ Hub để sửa lại voucher đã đọc trước đó, kiểm tra và Lưu voucher & tính lại.
 
@@ -119,7 +119,7 @@ Cập nhật đồng thời reference/rules-source.json, reference/policy-regist
 
 Trên Bảng đối chiếu, bấm **Tự lấy Input** để đọc Course fee KOC, Hour/week, Package, Giftcode No và Discount apply của các CT đang lọc. CT thiếu link sẽ tự tra danh sách Hub theo tháng giống Tự gắn link Hub. Dữ liệu được kiểm tra theo đúng CT nhận tiền / Student ID rồi lưu và tính lại; CT trung gian đã move không trở thành khóa học mới.
 
-Mặc định xử lý CT còn thiếu Input; có thể chọn đọc lại cả CT đã đủ Input để đối chiếu hoặc Dừng lấy Input. Giữ dữ liệu gốc và chỉnh sửa tay; nguồn mâu thuẫn, thiếu minh chứng, voucher chờ duyệt và lỗi chính sách vẫn CHECK. Không thay số tiền thu, ngày/phương thức hóa đơn hoặc tự duyệt điều kiện. Cần cầu nối **1.6.3** và phiên Hub đã đăng nhập trên máy người dùng. Xem [hướng dẫn](docs/contract-input-autofill.md).
+Mặc định xử lý CT còn thiếu Input; có thể chọn đọc lại cả CT đã đủ Input để đối chiếu hoặc Dừng lấy Input. Giữ dữ liệu gốc và chỉnh sửa tay; nguồn mâu thuẫn, thiếu minh chứng, voucher chờ duyệt và lỗi chính sách vẫn CHECK. Không thay số tiền thu, ngày/phương thức hóa đơn hoặc tự duyệt điều kiện. Cần cầu nối **1.6.4** và phiên Hub đã đăng nhập trên máy người dùng. Xem [hướng dẫn](docs/contract-input-autofill.md).
 
 Discount amount đọc theo ký hiệu hiển thị ngay sau số: `12,5 %` điền **Tỷ lệ giảm (%) = 12,5**; `2.000.000 Đ` điền **Số tiền giảm (VND) = 2.000.000**. Không suy đơn vị từ giá trị hay tiền tố mã; đọc lại mà thiếu đơn vị sẽ xóa mức giảm Hub cũ để yêu cầu kiểm tra. 125 kiểm thử bằng dữ liệu giả đã qua; trang voucher 19880 yêu cầu đăng nhập trong phiên kiểm tra nên chưa xác nhận giá trị thật của mã này.
 
@@ -131,3 +131,12 @@ Price name là tên bảng giá điền vào Course fee KOC; Course fee ở cộ
 Lỗi từng CT chỉ rõ vấn đề mã CT, học viên, trường mâu thuẫn, định dạng hoặc đang tải. Cần dừng lượt cũ, cập nhật tiện ích **1.6.3**, tải lại Promotion/Hub và chạy lại Tự lấy Input. Không thay quyền truy cập hoặc tự duyệt hồ sơ.
 
 125 kiểm thử đã qua. Đã chạy luồng UI đọc DOM fixture theo ảnh và lưu/tính lại 2/2 CT giả; chưa kiểm chứng các CT thật trong tài khoản Hub. Xem [hướng dẫn](docs/contract-input-autofill.md) và `tests/fixtures/hub-contract-readonly.html`.
+
+
+## Đọc Input trong nền và tiếp tục sau khi hết giờ · 1.6.4
+
+Cầu nối quan sát request GetContractDetail?contractId= của chính tab Hub đang được yêu cầu, đọc ListCourseInfo và dùng Course info có nhãn để bổ sung trường thiếu. Không dựng route API hoặc suy tên từ PriceId, HowweekId, ProductPackageId. Tab CT, danh sách và tìm link chạy nền, tự đóng và không giành tab đang dùng; hết phiên đăng nhập sẽ dừng và yêu cầu mở Hub chủ động.
+
+Tiến độ lưu sau mỗi CT đã lưu đủ trường, tách theo bộ nguồn / CT / Student ID. Hết giờ, dừng hoặc tải lại trang rồi bấm Tiếp tục sẽ bỏ qua CT đã hoàn tất, kể cả lượt đã chọn đọc lại toàn bộ. Trường đọc dở được giữ và tiếp tục bổ sung. Tạo lượt đọc mới bắt đầu lại tiến độ, giữ các dữ liệu đã lưu. Lấy xong Input không tự duyệt chính sách, voucher hoặc chênh lệch tiền.
+
+142 kiểm thử đạt. Giao diện đã thử 3 CT giả: ngắt tại CT thứ hai, tải lại trang, tiếp tục đúng 2 CT còn lại; CT thứ nhất chỉ đọc 1 lần. JSON/API, DOM và Chrome API trong bài thử là mô phỏng; chưa xác nhận phản hồi API tài khoản Hub thật. Xem [hướng dẫn](docs/silent-input-resume.md). Cần cập nhật tiện ích 1.6.4 rồi tải lại Promotion và Hub.

@@ -10,7 +10,7 @@ async function finish(job, message, close = true) {
   if ((await read())?.id !== job.id) return;
   await chrome.storage.session.remove('job');
   await emit(job, message);
-  if (close) { try { await chrome.tabs.remove(job.hubTab); } catch { /* already closed */ } }
+  if (close || job.silent) { try { await chrome.tabs.remove(job.hubTab); } catch { /* already closed */ } }
   else { try { await chrome.tabs.update(job.hubTab, {active: true}); } catch { /* already closed */ } }
 }
 const onList = (job, sender) => new URL(sender.url).pathname.toLowerCase() === P.list(job.ct);
@@ -36,9 +36,9 @@ async function handle(m, sender) {
     if(job&&job.sourceTab===sender.tab.id&&job.sourceDocument&&sender.documentId&&job.sourceDocument!==sender.documentId){await finish(job,{type:'error',message:'Promotion đã tải lại.'});job=null;}
     if(job)return {error:'Đang có một lượt Hub. Chờ hoàn tất rồi thử lại.'};
     const tab=await chrome.tabs.create({url:'about:blank',active:false});
-    job={id:m.id,kind:'course',course,sourceTab:sender.tab.id,sourceDocument:sender.documentId,hubTab:tab.id,stage:'course',expires:Date.now()+15*60_000};await chrome.storage.session.set({job});
-    try{await chrome.tabs.update(tab.id,{url:course.url,active:true});}catch{await finish(job,{type:'error',message:'Không mở được Course info trên Hub.'});return {};}
-    await emit(job,{type:'progress',phase:'course',message:`Đang đọc Course info của ${course.ct}…`});return {};
+    job={id:m.id,kind:'course',course,silent:true,sourceTab:sender.tab.id,sourceDocument:sender.documentId,hubTab:tab.id,stage:'course',expires:Date.now()+15*60_000};await chrome.storage.session.set({job});
+    try{await chrome.tabs.update(tab.id,{url:course.url,active:false});}catch{await finish(job,{type:'error',message:'Không mở được Course info trên Hub.'});return {};}
+    await emit(job,{type:'progress',phase:'course',message:`Đang đọc nền GetContractDetail / Course info của ${course.ct}…`});return {};
   }
   if(m.type==='index-start'&&source){
     let groups;try{groups=I.indexGroups(m.codes);}catch{return {error:'Danh sách CT / DEP không hợp lệ.'};}
@@ -46,7 +46,7 @@ async function handle(m, sender) {
     if(job&&job.sourceTab===sender.tab.id&&job.sourceDocument&&sender.documentId&&job.sourceDocument!==sender.documentId){await finish(job,{type:'error',message:'Promotion đã tải lại; bắt đầu lượt mới.'});job=null;}
     if(job)return {error:'Đang có một lượt Hub. Hoàn tất hoặc dừng lượt đó trước.'};
     const tab=await chrome.tabs.create({url:'about:blank',active:false});
-    job={id:m.id,kind:'index',codes:groups[0].codes,sourceTab:sender.tab.id,sourceDocument:sender.documentId,hubTab:tab.id,stage:'index',expires:Date.now()+15*60_000};
+    job={id:m.id,kind:'index',silent:true,codes:groups[0].codes,sourceTab:sender.tab.id,sourceDocument:sender.documentId,hubTab:tab.id,stage:'index',expires:Date.now()+15*60_000};
     await chrome.storage.session.set({job});
     try{await chrome.tabs.update(tab.id,{url:I.indexURL(job.codes,job.id)});}catch{await finish(job,{type:'error',message:'Không mở được danh sách Hub.'});return {};}
     await emit(job,{type:'progress',phase:'index',message:`Đang đọc danh sách ${groups[0].kind==='contract'?'Contract':'Deposit'} · ${groups[0].from} → ${groups[0].to} cho ${job.codes.length} mã…`});return {};
@@ -69,7 +69,7 @@ async function handle(m, sender) {
     if (job) return {error: 'Đang có một lượt tìm Hub. Hoàn tất hoặc dừng lượt đó trước.'};
     // Persist before navigation; a service-worker restart cannot misroute a result.
     const tab = await chrome.tabs.create({url: 'about:blank', active: false});
-    job = {id: m.id, ct: P.code(m.ct), scope: P.range(m.ct).scope, sourceTab: sender.tab.id, sourceDocument: sender.documentId, hubTab: tab.id, stage: 'search', expires: Date.now() + 15 * 60_000};
+    job = {id: m.id, ct: P.code(m.ct), silent:true, scope: P.range(m.ct).scope, sourceTab: sender.tab.id, sourceDocument: sender.documentId, hubTab: tab.id, stage: 'search', expires: Date.now() + 15 * 60_000};
     await chrome.storage.session.set({job});
     try { await chrome.tabs.update(tab.id, {url: P.search(job.ct, job.scope)}); }
     catch { await finish(job, {type: 'error', message: 'Không mở được tab Hub.'}); return {}; }
@@ -84,6 +84,7 @@ async function handle(m, sender) {
   if (m.type === 'context') return job.kind==='voucher'?{id:job.id,kind:'voucher',voucher:job.voucher,stage:job.stage,searchApplied:job.searchApplied,list:job.list,url:job.detailUrl,codesUrl:job.codesUrl,detailPairs:job.detailPairs}:job.kind==='course'?{id:job.id,kind:'course',course:job.course}:job.kind==='index'?{id:job.id,kind:'index',codes:job.codes,fields:job.fields}:job.kind==='report'?{id:job.id,kind:'report',report:job.report,month:job.month,stage:job.stage,pageSize:job.pageSize,total:job.total}:{id: job.id, ct: job.ct, stage: job.stage, scope: job.scope, fields: job.fields, ui: job.ui, url: job.detailUrl};
   if (m.id !== job.id) return {};
   if (m.type === 'login') {
+    if(job.silent){await finish(job,{type:'error',code:'hub_login',message:'Hub cần đăng nhập. Mở Hub và đăng nhập, sau đó bấm Tiếp tục lấy Input; các CT đã lưu được bỏ qua.'});return {};}
     await emit(job, {type: 'progress', phase: 'login', message: job.kind==='report'?'Đăng nhập Hub trong tab vừa mở. Báo cáo sẽ tiếp tục sau đăng nhập.':job.kind==='index'?'Đăng nhập Hub trong tab vừa mở. Đọc danh sách sẽ tiếp tục sau đăng nhập.':'Cần đăng nhập Hub trong tab vừa mở. Tìm kiếm sẽ tự tiếp tục sau đăng nhập.'});
     await chrome.tabs.update(job.hubTab, {active: true}); return {};
   }
@@ -94,7 +95,7 @@ async function handle(m, sender) {
     }
     if(job.kind==='course'){
       if((job.resumes??0)>=1){await finish(job,{type:'error',message:'Hub không giữ được hồ sơ sau đăng nhập.'},false);return {};}
-      job={...job,resumes:1};await chrome.storage.session.set({job});await chrome.tabs.update(job.hubTab,{url:job.course.url,active:true});return {};
+      job={...job,resumes:1};await chrome.storage.session.set({job});await chrome.tabs.update(job.hubTab,{url:job.course.url,active:false});return {};
     }
     if(job.kind==='index'&&!/^\/(?:home|dashboard)?(?:\/index)?\/?$/i.test(new URL(sender.url).pathname)){
       await finish(job,{type:'error',code:'index_navigation',message:'Hub đã chuyển sang trang khác khi đọc danh sách; chưa xác minh hoặc lưu link.',diagnostic:{stage:'index',path:indexPath(sender.url),reason:'unexpected_navigation'}},false);return {};
@@ -243,6 +244,7 @@ chrome.tabs.onUpdated.addListener((tabId,change)=>{
  serial=serial.then(async()=>{const job=await read();if(!job||job.hubTab!==tabId||job.loginNotified)return;
   let url;try{url=new URL(change.url);}catch{return;}
   if(url.origin!=='https://hub24.apollo.vn:10000'||!/^\/login\/?$/i.test(url.pathname))return;
+  if(job.silent){await finish(job,{type:'error',code:'hub_login',message:'Hub cần đăng nhập. Mở Hub và đăng nhập, rồi bấm Tiếp tục lấy Input. Tiến độ CT đã lấy đủ vẫn được giữ.'});return;}
   await chrome.storage.session.set({job:{...job,loginNotified:true}});
   await emit(job,{type:'progress',phase:'login',message:'Đăng nhập Hub trong tab vừa mở. Đọc dữ liệu sẽ tiếp tục sau đăng nhập.'});
  }).catch(()=>{});

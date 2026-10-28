@@ -7,13 +7,14 @@ parts=urlsplit(site)
 if parts.scheme!='https' or not parts.netloc or parts.path or parts.query or parts.fragment or parts.username or parts.password:
  raise ValueError('SITE_ORIGIN must be an HTTPS origin without a path.')
 site_match=site+os.environ.get('BASE_PATH','/')+'*'
-files=['background.js','core.js','course-core.js','voucher-core.js','report-core.js','index-core.js','promotion.js','hub.js','hub-course.js','hub-voucher.js','hub-index.js','hub-reports.js','index-bootstrap.js','index-tap.js']
-manifest={'manifest_version':3,'name':'Promotion Studio · Apollo HUB Bridge','version':'1.6.3','minimum_chrome_version':'111','description':'Đọc Voucher, danh sách CT/DEP, Course info và báo cáo được yêu cầu trên Apollo HUB.','permissions':['storage','tabs'],'host_permissions':[site+'/*','https://hub24.apollo.vn/*'],'background':{'service_worker':'background.js'},'content_scripts':[
+files=['background.js','core.js','course-core.js','course-network-core.js','course-bootstrap.js','course-tap.js','voucher-core.js','report-core.js','index-core.js','promotion.js','hub.js','hub-course.js','hub-voucher.js','hub-index.js','hub-reports.js','index-bootstrap.js','index-tap.js']
+manifest={'manifest_version':3,'name':'Promotion Studio · Apollo HUB Bridge','version':'1.6.4','minimum_chrome_version':'111','description':'Đọc Voucher, danh sách CT/DEP, Course info và báo cáo được yêu cầu trên Apollo HUB.','permissions':['storage','tabs'],'host_permissions':[site+'/*','https://hub24.apollo.vn/*'],'background':{'service_worker':'background.js'},'content_scripts':[
  {'matches':[site_match],'js':['core.js','report-core.js','index-core.js','course-core.js','voucher-core.js','promotion.js'],'run_at':'document_start','all_frames':False},
- {'matches':['https://hub24.apollo.vn/*'],'js':['core.js','report-core.js','index-core.js','course-core.js','voucher-core.js','index-bootstrap.js'],'run_at':'document_start','all_frames':False},
+ {'matches':['https://hub24.apollo.vn/*'],'js':['core.js','report-core.js','index-core.js','course-core.js','course-network-core.js','voucher-core.js','index-bootstrap.js','course-bootstrap.js'],'run_at':'document_start','all_frames':False},
  {'matches':['https://hub24.apollo.vn/*'],'js':['hub.js','hub-course.js','hub-voucher.js','hub-index.js','hub-reports.js'],'run_at':'document_idle','all_frames':False},
- {'matches':['https://hub24.apollo.vn/contract/list*'],'js':['index-core.js','index-tap.js'],'run_at':'document_start','world':'MAIN','all_frames':False}]}
-readme='''CẦU NỐI PROMOTION STUDIO 1.6.3
+ {'matches':['https://hub24.apollo.vn/contract/list*'],'js':['index-core.js','index-tap.js'],'run_at':'document_start','world':'MAIN','all_frames':False},
+ {'matches':['https://hub24.apollo.vn/contract/detail/*'],'js':['course-network-core.js','course-tap.js'],'run_at':'document_start','world':'MAIN','all_frames':False}]}
+readme='''CẦU NỐI PROMOTION STUDIO 1.6.4
 
 Chỉ dùng cho website https://promotion-hub-2026.roundskunk11.chatgpt.site và Apollo HUB https://hub24.apollo.vn:7777.
 
@@ -21,7 +22,7 @@ Chỉ dùng cho website https://promotion-hub-2026.roundskunk11.chatgpt.site và
 2. Mở chrome://extensions hoặc edge://extensions, bật Chế độ dành cho nhà phát triển.
 3. Chọn Tải tiện ích đã giải nén (Load unpacked), chọn thư mục có manifest.json.
 4. Tải lại Promotion Studio và các tab Apollo HUB. Bấm Kiểm tra cầu nối.
-5. Bạn tự đăng nhập HUB trong tab HUB. Trên Bảng đối chiếu, bấm Tự lấy Input theo Contract để đọc Course fee KOC, Hour/week, Package, Giftcode No và Discount apply cho các CT đang lọc. CT thiếu link sẽ tự tìm theo tháng; dữ liệu lưu theo đúng CT nhận tiền / Student ID rồi tính lại. Có thể Dừng lấy Input hoặc chọn đọc lại cả CT đã đủ Input để đối chiếu. Cầu nối cũng đọc khi bạn yêu cầu báo cáo, tìm link, Course info hoặc mở Voucher còn thiếu thông tin.
+5. Bạn tự đăng nhập HUB trong tab HUB. Lấy Input và tìm link CT chạy trong tab nền, không tự chuyển tab. Cầu nối quan sát request GetContractDetail?contractId= của chính trang và đọc ListCourseInfo; trường chưa có tên rõ dùng Course info có nhãn. Hết giờ/dừng/mở lại trang, bấm lấy tiếp để bỏ qua CT đã lấy đủ và lưu tiến độ; CT đọc dở còn trong hàng chờ. Tạo lượt đọc mới chỉ dùng khi muốn bắt đầu lại. Trên Bảng đối chiếu, bấm Tự lấy Input theo Contract để đọc Course fee KOC, Hour/week, Package, Giftcode No và Discount apply cho các CT đang lọc. CT thiếu link sẽ tự tìm theo tháng; dữ liệu lưu theo đúng CT nhận tiền / Student ID rồi tính lại. Có thể Dừng lấy Input hoặc chọn đọc lại cả CT đã đủ Input để đối chiếu. Cầu nối cũng đọc khi bạn yêu cầu báo cáo, tìm link, Course info hoặc mở Voucher còn thiếu thông tin.
 6. Voucher: mở chi tiết CT, nhập Giftcode No. Student ID/tên học viên lấy từ CT; mã còn thiếu sẽ tự tra Hub khi cầu nối sẵn sàng. Có thể bấm Tìm & tự điền từ Hub để đọc lại. Cầu nối nhập mã đầy đủ vào ô tìm trên /giftcode/manage, mở link chi tiết từ dòng kết quả và kiểm tra đúng mã trong List gift code. Không suy mức giảm hay học viên từ Code prefix.
 7. Đơn vị % hoặc VND/VNĐ/đ/₫ lấy cạnh Discount amount. Center lấy từ cột Center code, đọc tiếp khi bảng có phân trang. Thiếu đơn vị hoặc chưa đủ danh sách center thì dừng, không đoán kiểu giảm hay phạm vi.
 8. Kiểm tra các ô tự điền, trạng thái duyệt và bấm Lưu voucher & tính lại. Cầu nối không tự duyệt ngoại lệ và không bấm Create/Update trên Hub.

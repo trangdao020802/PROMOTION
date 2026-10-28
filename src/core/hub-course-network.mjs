@@ -1,0 +1,65 @@
+import {courseRequest,coursePayload,COURSE_FIELDS} from './hub-course.mjs';
+export const COURSE_NETWORK_CHANNEL='promotion-hub/course-network/v1';
+const HUB='https://hub24.apollo.vn:7777';
+const text=v=>typeof v==='string'?v.trim().replace(/\s+/g,' '):'';
+const numberId=v=>/^[1-9]\d{0,14}$/.test(String(v??''))?String(v):null;
+export function courseDetailEndpoint(value,detailURL,method='GET'){
+ try{
+  const detail=new URL(detailURL),match=/^\/contract\/detail\/([1-9]\d{0,14})\/?$/i.exec(detail.pathname),u=new URL(value,HUB);
+  if(detail.origin!==HUB||detail.search||detail.hash||!match||String(method).toUpperCase()!=='GET'||u.origin!==HUB||u.username||u.password||u.hash||!/\/GetContractDetail\/?$/i.test(u.pathname)||u.searchParams.getAll('contractId').length!==1||u.searchParams.get('contractId')!==match[1])return null;
+  if([...u.searchParams.keys()].some(k=>/token|session|password|secret|credential|authorization|api.?key/i.test(k)))return null;
+  // Preserve the observed route, discard incidental cache/filter parameters.
+  u.search='';u.searchParams.set('contractId',match[1]);return u.href;
+ }catch{return null;}
+}
+const pick=(obj,names)=>{
+ if(!obj||typeof obj!=='object'||Array.isArray(obj))return undefined;
+ for(const name of names){const key=Object.keys(obj).find(k=>k.toLowerCase()===name.toLowerCase());if(key!==undefined&&obj[key]!=null&&obj[key]!=='')return obj[key];}
+ return undefined;
+};
+const scalar=(obj,names,max=200)=>{const value=pick(obj,names);return typeof value==='string'&&text(value).length<=max?text(value)||null:null;};
+function offer(obj,names,arrays,itemNames){
+ const direct=scalar(obj,names,2000);if(direct)return /^(?:0|none|n\/a|[-—]+)$/i.test(direct)?'0':direct;
+ const list=pick(obj,arrays);if(!Array.isArray(list)||list.length>100)return null;if(!list.length)return '0';
+ const values=list.map(v=>typeof v==='string'?text(v):scalar(v,itemNames,2000));if(values.some(v=>!v))return null;
+ const result=[...new Set(values)].join(';');return result.length<=2000?result:null;
+}
+function fields(obj){
+ let hours=pick(obj,['HourWeekName','HowweekName','HowWeekName','HoursPerWeek','HourPerWeek','HourWeek','HoursWeek']);
+ if(typeof hours==='number'&&hours>0&&hours<=168)hours=hours+' hrs/week';
+ if(typeof hours==='string'){hours=text(hours).replace(/^(\d+(?:[.,]\d+)?)\s*(?:giờ\s*\/\s*tuần|hours?\s*per\s*week)$/i,(_,n)=>n.replace(',','.')+' hrs/week');if(/^\d+(?:\.\d+)?$/.test(hours))hours+=' hrs/week';}
+ if(typeof hours!=='string'||!/^\d+(?:\.\d+)?\s*(?:hrs?|hours?)\s*\/\s*week$/i.test(hours)||!(parseFloat(hours)>0&&parseFloat(hours)<=168))hours=null;
+ return {courseFee:scalar(obj,['PriceName','CourseFeeKOC']),hoursPerWeek:hours,package:scalar(obj,['PackageBeforeDiscountName','PackageBeforeDiscount','ProductPackageName','PackageName','ProductPackage']),
+  giftcode:offer(obj,['GiftcodeNo','GiftCodeNumber','Giftcode'],['ListGiftCode','ListGiftcodes'],['GiftcodeNo','GiftCodeNumber','Code']),
+  discount:offer(obj,['DiscountApply','DiscountApplyName','PromotionApply','PromotionApplyName'],['ListDiscountApply','ListDiscount','ListPromotion'],['DiscountName','PromotionName','Name']),
+  groupKoc:scalar(obj,['GroupKOC','ProductGroupName']),contractType:scalar(obj,['ContractTypeName'])};
+}
+// Project only the requested course facts. No address, seller, receipt, token,
+// cookie, or full JSON response crosses from the page into Promotion.
+export function projectContractDetail(value,sourceURL,detailURL){
+ const source=courseDetailEndpoint(sourceURL,detailURL);if(!source)return null;
+ let objects=[value];
+ for(let depth=0;depth<4;depth++){
+  const matches=objects.filter(v=>v&&typeof v==='object'&&!Array.isArray(v)&&Array.isArray(v.ListCourseInfo));
+  if(matches.length){
+   if(matches.length!==1)return null;const root=matches[0],list=root.ListCourseInfo;if(list.length>20)return null;
+   const id=pick(root,['ContractId','Id']),ct=scalar(root,['ContractNo','ContractCode','ContractNumber']),student=scalar(root,['StudentCode','StudentNo','StudentNumber']);
+   if(id!=null&&!numberId(id))return null;
+   return {source,contractId:id==null?null:numberId(id),ct:ct?.toUpperCase()??null,student,fields:fields(root),courses:list.map(row=>fields(row))};
+  }
+  objects=objects.flatMap(v=>v&&typeof v==='object'&&!Array.isArray(v)?['Data','data','Result','result','Model','model','Contract'].filter(k=>Object.hasOwn(v,k)).map(k=>v[k]):[]);
+  if(!objects.length)return null;
+ }
+ return null;
+}
+export function parseContractDetailProjection(projection,expected,domPayload=null){
+ const request=courseRequest(expected);if(!request||!projection||!courseDetailEndpoint(projection.source,request.url))return {error:'identity'};
+ const detailId=/\/([1-9]\d*)\/?$/.exec(request.url)[1];
+ if(projection.contractId!=null&&projection.contractId!==detailId||projection.ct&&projection.ct!==request.ct)return {error:'identity'};
+ if(projection.student&&projection.student!==request.student)return {error:'student'};
+ if(!projection.ct&&!coursePayload(domPayload,request))return {error:'identity'};
+ if(!Array.isArray(projection.courses)||projection.courses.length!==1)return {error:projection.courses?.length?'conflict':'empty',fields:['courseFee','hoursPerWeek','package']};
+ const root=projection.fields??{},course=projection.courses[0]??{},values={};
+ for(const key of COURSE_FIELDS)values[key]=course[key]??root[key]??domPayload?.[key]??null;
+ const payload=coursePayload({...request,...values},request);return payload?{payload,via:domPayload?'network+dom':'network'}:{error:'format'};
+}

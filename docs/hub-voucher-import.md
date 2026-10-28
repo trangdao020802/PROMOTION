@@ -1,10 +1,10 @@
 # Tự điền Voucher từ Hub
 
-Cầu nối 1.6.3 dùng phiên Hub của người dùng trên Chrome/Edge. Website không đọc trực tiếp cookie hay mật khẩu và không gọi API đăng nhập. Trình duyệt kiểm thử hiện yêu cầu đăng nhập; kiểm tra tự động sử dụng dữ liệu giả và trang DOM mô phỏng, không xác nhận đã đọc tài khoản Hub thật.
+Cầu nối 1.6.4 dùng phiên Hub của người dùng trên Chrome/Edge. Website không đọc trực tiếp cookie hay mật khẩu và không gọi API đăng nhập. Trình duyệt kiểm thử hiện yêu cầu đăng nhập; kiểm tra tự động sử dụng dữ liệu giả và trang DOM mô phỏng, không xác nhận đã đọc tài khoản Hub thật.
 
 ## Luồng sử dụng
 
-1. Cập nhật tiện ích cầu nối 1.6.3, tải lại Promotion và các tab Hub.
+1. Cập nhật tiện ích cầu nối 1.6.4, tải lại Promotion và các tab Hub.
    Bản 1.6.3 đọc cả đuôi `%`/`đ` trong thẻ thường, wrapper lồng hoặc bộ chọn đơn vị; phần đuôi hiển thị quyết định kiểu giảm. `12,5%` điền Tỷ lệ giảm 12,5; `2.000.000 Đ` điền Số tiền giảm 2000000. Không lấy đơn vị ở Minimum/Maximum. Khi chuyển kiểu giảm, ô số của kiểu cũ được xóa.
 2. Mở chi tiết CT, nhập Giftcode No. Student ID, tên học viên, center lấy từ các trường của CT đang mở khi sổ voucher còn trống. Nếu mở từ bảng Voucher, chỉ ghép hồ sơ khi mã có đúng một CT trong bộ nguồn.
 3. Voucher còn thiếu tự tra khi mở hồ sơ và cầu nối sẵn sàng. Nút **Tìm & tự điền từ Hub** đọc lại theo yêu cầu.
