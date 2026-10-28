@@ -44,7 +44,7 @@ class IndependentCalculator{
   if(!group)throw Error('Không tìm thấy dòng CT tổng để tính.');
   const cells={...group.cells,...options.cells};for(const k of ['H','I','J','K','L'])if(own(patch,k))cells[k]=patch[k];
   const raw=data.grids.RAW_REPORT,rawRow=group.rawRow;
-  const context={method:options.raw?.AH??raw['AH'+rawRow],term:options.raw?.AJ??group.raw.AJ??null,bank:raw['AI'+rawRow],contractType:group.raw?.G??raw['G'+rawRow],source:raw['T'+rawRow],fullStatus:raw['J'+rawRow],group:raw['X'+rawRow],voucherDescription:raw['AP'+rawRow]};
+  const context={method:options.raw?.AH??raw['AH'+rawRow],term:options.raw?.AJ??group.raw.AJ??null,bank:raw['AI'+rawRow],contractType:group.raw?.G??raw['G'+rawRow],source:raw['T'+rawRow],fullStatus:raw['J'+rawRow],group:group.raw?.X??raw['X'+rawRow],voucherDescription:raw['AP'+rawRow]};
   const code=voucherCode(cells.K),hasDescription=!!text(context.voucherDescription)&&text(context.voucherDescription)!=='0',voucher=data.extensions.customVouchers?.find(v=>voucherCode(v.code)===code);
   if(voucher){context.voucherType=voucher.type==='percent'?'PHẦN TRĂM':'SỐ TIỀN';context.voucherBasis=voucher.percentBasis??'policy-default';if(voucher.policyId&&voucher.policyId!=='case-specific'||voucher.percentBasis&&voucher.percentBasis!=='policy-default')context.voucherPolicyScope=JSON.stringify([voucher.policyId,voucher.percentBasis,voucher.type,voucher.amount,voucher.rate,voucher.startDate,voucher.endDate,voucher.center,voucher.approvalNote]);}
   const account=options.account||group.account;const pricing=priceFor(data,cells,context),label=text(cells.L),match=discountPolicyMatch(label,cells.D),checks=[];

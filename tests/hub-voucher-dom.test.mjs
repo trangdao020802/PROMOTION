@@ -62,6 +62,25 @@ test('nested Discount amount suffix selects VND or percent and never reads the n
  }
  const r=runtime(discountDocument('2.000.000',''),{id:'unknown-unit',kind:'voucher',voucher:{code},stage:'voucher-detail',url});await r.settle();await r.advance(1000);await r.settle();assert.equal(r.messages.at(-1).type,'voucher-failure');assert.equal(r.messages.at(-1).reason,'unit');
 });
+test('plain suffix spans, nested wrappers and a unit select feed the correct discount field',async()=>{
+ for(const [value,unit,type,rate,amount]of [['12,5','%','percent',.125,null],['2.000.000','Đ','amount',null,2000000]])for(const style of ['span','select','nested','readonly']){
+  const control=new Input('discount',value),suffix=node(unit,style==='select'?{tagName:'SELECT',selectedOptions:[node(unit)]}:{tagName:'SPAN'});
+  const wrapper=node('',{querySelectorAll:s=>s.startsWith('input')?[control]:[]}),group=node('',{querySelectorAll:s=>s.startsWith('input')?[control,...(style==='select'?[suffix]:[])]:s.includes('span')?[suffix]:[]});
+  control.parentElement=wrapper;wrapper.parentElement=group;
+  if(style==='select'||style==='span')control.nextElementSibling=suffix;else wrapper.nextElementSibling=suffix;
+  const label=node('Discount amount *',{getAttribute:k=>k==='for'?'discount':null,nextElementSibling:style==='readonly'?node(value+' '+unit):null}),codes=table(['Giftcode No.','Status'],[[code,'Used']]);
+  const document={documentElement:{},getElementById:()=>style==='readonly'?null:control,querySelectorAll:s=>s==='label,dt'?[label]:s==='table'?[codes]:[]};
+  const r=runtime(document,{id:'literal-suffix',kind:'voucher',voucher:{code},stage:'voucher-detail',url});await r.settle();await r.advance(1000);await r.settle();
+  const result=r.messages.find(m=>m.type==='voucher-complete');assert.ok(result,style+' '+JSON.stringify(r.messages));assert.equal(result.payload.type,type);assert.equal(result.payload.rate,rate);assert.equal(result.payload.amount,amount);
+ }
+});
+test('an adjacent percent suffix cannot be replaced by Maximum VND in the same row',async()=>{
+ const control=new Input('discount','12.5'),suffix=node('%'),maximum=new Input('maximum','2000000');control.nextElementSibling=suffix;
+ control.parentElement=node('',{querySelectorAll:s=>s.startsWith('input')?[control,maximum]:[node('đ')]});
+ const label=node('Discount amount *',{getAttribute:k=>k==='for'?'discount':null}),codes=table(['Giftcode No.','Status'],[[code,'Used']]);
+ const document={documentElement:{},getElementById:()=>control,querySelectorAll:s=>s==='label,dt'?[label]:s==='table'?[codes]:[]};
+ const r=runtime(document,{id:'adjacent-unit',kind:'voucher',voucher:{code},stage:'voucher-detail',url});await r.settle();await r.advance(1000);await r.settle();assert.equal(r.messages.find(m=>m.type==='voucher-complete')?.payload.rate,.125);
+});
 test('Center code scope includes all observed pages and survives the separate List gift code stage',async()=>{
  let page=1,clicks=0;
  const next=node('Next',{getAttribute:key=>key==='aria-disabled'?String(page===2):null,click:()=>{page=2;clicks++;}});

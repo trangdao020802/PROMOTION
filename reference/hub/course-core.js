@@ -1,5 +1,3 @@
-// Generated from lib/hub-course.mjs by scripts/build-hub-helper.mjs.
-"use strict";
 var PromotionHubCourse = (() => {
   var __defProp = Object.defineProperty;
   var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -19,75 +17,68 @@ var PromotionHubCourse = (() => {
   };
   var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
-  // lib/hub-course.mjs
+  // src/core/hub-course.mjs
   var hub_course_exports = {};
   __export(hub_course_exports, {
+    COURSE_FIELDS: () => COURSE_FIELDS,
     COURSE_LABELS: () => COURSE_LABELS,
+    contractInputPlan: () => contractInputPlan,
+    courseLabel: () => courseLabel,
     coursePayload: () => coursePayload,
     courseRequest: () => courseRequest,
+    fillContractInputs: () => fillContractInputs,
+    missingContractInputs: () => missingContractInputs,
     parseCoursePage: () => parseCoursePage
   });
-
-  // lib/hub-links.mjs
-  function contractCode(value) {
-    const ct = typeof value === "string" ? value.trim().toUpperCase() : "";
-    return /^[A-Z0-9]+-CT-\d{4,20}$/.test(ct) ? ct : null;
-  }
-  function hubDocumentCode(value) {
-    const code = typeof value === "string" ? value.trim().toUpperCase() : "";
-    return /^[A-Z0-9]+-(?:CT|DEP)-\d{4,20}$/.test(code) ? code : null;
-  }
-  function hubContractUrl(value, expected) {
-    if (typeof value !== "string" || value.length > 2048) return null;
-    const text2 = value.trim();
-    if (!text2 || /[\s\\\u0000-\u001f\u007f]/.test(text2)) return null;
-    try {
-      const url = new URL(text2);
-      if (url.origin !== "https://hub24.apollo.vn:7777" || url.username || url.password) return null;
-      const deposit = hubDocumentCode(expected)?.includes("-DEP-");
-      if (expected && !hubDocumentCode(expected)) return null;
-      if (deposit) {
-        const numeric = /^\/deposit\/(?:detail|view)\/\d+\/?$/i.test(url.pathname) && !url.search;
-        const entries = [...url.searchParams], query = /^\/deposit\/(?:detail|view)\/?$/i.test(url.pathname) && entries.length === 1 && ["id", "depositId"].includes(entries[0][0]) && /^\d+$/.test(entries[0][1]);
-        if (!numeric && !query) return null;
-      } else if (!/^\/contract(?:\/|$)/i.test(url.pathname) || /^\/contract\/(?:list|login|logout)\/?$/i.test(url.pathname)) return null;
-      const sensitive = /(?:token|session|password|passwd|secret|credential|authorization|authcode|accesskey|apikey|redirect|returnurl|callback)/i;
-      for (const key of url.searchParams.keys()) if (sensitive.test(key.replace(/[^a-z0-9]/gi, ""))) return null;
-      if (url.hash) return null;
-      return url.href;
-    } catch {
-      return null;
-    }
-  }
-
-  // lib/hub-course.mjs
+  var HUB = "https://hub24.apollo.vn:7777";
+  var text = (v) => String(v ?? "").trim().replace(/\s+/g, " ");
+  var label = (v) => text(v).replace(/\s*[:*]\s*$/, "").toLowerCase();
+  var courseLabel = (v) => COURSE_LABELS[label(v)] ?? null;
+  var COURSE_FIELDS = ["courseFee", "hoursPerWeek", "package", "giftcode", "discount", "groupKoc", "contractType"];
   var COURSE_LABELS = {
     "price name": "courseFee",
     "course fee koc": "courseFee",
+    "course fee": "courseFee",
     "hour/week": "hoursPerWeek",
     "hours/week": "hoursPerWeek",
     "hours per week": "hoursPerWeek",
     "package": "package",
+    "package before discount": "package",
+    "package (before discount)": "package",
     "student id": "student",
-    "student code": "student"
+    "student code": "student",
+    "giftcode no": "giftcode",
+    "giftcode no.": "giftcode",
+    "giftcode": "giftcode",
+    "gift code": "giftcode",
+    "discount apply": "discount",
+    "promotion apply": "discount",
+    "group koc": "groupKoc",
+    "contract type": "contractType"
   };
-  var text = (v) => String(v ?? "").trim().replace(/\s+/g, " ");
   function courseRequest(v) {
-    if (!v || typeof v !== "object") return null;
-    const ct = contractCode(v.ct), url = hubContractUrl(v.url, ct), student = typeof v.student === "string" ? v.student.trim() : "";
-    if (!ct || !url || !/^https:\/\/hub24\.apollo\.vn:7777\/contract\/detail\/[1-9]\d{0,14}\/?$/i.test(url) || !/^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,149}$/.test(student) || Object.hasOwn(Object.prototype, student)) return null;
-    return { ct, student, url };
+    if (!v || typeof v !== "object" || typeof v.ct !== "string" || typeof v.student !== "string" || typeof v.url !== "string") return null;
+    const ct = v.ct.trim().toUpperCase(), student = v.student.trim();
+    if (!/^[A-Z0-9]+-CT-\d{4,20}$/.test(ct) || !/^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,149}$/.test(student) || Object.hasOwn(Object.prototype, student)) return null;
+    try {
+      const u = new URL(v.url);
+      if (u.origin !== HUB || u.username || u.password || u.hash || u.search || !/^\/contract\/detail\/[1-9]\d{0,14}\/?$/i.test(u.pathname)) return null;
+      return { ct, student, url: u.href };
+    } catch {
+      return null;
+    }
   }
   function coursePayload(v, expected) {
     const request = courseRequest(expected);
-    if (!request || !v || typeof v !== "object" || Object.keys(v).some((k) => !["ct", "student", "url", "courseFee", "hoursPerWeek", "package"].includes(k)) || v.ct !== request.ct || v.student !== request.student || v.url !== request.url) return null;
+    if (!request || !v || typeof v !== "object" || Object.keys(v).some((k) => !["ct", "student", "url", ...COURSE_FIELDS].includes(k)) || v.ct !== request.ct || v.student !== request.student || v.url !== request.url) return null;
     const result = { ...request };
-    for (const key of ["courseFee", "hoursPerWeek", "package"]) {
-      if (v[key] !== null && (typeof v[key] !== "string" || !text(v[key]) || text(v[key]).length > 200)) return null;
-      result[key] = v[key] === null ? null : text(v[key]);
+    for (const key of COURSE_FIELDS) {
+      if (v[key] != null && (typeof v[key] !== "string" || !text(v[key]) || text(v[key]).length > (key === "discount" ? 2e3 : 200))) return null;
+      result[key] = v[key] == null ? null : text(v[key]);
     }
-    if (!result.courseFee && !result.hoursPerWeek && !result.package) return null;
-    if (result.hoursPerWeek && (!/^\d+(?:\.\d+)?\s*(?:hrs?|hours?)\s*\/\s*week$/i.test(result.hoursPerWeek) || !(parseFloat(result.hoursPerWeek) > 0 && parseFloat(result.hoursPerWeek) <= 168))) return null;
+    if (!COURSE_FIELDS.some((k) => result[k] !== null)) return null;
+    if (result.hoursPerWeek && !/^\d+(?:\.\d+)?\s*(?:hrs?|hours?)\s*\/\s*week$/i.test(result.hoursPerWeek)) return null;
+    if (result.hoursPerWeek && !(parseFloat(result.hoursPerWeek) > 0 && parseFloat(result.hoursPerWeek) <= 168)) return null;
     return result;
   }
   function parseCoursePage(page, expected) {
@@ -95,16 +86,67 @@ var PromotionHubCourse = (() => {
     if (!request || page.url !== request.url) return { error: "identity" };
     const codes = [...new Set((page.titles ?? []).flatMap((t) => text(t).match(/[A-Z0-9]+-CT-\d{4,20}\b/gi) ?? []).map((v) => v.toUpperCase()))];
     if (codes.length !== 1 || codes[0] !== request.ct) return { error: "identity" };
-    const values = {};
-    for (const pair of page.pairs ?? []) {
-      const key = COURSE_LABELS[text(pair.label).replace(/:$/, "").toLowerCase()], value = text(pair.value);
-      if (!key || !value || /^[-—]+$/.test(value) || value === "0") continue;
+    const pairs = page.pairs ?? [], hasBefore = pairs.some((p) => /before discount/i.test(p.label) && COURSE_LABELS[label(p.label)] === "package"), values = {};
+    for (const pair of pairs) {
+      const key = COURSE_LABELS[label(pair.label)];
+      if (!key || hasBefore && key === "package" && !/before discount/i.test(pair.label)) continue;
+      let value = text(pair.value);
+      if (!value) continue;
+      if (["giftcode", "discount"].includes(key) && /^(?:0|[-—]+|none|no (?:giftcode|discount)|n\/a)$/i.test(value)) value = "0";
+      else if (/^[-—]+$/.test(value) || value === "0") continue;
       (values[key] ??= /* @__PURE__ */ new Set()).add(value);
     }
-    if (Object.values(values).some((s) => s.size > 1)) return { error: "conflict" };
+    if (Object.entries(values).some(([k, s]) => k !== "discount" && s.size > 1)) return { error: "conflict" };
     if (values.student && [...values.student][0] !== request.student) return { error: "identity" };
-    const payload = coursePayload({ ...request, ...Object.fromEntries(["courseFee", "hoursPerWeek", "package"].map((k) => [k, values[k] ? [...values[k]][0] : null])) }, request);
+    const payload = coursePayload({ ...request, ...Object.fromEntries(COURSE_FIELDS.map((k) => [k, values[k] ? [...values[k]].join(k === "discount" ? ";" : "") : null])) }, request);
     return payload ? { payload } : { error: "empty" };
+  }
+  function missingContractInputs(row) {
+    if (row?.kind !== "contract" || !String(row.ct || row.cells?.contractTotal || "").includes("-CT-")) return [];
+    const c = row.cells ?? {}, missing = ["H", "I", "J"].filter((k) => !text(c[k]));
+    if (!text(c.K) && (Number(c.V) > 0 || text(row.context?.voucherDescription) && text(row.context.voucherDescription) !== "0")) missing.push("K");
+    if (!text(c.L) && Number(c.U) > 0) missing.push("L");
+    return missing;
+  }
+  function contractInputPlan(rows, { refresh = false } = {}) {
+    const unique = /* @__PURE__ */ new Map(), students = /* @__PURE__ */ new Map();
+    for (const row of rows ?? []) {
+      const ct = text(row.ct || row.cells?.contractTotal), student = text(row.cells?.F);
+      if (row.kind !== "contract" || !/^[A-Z0-9]+-CT-\d{4,20}$/.test(ct) || !/^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,149}$/.test(student) || Object.hasOwn(Object.prototype, student)) continue;
+      (students.get(ct) ?? (students.set(ct, /* @__PURE__ */ new Set()), students.get(ct))).add(student);
+      unique.set(ct + "|" + student, row);
+    }
+    return [...unique.values()].filter((r) => (refresh || missingContractInputs(r).length > 0) && students.get(text(r.ct || r.cells.contractTotal)).size === 1);
+  }
+  async function fillContractInputs(rows, io) {
+    const results = [];
+    for (const row of rows) {
+      if (io.signal?.aborted) break;
+      const ct = text(row.ct || row.cells.contractTotal), student = text(row.cells.F);
+      try {
+        io.progress?.("\u0110ang l\u1EA5y Input theo " + ct + "\u2026");
+        let link = await io.loadLink(ct);
+        if (!courseRequest({ ct, student, url: link?.url ?? "" })) {
+          const found = await io.lookup(ct);
+          if (io.signal?.aborted) break;
+          if (found.ct !== ct || !courseRequest({ ct, student, url: found.url })) throw Error("Link Hub kh\xF4ng kh\u1EDBp CT nh\u1EADn.");
+          link = await io.saveLink({ ct, url: found.url, version: link?.version ?? 0 });
+        }
+        if (io.signal?.aborted) break;
+        const expected = { ct, student, url: link.url }, payload = coursePayload(await io.read(expected), expected);
+        if (!payload) throw Error("Th\xF4ng tin tr\u1EA3 v\u1EC1 kh\xF4ng kh\u1EDBp CT / Student ID.");
+        if (io.signal?.aborted) break;
+        await io.save(row, payload);
+        results.push({ ct, status: "saved", fields: COURSE_FIELDS.filter((k) => payload[k] !== null) });
+        io.saved?.(row, payload);
+      } catch (e) {
+        if (io.signal?.aborted) break;
+        results.push({ ct, status: "check", message: String(e.message ?? e) });
+        if (!["index_unresolved", "not_found", "course_invalid", "course_empty", "course_unavailable"].includes(e.code)) break;
+      }
+      io.update?.([...results]);
+    }
+    return results;
   }
   return __toCommonJS(hub_course_exports);
 })();

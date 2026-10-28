@@ -7,6 +7,7 @@ import {validateVerification} from '../core/verification.mjs';
 import {validateReviews} from '../core/reviews.mjs';
 import {assetPath} from './paths.mjs';
 import {resolveCourseInfo} from '../core/course-info.mjs';
+import {coursePayload} from '../core/hub-course.mjs';
 import {buildPriceCatalogue,policyRuleCatalogue} from '../core/price-catalog.mjs';
 let policies;
 const nativeFetch=globalThis.fetch.bind(globalThis);
@@ -73,8 +74,9 @@ export async function localFetch(input,options={}){
   if(path==='/api/course-sources'&&method==='PATCH'){
    const {model}=await recordFor(body.datasetId,'CT::'+body.payload?.ct);const payload=body.payload;
    if(body.hash!==model.hash||!model.contractGroups.some(g=>g.ct===payload.ct&&String(g.cells.F)===String(payload.student)))throw fail('Nguồn Course info không khớp CT/học viên hiện tại.');
-   if(!validHubURL(payload.url,payload.ct)||['courseFee','hoursPerWeek','package'].some(k=>typeof payload[k]!=='string'||payload[k].length>2000))throw fail('Thông tin khóa học từ Hub không hợp lệ.');
-   const saved=await versioned('courseSources',payload.ct,body.version||0,()=>payload);return response({source:saved});
+   const normalized=coursePayload(payload,payload);if(!normalized)throw fail('Thông tin đầu vào từ Hub không hợp lệ.');
+   await ensureVouchers([normalized.giftcode??'']);
+   const saved=await versioned('courseSources',payload.ct,body.version||0,()=>normalized);return response({source:saved,vouchers:await all('vouchers')});
   }
   if(path==='/api/evidence'&&method==='GET'){
    const {key}=await recordFor(url.searchParams.get('dataset'),url.searchParams.get('record'));const files=(await all('evidence')).filter(e=>e.recordKey===key).map(({blob,...e})=>e);return response({files});

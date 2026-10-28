@@ -48,23 +48,15 @@
   });
   const pairs=()=>[...document.querySelectorAll('label,dt')].filter(e=>visible(e)&&V.voucherLabel(text(e))).map(label=>{
    const id=label.getAttribute('for'),group=label.closest('.form-group')||label.parentElement;
-   let control=id?document.getElementById(id):null;
+   let control=label.control||(id?document.getElementById(id):null);
+   if(!control&&V.voucherLabel(text(label))==='discount'){
+    const next=label.nextElementSibling,candidates=next?.matches?.('input:not([type="hidden"]),textarea')?[next]:next?[...next.querySelectorAll('input:not([type="hidden"]),textarea')]:[];
+    if(candidates.length===1)control=candidates[0];
+   }
    if(!control&&group){const controls=[...group.querySelectorAll('input:not([type="hidden"]):not([type="password"]),select,textarea')];if(controls.length===1)control=controls[0];}
    if(control&&/token|session|pass|auth|secret|credential/i.test(control.name))return null;
    let value=control?control.tagName==='SELECT'?[...control.selectedOptions].map(text).join(', '):control.type==='checkbox'?control.checked?'Active':'Inactive':control.value:text(label.nextElementSibling);
-   let unit='';
-   if(V.voucherLabel(text(label))==='discount'&&control){
-    // Hub can wrap the input before the suffix. Stay within its input group or
-    // ancestors with one value control so Minimum/Maximum units cannot leak in.
-    let root=control.closest('.input-group')||control.parentElement;
-    for(let depth=0;root&&depth<4;depth++,root=root.parentElement){
-     const controls=[...root.querySelectorAll('input:not([type="hidden"]),select,textarea')];if(controls.length>1)break;
-     const suffixes=[...root.querySelectorAll('.input-group-addon,.input-group-text,.input-group-append,.input-group-prepend')].filter(visible).map(text).filter(v=>V.hubDiscountType(v));
-     if(suffixes.length){unit=[...new Set(suffixes)].join(' ');break;}
-     const sibling=text(control.nextElementSibling);if(V.hubDiscountType(sibling)){unit=sibling;break;}
-     if(root===group)break;
-    }
-   }
+   const unit=V.voucherLabel(text(label))==='discount'?V.readHubDiscountUnit(control,group,visible):'';
    return {label:text(label),value,unit};
   }).filter(Boolean);
   const giftcodeRows=()=>[...document.querySelectorAll('table')].flatMap(table=>{

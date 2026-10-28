@@ -17,15 +17,19 @@ export function resolveCourseInfo(candidates){
 }
 export function applyCourseInfo(book,group,hubSources=[]){
  if(!group.ct)return;
+ if(!group.hubInputBase)group.hubInputBase={G:group.raw.G,X:group.raw.X};
+ Object.assign(group.raw,group.hubInputBase);
  const exact=(book.extensions.courseEvidence??[]).filter(e=>e.ct===group.ct&&e.student===String(group.cells.F));
  const candidates=[...(group.courseCandidates??[]),...exact.map(e=>({...Object.fromEntries(Object.entries(columns).map(([col,key])=>[col,e[key]??null])),ref:e.ref})),
-  ...hubSources.filter(e=>e.ct===group.ct&&e.student===String(group.cells.F)).map(e=>({H:e.courseFee,I:e.hoursPerWeek,J:e.package,ref:{file:'Hub · '+e.ct,sheet:'Course info',url:e.url}}))];
+  ...hubSources.filter(e=>e.ct===group.ct&&e.student===String(group.cells.F)).map(e=>({H:e.courseFee,I:e.hoursPerWeek,J:e.package,K:e.giftcode,L:e.discount,ref:{file:'Hub · '+e.ct,sheet:'Contract inputs',url:e.url}}))];
  const course=resolveCourseInfo(candidates);
  Object.assign(group.cells,course.values);group.courseInfo=course;
- group.warnings=group.warnings.filter(w=>!w.startsWith(NO_CT)&&!Object.keys(columns).some(k=>w.startsWith(k+':')));
+ group.warnings=group.warnings.filter(w=>!w.startsWith(NO_CT)&&!Object.keys(columns).some(k=>w.startsWith(k+':'))&&!/^(?:groupKoc|contractType):/.test(w));
  group.warnings.push(...course.warnings);
  if(group.noCTInvoice&&!course.complete)group.warnings.push(NO_CT+'; bổ sung các trường khóa học còn thiếu từ CT nhận / Export');
  if(exact.length===1){const e=exact[0];if(e.center)group.cells.B=e.center;if(e.centerName)group.cells.A=e.centerName;if(e.contractType)group.raw.G=e.contractType;}
+ const hub=hubSources.filter(e=>e.ct===group.ct&&e.student===String(group.cells.F));
+ for(const [field,col]of [['groupKoc','X'],['contractType','G']]){const known=[...new Set(hub.map(e=>text(e[field])).filter(Boolean))];if(known.length===1&&!text(group.raw[col]))group.raw[col]=known[0];else if(known.length>1||known.length===1&&text(group.raw[col])&&text(group.raw[col])!==known[0])group.warnings.push(field+': thông tin trên Hub khác nguồn CT; cần đối chiếu.');}
 }
 export function withCourseSources(book,sources){
  // Callers load their own freshly built workbook. Original source grids and

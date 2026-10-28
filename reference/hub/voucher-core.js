@@ -25,11 +25,14 @@ var PromotionHubVoucher = (() => {
     giftcodeKey: () => giftcodeKey,
     hubDate: () => hubDate,
     hubDiscountType: () => hubDiscountType,
+    hubDiscountUnit: () => hubDiscountUnit,
     hubNumber: () => hubNumber,
+    hubPercentNumber: () => hubPercentNumber,
     hubVoucherStatus: () => hubVoucherStatus,
     mergeHubVoucher: () => mergeHubVoucher,
     parseVoucherDetail: () => parseVoucherDetail,
     profileForVoucherCode: () => profileForVoucherCode,
+    readHubDiscountUnit: () => readHubDiscountUnit,
     voucherCodesURL: () => voucherCodesURL,
     voucherDetailURL: () => voucherDetailURL,
     voucherLabel: () => voucherLabel,
@@ -125,6 +128,36 @@ var PromotionHubVoucher = (() => {
     const amount = /[₫đĐ]/.test(s) || /\bvnd\b|\bdong\b|\bfixed(?: amount)?\b|\bamount\b|\bso tien\b/.test(normalized) || /^(?:\(?\s*)d(?:\s*\)?)$/i.test(s);
     return percent && amount ? "conflict" : percent ? "percent" : amount ? "amount" : "";
   }
+  function hubDiscountUnit(value) {
+    const s = text(value).replace(/^[([]\s*|\s*[)\]]$/g, "");
+    return s === "%" ? "%" : /^(?:đ|₫|vnd|vnđ)$/iu.test(s) ? "VND" : "";
+  }
+  function hubPercentNumber(value) {
+    const s = text(value).replace(/\s*%\s*$/, "").trim();
+    if (!/^\d+(?:[.,]\d+)?$/.test(s)) return null;
+    const n = Number(s.replace(",", "."));
+    return Number.isFinite(n) && n >= 0 ? n : null;
+  }
+  function readHubDiscountUnit(control, group, visible = () => true) {
+    if (!control) return "";
+    const textOf = (e) => text(e?.tagName === "SELECT" ? [...e.selectedOptions ?? []].map((o) => o.textContent).join(" ") : e?.textContent);
+    const suffixOf = (e) => e && visible(e) ? hubDiscountUnit(textOf(e)) : "";
+    const adjacent = suffixOf(control.nextElementSibling);
+    if (adjacent) return adjacent;
+    let root = control.closest?.(".input-group") || control.parentElement;
+    for (let depth = 0; root && depth < 6; depth++, root = root.parentElement) {
+      const controls = [...root.querySelectorAll('input:not([type="hidden"]),select,textarea')];
+      if (controls.some((e) => e !== control && !(e.tagName === "SELECT" && suffixOf(e)))) break;
+      const otherLabels = [...root.querySelectorAll("label,dt")].filter((e) => voucherLabel(textOf(e)) && voucherLabel(textOf(e)) !== "discount");
+      if (otherLabels.length) break;
+      const candidates = [...root.querySelectorAll(".input-group-addon,.input-group-text,.input-group-append,span,small,b,strong,em,select")];
+      for (let cursor = control; cursor && cursor !== root; cursor = cursor.parentElement) if (cursor.nextElementSibling) candidates.push(cursor.nextElementSibling);
+      const units = [...new Set(candidates.filter((e) => !control.compareDocumentPosition || (control.compareDocumentPosition(e) & 4) !== 0).map(suffixOf).filter(Boolean))];
+      if (units.length) return units.join(" ");
+      if (root === group) break;
+    }
+    return "";
+  }
   function hubVoucherStatus(value) {
     const s = fold(value);
     if (/^(?:inactive|disabled|cancelled|canceled|rejected|not applied|khong ap dung)$/.test(s)) return "INACTIVE";
@@ -164,8 +197,11 @@ var PromotionHubVoucher = (() => {
     const list = page.list ?? {}, row = exact[0] ?? {}, one = (key) => unique(key)[0] ?? "", conditions = text(list.conditions);
     const observed = conditions.match(/discount amount\s*:\s*([\d.,]+)\s*(%|VND|VNĐ|₫|đ)?/i);
     const discount = one("discount") || observed?.[1] || "", unit = pairs.filter((p) => voucherLabel(p.label) === "discount").map((p) => p.unit ?? "").join(" ");
-    const types = [...new Set([one("discountType"), discount, unit, ...!one("discount") ? [observed?.[2]] : []].map(hubDiscountType).filter(Boolean))];
-    const amount = hubNumber(discount);
+    const inline = /^\s*[\d.,]+\s*(%|VND|VNĐ|₫|đ)\s*$/iu.exec(discount)?.[1];
+    const suffixTypes = [unit, inline, ...!one("discount") ? [observed?.[2]] : []].map(hubDiscountType).filter(Boolean);
+    const types = [...new Set(suffixTypes.length ? suffixTypes : [hubDiscountType(one("discountType"))].filter(Boolean))];
+    const amount = types[0] === "percent" ? hubPercentNumber(discount) : hubNumber(discount);
+    if (discount && amount === null) return { error: "amount" };
     if (amount !== null && (types.length !== 1 || types[0] === "conflict")) return { error: "unit" };
     const type = amount === null ? "" : types[0];
     if (type === "percent" && amount > 100) return { error: "amount" };
@@ -212,6 +248,11 @@ var PromotionHubVoucher = (() => {
     let result = withVoucherProfile(value, profile);
     for (const key of ["label", "center", "startDate", "endDate", "type"]) if (payload[key]) result[key] = payload[key];
     for (const key of ["amount", "rate", "minimum", "maximum"]) if (payload[key] !== null) result[key] = payload[key];
+    if (!payload.type) {
+      result.type = "";
+      result.amount = null;
+      result.rate = null;
+    }
     if (payload.studentId) result.studentId = payload.studentId;
     if (payload.studentName) result.studentName = payload.studentName;
     if (profile.centerName && fold(result.center) === fold(profile.centerName) && profile.center) result.center = profile.center;

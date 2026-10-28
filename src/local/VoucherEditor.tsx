@@ -21,8 +21,8 @@ export default function VoucherEditor({initial={},profile={},disabled=false,onSa
   try{
    const payload=await readHubVoucher(current.code,{signal:task.signal,onProgress:setMessage});
    if(task.signal.aborted)return;
-   setDraft(mergeHubVoucher(ref.current,payload,profile));setMessage('Đã tự điền từ đúng Giftcode trên Hub. Kiểm tra các ô và bấm Lưu voucher & tính lại.');
-  }catch(e:any){if(e.code!=='cancelled'){setBridgeNeeded(e.code==='bridge');setMessage(automatic&&e.code==='bridge'?'Cập nhật cầu nối Hub 1.6.1 để tự tra Voucher.':e.message);if(e.code!=='bridge')setFailure(e.message);}}
+   setDraft(mergeHubVoucher(ref.current,payload,profile));const number=(n:number)=>n.toLocaleString('vi-VN',{maximumSignificantDigits:15});setMessage(payload.type==='percent'?'Đã đọc Discount amount '+number(payload.rate*100)+' % → Tỷ lệ giảm (%) = '+number(payload.rate*100)+'. Bấm Lưu voucher & tính lại.':payload.type==='amount'?'Đã đọc Discount amount '+number(payload.amount)+' đ → Số tiền giảm (VND) = '+number(payload.amount)+'. Bấm Lưu voucher & tính lại.':'Hub chưa có Discount amount đủ rõ; cần bổ sung trước khi duyệt.');
+  }catch(e:any){if(e.code!=='cancelled'){setBridgeNeeded(e.code==='bridge');setMessage(automatic&&e.code==='bridge'?'Cập nhật cầu nối Hub 1.6.2 để tự tra Voucher.':e.message);if(e.code!=='bridge')setFailure(e.message);}}
   finally{if(controller.current===task){controller.current=null;setBusy(false);}}
  },[disabled,saving,profile.ct,profile.studentId,profile.studentName,profile.center,profile.centerName]);
  useEffect(()=>{
@@ -44,7 +44,7 @@ export default function VoucherEditor({initial={},profile={},disabled=false,onSa
    <button type="button" className="quiet-button" disabled={!draft.code} onClick={()=>void navigator.clipboard.writeText(draft.code).then(()=>setMessage('Đã sao chép Giftcode đầy đủ.')).catch(()=>setFailure('Chưa sao chép được mã.'))}>Sao chép mã</button>
   </div>
   {message&&<p className="voucher-hub-message" role="status">{message}</p>}
-  {bridgeNeeded&&<details className="voucher-bridge-help"><summary>Cập nhật cầu nối để tự tìm Voucher</summary><p>Tải bản 1.6.1, giải nén và tải lại tiện ích tại chrome://extensions hoặc edge://extensions. Sau đó tải lại Promotion và các tab Hub, đăng nhập Hub rồi bấm Tìm & tự điền từ Hub.</p><a href={assetPath('downloads/promotion-hub-bridge.zip')+'?v=1.6.1'} download>Tải cầu nối Hub 1.6.1</a></details>}
+  {bridgeNeeded&&<details className="voucher-bridge-help"><summary>Cập nhật cầu nối để tự tìm Voucher</summary><p>Tải bản 1.6.2, giải nén và tải lại tiện ích tại chrome://extensions hoặc edge://extensions. Sau đó tải lại Promotion và các tab Hub, đăng nhập Hub rồi bấm Tìm & tự điền từ Hub.</p><a href={assetPath('downloads/promotion-hub-bridge.zip')+'?v=1.6.2'} download>Tải cầu nối Hub 1.6.2</a></details>}
   {source&&<p className="evidence-caption">Nguồn Hub: <a href={source} target="_blank" rel="noopener noreferrer">{draft.code}</a> · {hubStatus[draft.hubStatus]||'Chưa rõ'}{draft.hubCheckedAt?' · đọc lúc '+new Date(draft.hubCheckedAt).toLocaleString('vi-VN'):''}. Dữ liệu tự điền cần được lưu; trạng thái duyệt của hồ sơ kiểm tra riêng.</p>}
   <div className="verification-grid">
    {input('code','Giftcode No *',{maxLength:150,placeholder:'Nhập mã chính xác',onBlur:()=>{if(!initial.code&&voucherRequest({code:ref.current.code}))void lookup(false);},onKeyDown:(e:any)=>{if(e.key==='Enter'){e.preventDefault();void lookup(false);}}})}{input('label','Tên / mô tả voucher',{maxLength:200})}
@@ -55,7 +55,7 @@ export default function VoucherEditor({initial={},profile={},disabled=false,onSa
    <label><span>Chính sách áp dụng</span><select value={draft.policyId??'case-specific'} disabled={locked} onChange={e=>change('policyId',e.target.value)}>{Object.entries(VOUCHER_POLICIES).map(([id,label])=><option key={id} value={id}>{String(label)}</option>)}</select></label>
    <label><span>Cơ sở tính voucher %</span><select value={draft.percentBasis??'policy-default'} disabled={locked||draft.type==='amount'} onChange={e=>change('percentBasis',e.target.value)}><option value="policy-default">Theo bộ ca đối chiếu · cần xác minh nếu cộng Discount</option><option value="gross">Giá gốc trước Discount · theo căn cứ của mã</option><option value="after-discount">Giá gốc − Discount · theo căn cứ của mã</option></select></label>
    <label><span>Loại giảm *</span><select value={draft.type} disabled={locked} onChange={e=>change('type',e.target.value)}><option value="">Chưa xác định</option><option value="amount">Số tiền (VND)</option><option value="percent">Phần trăm</option></select></label>
-   {draft.type==='percent'?<label><span>Tỷ lệ giảm (%) *</span><input type="number" min="0" max="100" step="any" value={draft.rate===null?'':Number((draft.rate*100).toFixed(6))} disabled={locked} onChange={e=>change('rate',e.target.value===''?null:Number(e.target.value)/100)}/></label>:numberInput('amount','Số tiền giảm (VND) *')}
+   {draft.type==='percent'?<label><span>Tỷ lệ giảm (%) *</span><input type="number" min="0" max="100" step="any" value={draft.rate===null?'':Number((draft.rate*100).toPrecision(15))} disabled={locked} onChange={e=>change('rate',e.target.value===''?null:Number(e.target.value)/100)}/></label>:numberInput('amount','Số tiền giảm (VND) *')}
    {numberInput('minimum','Mức sàn (VND)')}{numberInput('maximum','Mức trần (VND) · 0 = không giới hạn')}
   </div>
   <p className="evidence-caption">Chọn chính sách theo hồ sơ của mã, không theo tiền tố Giftcode. Duyệt voucher xác nhận hồ sơ mã; các kiểm tra sai gói, sai đối tượng, cộng trùng và ngoài hạn vẫn giữ CHECK.</p>
