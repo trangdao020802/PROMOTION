@@ -130,7 +130,7 @@ async function handle(m, sender) {
     return {};
   }
   if(job.kind==='course'){
-    if(m.type==='course-failure'){await finish(job,{type:'error',code:'course_unavailable',message:'Chưa đọc được Course info duy nhất của CT nhận trên Hub. Các trường đã có từ nguồn được giữ; chỉ bổ sung trường còn thiếu.'},false);return {};}
+    if(m.type==='course-failure'){await finish(job,C.courseFailure(m.reason,Array.isArray(m.fields)?m.fields:[]),false);return {};}
     if(sender.url!==job.course.url)return {};
     if(m.type==='course-complete'){const payload=C.coursePayload(m.payload,job.course);if(!payload)return {error:'Thông tin khóa học sai CT / học viên.'};await finish(job,{type:'course-result',payload});}
     return {};

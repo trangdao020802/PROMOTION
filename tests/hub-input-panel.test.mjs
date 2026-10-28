@@ -24,7 +24,7 @@ const bundled=build({entryPoints:[new URL('../src/local/HubInputAutofill.tsx',im
  b.onLoad({filter:/.*/,namespace:'qa'},a=>({contents:a.path==='react'?reactStub:databaseStub,loader:'js'}));
 }}]});
 function nodes(node){return node&&typeof node==='object'?[node,...(node.children||[]).flatMap(nodes)]:[];}
-async function runPanel({existing=false,count=1,lookupError=false}={}){
+async function runPanel({existing=false,count=1,lookupError=false,version='1.6.3'}={}){
  const qa={states:[],stores:{links:new Map()},network:[],lookups:[],reads:[],saved:[],links:[],busy:[]};
  const ct='QA2610-CT-000004',student='QA-INPUTS',url='https://hub24.apollo.vn:7777/contract/detail/12345';
  if(existing)qa.stores.links.set(ct,{id:ct,ct,url,version:3});
@@ -32,7 +32,7 @@ async function runPanel({existing=false,count=1,lookupError=false}={}){
  vm.runInContext((await bundled).outputFiles[0].text,context);
  let complete;const done=new Promise(resolve=>{complete=resolve;});
  const rows=Array.from({length:count},(_,i)=>{const code=i?'QA2610-CT-000005':ct;return {id:'CT::'+code,ct:code,kind:'contract',cells:{F:student,contractTotal:code}};});
- const tree=module.exports.default({rows,datasetId:'qa-local',checkBridge:async()=>({version:'1.6.2',capabilities:['contract-inputs']}),makeLookup:()=>async code=>{qa.lookups.push(code);if(lookupError)throw Error('Lỗi kiểm thử kết nối');return {ct:code,url};},readInputs:async expected=>{qa.reads.push(expected);return {...expected,courseFee:'ATLS - New Price 2026 - Layer 1',hoursPerWeek:'3 hrs/week',package:'2 months',giftcode:'0',discount:'0'};},onSave:async(row,payload)=>qa.saved.push({row,payload}),onLinkSaved:link=>qa.links.push(link),onBusyChange:value=>{qa.busy.push(value);if(!value)complete();}});
+ const tree=module.exports.default({rows,datasetId:'qa-local',checkBridge:async()=>({version,capabilities:['contract-inputs']}),makeLookup:()=>async code=>{qa.lookups.push(code);if(lookupError)throw Error('Lỗi kiểm thử kết nối');return {ct:code,url};},readInputs:async expected=>{qa.reads.push(expected);return {...expected,courseFee:'ATLS - New Price 2026 - Layer 1',hoursPerWeek:'3 hrs/week',package:'2 months',giftcode:'0',discount:'0'};},onSave:async(row,payload)=>qa.saved.push({row,payload}),onLinkSaved:link=>qa.links.push(link),onBusyChange:value=>{qa.busy.push(value);if(!value)complete();}});
  const start=nodes(tree).find(n=>n.type==='button'&&n.props.className==='primary-button');assert.ok(start);start.props.onClick();await done;return {qa,ct,student,url};
 }
 test('Input panel uses browser-local JSON to resolve and save missing links before reading H:L',{timeout:5000},async()=>{
@@ -43,4 +43,7 @@ test('Input panel reuses the existing browser link without a static-host API req
 });
 test('Input panel reports an interrupted batch without claiming all contracts were read',{timeout:5000},async()=>{
  const {qa}=await runPanel({count:2,lookupError:true});assert.equal(qa.saved.length,0);assert.equal(qa.lookups.length,1);assert.match(qa.states[2],/Đã dừng/);assert.match(qa.states[2],/1\/2 CT/);assert.equal(qa.network.length,0);
+});
+test('the old Course info reader must be updated before starting a bulk read',{timeout:5000},async()=>{
+ const {qa}=await runPanel({version:'1.6.2'});assert.match(qa.states[2],/1.6.3/);assert.equal(qa.states[4],true);assert.equal(qa.lookups.length,0);assert.equal(qa.reads.length,0);assert.equal(qa.saved.length,0);
 });

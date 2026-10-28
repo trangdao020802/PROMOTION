@@ -23,7 +23,9 @@ var PromotionHubCourse = (() => {
     COURSE_FIELDS: () => COURSE_FIELDS,
     COURSE_LABELS: () => COURSE_LABELS,
     contractInputPlan: () => contractInputPlan,
+    courseFailure: () => courseFailure,
     courseLabel: () => courseLabel,
+    coursePageFromDocument: () => coursePageFromDocument,
     coursePayload: () => coursePayload,
     courseRequest: () => courseRequest,
     fillContractInputs: () => fillContractInputs,
@@ -32,13 +34,12 @@ var PromotionHubCourse = (() => {
   });
   var HUB = "https://hub24.apollo.vn:7777";
   var text = (v) => String(v ?? "").trim().replace(/\s+/g, " ");
-  var label = (v) => text(v).replace(/\s*[:*]\s*$/, "").toLowerCase();
+  var label = (v) => text(v).replace(/[\s:*]+$/, "").replace(/\s*\/\s*/g, "/").toLowerCase();
   var courseLabel = (v) => COURSE_LABELS[label(v)] ?? null;
   var COURSE_FIELDS = ["courseFee", "hoursPerWeek", "package", "giftcode", "discount", "groupKoc", "contractType"];
   var COURSE_LABELS = {
     "price name": "courseFee",
     "course fee koc": "courseFee",
-    "course fee": "courseFee",
     "hour/week": "hoursPerWeek",
     "hours/week": "hoursPerWeek",
     "hours per week": "hoursPerWeek",
@@ -54,8 +55,57 @@ var PromotionHubCourse = (() => {
     "discount apply": "discount",
     "promotion apply": "discount",
     "group koc": "groupKoc",
-    "contract type": "contractType"
+    "contract type": "contractType",
+    "contract no": "contract",
+    "contract no.": "contract",
+    "contract code": "contract",
+    "contract number": "contract"
   };
+  function coursePageFromDocument(root) {
+    const visible = (e) => !!e && !e.hidden && e.getAttribute?.("aria-hidden") !== "true" && (!e.getClientRects || e.getClientRects().length > 0);
+    const query = (e, s) => [...e?.querySelectorAll?.(s) ?? []];
+    const controls = 'input:not([type="hidden"]):not([type="password"]),select,textarea';
+    const valueOf = (element, key) => {
+      if (!visible(element) || courseLabel(element.textContent)) return null;
+      const inputs = ["INPUT", "SELECT", "TEXTAREA"].includes(element.tagName) ? [element] : query(element, controls).filter(visible);
+      if (inputs.length) {
+        if (inputs.length !== 1) return null;
+        const input = inputs[0];
+        if (["password", "hidden"].includes(String(input.type).toLowerCase()) || /token|session|pass|auth|secret|credential/i.test(input.name ?? "")) return null;
+        return input.tagName === "SELECT" ? [...input.selectedOptions ?? []].map((e) => e.textContent).join(";") : input.value;
+      }
+      if (query(element, "label,dt,th,.control-label").some((e) => visible(e) && courseLabel(e.textContent))) return null;
+      const value = element.innerText ?? element.textContent;
+      return key === "discount" ? String(value ?? "").split(/\n+/).map(text).filter(Boolean).join(";") : value;
+    };
+    const pairs = [];
+    for (const node of query(root, 'label,dt,th,td,.control-label,.form-label,[class*="col-"]')) {
+      const key = courseLabel(node.textContent);
+      if (!key || !visible(node)) continue;
+      const id = node.getAttribute?.("for"), control = node.control || (id ? root.getElementById?.(id) : null);
+      let value = control ? valueOf(control, key) : null;
+      if (value == null) {
+        let current = node;
+        for (let level = 0; current && level < 4; level++, current = current.parentElement) {
+          if (["BODY", "FORM", "TABLE", "FIELDSET"].includes(current.tagName)) break;
+          const sibling = current.nextElementSibling;
+          if (sibling) {
+            value = valueOf(sibling, key);
+            if (text(value)) break;
+          }
+          const parent = current.parentElement;
+          if (!parent || query(parent, "label,dt,th,.control-label,.form-label").filter((e) => visible(e) && courseLabel(e.textContent)).length > 1) break;
+        }
+      }
+      if (text(value)) pairs.push({ label: node.textContent, value: text(value) });
+    }
+    return { titles: query(root, 'h1,h2,h3,h4,h5,h6,[role="heading"],.page-title,.content-header,.breadcrumb').filter(visible).map((e) => e.textContent), pairs };
+  }
+  function courseFailure(reason, fields = []) {
+    const messages = { identity: "Kh\xF4ng x\xE1c minh \u0111\u01B0\u1EE3c duy nh\u1EA5t m\xE3 CT tr\xEAn ti\xEAu \u0111\u1EC1 ho\u1EB7c tr\u01B0\u1EDDng Contract code / Contract No.", student: "Student ID tr\xEAn Hub kh\xF4ng kh\u1EDBp h\u1ECDc vi\xEAn \u0111ang \u0111\u1ED1i chi\u1EBFu.", conflict: "C\xF3 nhi\u1EC1u gi\xE1 tr\u1ECB kh\xE1c nhau cho c\xF9ng tr\u01B0\u1EDDng Course info.", empty: "Ch\u01B0a t\xECm th\u1EA5y tr\u01B0\u1EDDng Course info c\xF3 nh\xE3n \u0111\u1ECDc \u0111\u01B0\u1EE3c tr\xEAn Hub.", format: "\u0110\u1ECBnh d\u1EA1ng d\u1EEF li\u1EC7u Course info ch\u01B0a h\u1EE3p l\u1EC7.", loading: "Hub v\u1EABn \u0111ang t\u1EA3i Course info khi h\u1EBFt th\u1EDDi gian ch\u1EDD.", navigation: "Hub \u0111\xE3 chuy\u1EC3n kh\u1ECFi URL chi ti\u1EBFt CT \u0111\u01B0\u1EE3c y\xEAu c\u1EA7u." };
+    const key = Object.hasOwn(messages, reason) ? reason : "empty", known = fields.filter((f) => COURSE_FIELDS.includes(f));
+    return { type: "error", code: "course_unavailable", message: messages[key] + (known.length ? " Tr\u01B0\u1EDDng: " + known.join(", ") + "." : "") + " Ch\u01B0a l\u01B0u d\u1EEF li\u1EC7u CT n\xE0y.", diagnostic: { stage: "course", reason: key, fields: known } };
+  }
   function courseRequest(v) {
     if (!v || typeof v !== "object" || typeof v.ct !== "string" || typeof v.student !== "string" || typeof v.url !== "string") return null;
     const ct = v.ct.trim().toUpperCase(), student = v.student.trim();
@@ -84,22 +134,24 @@ var PromotionHubCourse = (() => {
   function parseCoursePage(page, expected) {
     const request = courseRequest(expected);
     if (!request || page.url !== request.url) return { error: "identity" };
-    const codes = [...new Set((page.titles ?? []).flatMap((t) => text(t).match(/[A-Z0-9]+-CT-\d{4,20}\b/gi) ?? []).map((v) => v.toUpperCase()))];
+    const identity = [...page.titles ?? [], ...(page.pairs ?? []).filter((p) => courseLabel(p.label) === "contract").map((p) => p.value)];
+    const codes = [...new Set(identity.flatMap((t) => text(t).match(/[A-Z0-9]+-CT-\d{4,20}\b/gi) ?? []).map((v) => v.toUpperCase()))];
     if (codes.length !== 1 || codes[0] !== request.ct) return { error: "identity" };
     const pairs = page.pairs ?? [], hasBefore = pairs.some((p) => /before discount/i.test(p.label) && COURSE_LABELS[label(p.label)] === "package"), values = {};
     for (const pair of pairs) {
       const key = COURSE_LABELS[label(pair.label)];
-      if (!key || hasBefore && key === "package" && !/before discount/i.test(pair.label)) continue;
+      if (!key || key === "contract" || hasBefore && key === "package" && !/before discount/i.test(pair.label)) continue;
       let value = text(pair.value);
       if (!value) continue;
       if (["giftcode", "discount"].includes(key) && /^(?:0|[-—]+|none|no (?:giftcode|discount)|n\/a)$/i.test(value)) value = "0";
       else if (/^[-—]+$/.test(value) || value === "0") continue;
       (values[key] ??= /* @__PURE__ */ new Set()).add(value);
     }
-    if (Object.entries(values).some(([k, s]) => k !== "discount" && s.size > 1)) return { error: "conflict" };
-    if (values.student && [...values.student][0] !== request.student) return { error: "identity" };
+    const conflicts = Object.entries(values).filter(([k, s]) => k !== "discount" && s.size > 1).map(([k]) => k);
+    if (conflicts.length) return { error: "conflict", fields: conflicts };
+    if (values.student && [...values.student][0] !== request.student) return { error: "student" };
     const payload = coursePayload({ ...request, ...Object.fromEntries(COURSE_FIELDS.map((k) => [k, values[k] ? [...values[k]].join(k === "discount" ? ";" : "") : null])) }, request);
-    return payload ? { payload } : { error: "empty" };
+    return payload ? { payload } : { error: COURSE_FIELDS.some((k) => values[k]) ? "format" : "empty", fields: COURSE_FIELDS.filter((k) => values[k]) };
   }
   function missingContractInputs(row) {
     if (row?.kind !== "contract" || !String(row.ct || row.cells?.contractTotal || "").includes("-CT-")) return [];

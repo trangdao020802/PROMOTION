@@ -8,12 +8,12 @@ if parts.scheme!='https' or not parts.netloc or parts.path or parts.query or par
  raise ValueError('SITE_ORIGIN must be an HTTPS origin without a path.')
 site_match=site+os.environ.get('BASE_PATH','/')+'*'
 files=['background.js','core.js','course-core.js','voucher-core.js','report-core.js','index-core.js','promotion.js','hub.js','hub-course.js','hub-voucher.js','hub-index.js','hub-reports.js','index-bootstrap.js','index-tap.js']
-manifest={'manifest_version':3,'name':'Promotion Studio · Apollo HUB Bridge','version':'1.6.2','minimum_chrome_version':'111','description':'Đọc Voucher, danh sách CT/DEP, Course info và báo cáo được yêu cầu trên Apollo HUB.','permissions':['storage','tabs'],'host_permissions':[site+'/*','https://hub24.apollo.vn/*'],'background':{'service_worker':'background.js'},'content_scripts':[
+manifest={'manifest_version':3,'name':'Promotion Studio · Apollo HUB Bridge','version':'1.6.3','minimum_chrome_version':'111','description':'Đọc Voucher, danh sách CT/DEP, Course info và báo cáo được yêu cầu trên Apollo HUB.','permissions':['storage','tabs'],'host_permissions':[site+'/*','https://hub24.apollo.vn/*'],'background':{'service_worker':'background.js'},'content_scripts':[
  {'matches':[site_match],'js':['core.js','report-core.js','index-core.js','course-core.js','voucher-core.js','promotion.js'],'run_at':'document_start','all_frames':False},
  {'matches':['https://hub24.apollo.vn/*'],'js':['core.js','report-core.js','index-core.js','course-core.js','voucher-core.js','index-bootstrap.js'],'run_at':'document_start','all_frames':False},
  {'matches':['https://hub24.apollo.vn/*'],'js':['hub.js','hub-course.js','hub-voucher.js','hub-index.js','hub-reports.js'],'run_at':'document_idle','all_frames':False},
  {'matches':['https://hub24.apollo.vn/contract/list*'],'js':['index-core.js','index-tap.js'],'run_at':'document_start','world':'MAIN','all_frames':False}]}
-readme='''CẦU NỐI PROMOTION STUDIO 1.6.2
+readme='''CẦU NỐI PROMOTION STUDIO 1.6.3
 
 Chỉ dùng cho website https://promotion-hub-2026.roundskunk11.chatgpt.site và Apollo HUB https://hub24.apollo.vn:7777.
 

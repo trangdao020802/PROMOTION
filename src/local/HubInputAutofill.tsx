@@ -13,7 +13,7 @@ export default function HubInputAutofill({rows,datasetId,disabled,checkBridge,ma
   const task=new AbortController();controller.current=task;setBusy(true);onBusyChange?.(true);setResults([]);setBridgeNeeded(false);setMessage('Đang kiểm tra cầu nối Hub…');
   try{
    const ready=await checkBridge(task.signal),parts=String(ready.version??'').split('.').map(Number),version=(parts[0]||0)*1e6+(parts[1]||0)*1e3+(parts[2]||0);
-   if(version<1006002||!ready.capabilities?.includes('contract-inputs')){setBridgeNeeded(true);throw Error('Cần cầu nối Hub 1.6.2 để tự lấy đủ Input theo Contract.');}
+   if(version<1006003||!ready.capabilities?.includes('contract-inputs')){setBridgeNeeded(true);throw Error('Cần cầu nối Hub 1.6.3 để tự lấy đủ Input theo Contract.');}
    const selected=[...plan],lookup=makeLookup(selected.map((r:any)=>r.ct||r.cells.contractTotal),setMessage,task.signal);
    const results=await fillContractInputs(selected,{signal:task.signal,progress:setMessage,update:setResults,
     loadLink:async(ct:string)=>(await json('/api/hub-links?ct='+encodeURIComponent(ct),{signal:task.signal})).link,
@@ -21,7 +21,7 @@ export default function HubInputAutofill({rows,datasetId,disabled,checkBridge,ma
     saveLink:async(link:any)=>{const data=await json('/api/hub-links',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(link),signal:task.signal});onLinkSaved?.(data.link);return data.link;},
     read:(expected:any)=>readInputs(expected,setMessage,task.signal),save:onSave});
    setResults(results);setMessage((task.signal.aborted?'Đã dừng. ':results.length<selected.length?'Đã dừng để kiểm tra lỗi. ':'Hoàn tất lượt đọc. ')+'Đã xử lý '+results.length+'/'+selected.length+' CT; '+results.filter((r:any)=>r.status==='saved').length+' CT đã lưu và tính lại; '+results.filter((r:any)=>r.status==='check').length+' CT cần kiểm tra.');
-  }catch(e:any){setBridgeNeeded(e.code==='bridge'||String(e.message).includes('1.6.2'));setMessage(task.signal.aborted?'Đã dừng đọc Input.':e.message);}
+  }catch(e:any){setBridgeNeeded(e.code==='bridge'||String(e.message).includes('1.6.3'));setMessage(task.signal.aborted?'Đã dừng đọc Input.':e.message);}
   finally{if(controller.current===task)controller.current=null;setBusy(false);onBusyChange?.(false);}
  };
  return <section className="hub-input-panel" aria-label="Tự lấy Input theo Contract">
@@ -29,7 +29,7 @@ export default function HubInputAutofill({rows,datasetId,disabled,checkBridge,ma
   <label className="hub-input-refresh"><input type="checkbox" checked={refresh} disabled={busy||disabled} onChange={e=>setRefresh(e.target.checked)}/>Đọc lại cả CT đã đủ Input để đối chiếu</label>
   <p className="source-note">CT chưa có link sẽ tự tra danh sách theo tháng như Tự gắn link Hub. Thông tin đã có và chỉnh sửa tay được giữ; nguồn mâu thuẫn tiếp tục CHECK. Chứng từ chưa gắn CT chờ xác minh.</p>
   {message&&<p className="hub-input-message" role="status">{message}</p>}
-  {bridgeNeeded&&<p className="hub-input-message">Cập nhật <a href={assetPath('downloads/promotion-hub-bridge.zip')+'?v=1.6.2'} download>cầu nối Hub 1.6.2</a>, tải lại Promotion và các tab Hub rồi bấm Tự lấy Input.</p>}
+  {bridgeNeeded&&<p className="hub-input-message">Cập nhật <a href={assetPath('downloads/promotion-hub-bridge.zip')+'?v=1.6.3'} download>cầu nối Hub 1.6.3</a>, tải lại Promotion và các tab Hub rồi bấm Tự lấy Input.</p>}
   {!!results.length&&<details className="hub-input-results" open={results.some(r=>r.status==='check')}><summary>Kết quả từng CT ({results.length})</summary>{results.map(r=><p key={r.ct}><strong>{r.ct}</strong> · {r.status==='saved'?'Đã lưu: '+r.fields.map((f:string)=>names[f]).join(', '):r.message}</p>)}</details>}
  </section>;
 }

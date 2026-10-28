@@ -95,9 +95,9 @@ Cột đối chiếu tiền theo CT so trực tiếp `Phải đóng theo CT (CAL
 
 ## Tự điền Voucher từ Hub
 
-Cầu nối Hub 1.6.2 tự tra Giftcode đầy đủ tại `/giftcode/manage`, mở link chi tiết có trong kết quả và xác nhận đúng mã trong List gift code. Voucher còn thiếu sẽ tự điền khi mở hồ sơ nếu cầu nối sẵn sàng; có nút Tìm & tự điền từ Hub để đọc lại. Student ID/tên lấy từ CT đang mở và phải khớp thông tin riêng trên Hub nếu có. Phạm vi, ngày hiệu lực, kiểu/mức giảm, sàn/trần, căn cứ và link/thời điểm nguồn được lưu cùng voucher. Kiểm tra trạng thái duyệt rồi bấm Lưu voucher & tính lại. Không tự duyệt ngoại lệ hoặc bấm Create/Update trên Hub. Cần cập nhật tiện ích và đăng nhập Hub trên máy người dùng. Chi tiết tại `docs/hub-voucher-import.md`; kiểm thử dùng dữ liệu/DOM giả, chưa xác nhận đọc tài khoản Hub thật trong phiên này.
+Cầu nối Hub 1.6.3 tự tra Giftcode đầy đủ tại `/giftcode/manage`, mở link chi tiết có trong kết quả và xác nhận đúng mã trong List gift code. Voucher còn thiếu sẽ tự điền khi mở hồ sơ nếu cầu nối sẵn sàng; có nút Tìm & tự điền từ Hub để đọc lại. Student ID/tên lấy từ CT đang mở và phải khớp thông tin riêng trên Hub nếu có. Phạm vi, ngày hiệu lực, kiểu/mức giảm, sàn/trần, căn cứ và link/thời điểm nguồn được lưu cùng voucher. Kiểm tra trạng thái duyệt rồi bấm Lưu voucher & tính lại. Không tự duyệt ngoại lệ hoặc bấm Create/Update trên Hub. Cần cập nhật tiện ích và đăng nhập Hub trên máy người dùng. Chi tiết tại `docs/hub-voucher-import.md`; kiểm thử dùng dữ liệu/DOM giả, chưa xác nhận đọc tài khoản Hub thật trong phiên này.
 
-Bản 1.6.2 đọc đơn vị ngay cạnh Discount amount: `15 %` là 15%, `2.000.000 đ` là số tiền 2.000.000 VND. Không có đơn vị rõ thì dừng tự điền. Center ưu tiên cột Center code của đúng mã hoặc bảng Center code tại trang chi tiết, đọc tiếp nếu phân trang; không thay bằng North/South khi đã có mã center. Cần cập nhật cầu nối rồi bấm Tìm & tự điền từ Hub để sửa lại voucher đã đọc trước đó, kiểm tra và Lưu voucher & tính lại.
+Bản 1.6.3 đọc đơn vị ngay cạnh Discount amount: `15 %` là 15%, `2.000.000 đ` là số tiền 2.000.000 VND. Không có đơn vị rõ thì dừng tự điền. Center ưu tiên cột Center code của đúng mã hoặc bảng Center code tại trang chi tiết, đọc tiếp nếu phân trang; không thay bằng North/South khi đã có mã center. Cần cập nhật cầu nối rồi bấm Tìm & tự điền từ Hub để sửa lại voucher đã đọc trước đó, kiểm tra và Lưu voucher & tính lại.
 
 Discount Big Bang Sep giảm tiền lấy cột K theo Layer/giờ/gói trước bảng bổ sung Audit. Chứng từ tháng 10 giữ đúng số giảm, vẫn kiểm tra thời kỳ và điều kiện riêng. Case Layer 1, 3 giờ/tuần, 36 tháng chia đôi: 58.050.000 − 18.000.000 = 40.050.000 trước Giftcode (BẢNG GIÁ!G31/K31/L31). Chi tiết: `docs/big-bang-september-discount.md`.
 
@@ -119,6 +119,15 @@ Cập nhật đồng thời reference/rules-source.json, reference/policy-regist
 
 Trên Bảng đối chiếu, bấm **Tự lấy Input** để đọc Course fee KOC, Hour/week, Package, Giftcode No và Discount apply của các CT đang lọc. CT thiếu link sẽ tự tra danh sách Hub theo tháng giống Tự gắn link Hub. Dữ liệu được kiểm tra theo đúng CT nhận tiền / Student ID rồi lưu và tính lại; CT trung gian đã move không trở thành khóa học mới.
 
-Mặc định xử lý CT còn thiếu Input; có thể chọn đọc lại cả CT đã đủ Input để đối chiếu hoặc Dừng lấy Input. Giữ dữ liệu gốc và chỉnh sửa tay; nguồn mâu thuẫn, thiếu minh chứng, voucher chờ duyệt và lỗi chính sách vẫn CHECK. Không thay số tiền thu, ngày/phương thức hóa đơn hoặc tự duyệt điều kiện. Cần cầu nối **1.6.2** và phiên Hub đã đăng nhập trên máy người dùng. Xem [hướng dẫn](docs/contract-input-autofill.md).
+Mặc định xử lý CT còn thiếu Input; có thể chọn đọc lại cả CT đã đủ Input để đối chiếu hoặc Dừng lấy Input. Giữ dữ liệu gốc và chỉnh sửa tay; nguồn mâu thuẫn, thiếu minh chứng, voucher chờ duyệt và lỗi chính sách vẫn CHECK. Không thay số tiền thu, ngày/phương thức hóa đơn hoặc tự duyệt điều kiện. Cần cầu nối **1.6.3** và phiên Hub đã đăng nhập trên máy người dùng. Xem [hướng dẫn](docs/contract-input-autofill.md).
 
-Discount amount đọc theo ký hiệu hiển thị ngay sau số: `12,5 %` điền **Tỷ lệ giảm (%) = 12,5**; `2.000.000 Đ` điền **Số tiền giảm (VND) = 2.000.000**. Không suy đơn vị từ giá trị hay tiền tố mã; đọc lại mà thiếu đơn vị sẽ xóa mức giảm Hub cũ để yêu cầu kiểm tra. 115 kiểm thử bằng dữ liệu giả đã qua; trang voucher 19880 yêu cầu đăng nhập trong phiên kiểm tra nên chưa xác nhận giá trị thật của mã này.
+Discount amount đọc theo ký hiệu hiển thị ngay sau số: `12,5 %` điền **Tỷ lệ giảm (%) = 12,5**; `2.000.000 Đ` điền **Số tiền giảm (VND) = 2.000.000**. Không suy đơn vị từ giá trị hay tiền tố mã; đọc lại mà thiếu đơn vị sẽ xóa mức giảm Hub cũ để yêu cầu kiểm tra. 125 kiểm thử bằng dữ liệu giả đã qua; trang voucher 19880 yêu cầu đăng nhập trong phiên kiểm tra nên chưa xác nhận giá trị thật của mã này.
+
+
+## Khắc phục đọc Course info trên Hub · 1.6.3
+
+Price name là tên bảng giá điền vào Course fee KOC; Course fee ở cột tiền không phải tên bảng giá. Bộ đọc hỗ trợ nhãn và giá trị ở các cột lồng, trường Contract No./Contract code khi tiêu đề chỉ ghi Contract detail. Mã CT, URL và Student ID vẫn được kiểm tra; nhiều giá trị thật khác nhau vẫn báo mâu thuẫn. Chỉ dữ liệu Course info thay đổi mới làm đặt lại thời gian chờ ổn định.
+
+Lỗi từng CT chỉ rõ vấn đề mã CT, học viên, trường mâu thuẫn, định dạng hoặc đang tải. Cần dừng lượt cũ, cập nhật tiện ích **1.6.3**, tải lại Promotion/Hub và chạy lại Tự lấy Input. Không thay quyền truy cập hoặc tự duyệt hồ sơ.
+
+125 kiểm thử đã qua. Đã chạy luồng UI đọc DOM fixture theo ảnh và lưu/tính lại 2/2 CT giả; chưa kiểm chứng các CT thật trong tài khoản Hub. Xem [hướng dẫn](docs/contract-input-autofill.md) và `tests/fixtures/hub-contract-readonly.html`.

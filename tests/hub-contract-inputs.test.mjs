@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {courseRequest,coursePayload,parseCoursePage,contractInputPlan,fillContractInputs,missingContractInputs} from '../src/core/hub-course.mjs';
+import {courseRequest,coursePayload,parseCoursePage,contractInputPlan,fillContractInputs,missingContractInputs,courseLabel,courseFailure} from '../src/core/hub-course.mjs';
 import {AuditEngine} from '../src/local/calculation.mjs';
 import {buildModel} from '../src/local/model.mjs';
 import {policyData} from '../scripts/policy-data.mjs';
@@ -56,4 +56,20 @@ test('discount and full giftcode can be read; policy approvals are still indepen
 });
 test('Hub from a retired CT or different student cannot populate the receiving CT',()=>{
  const {engine,source}=fixture();for(const bad of [{...source,ct:'QA2610-CT-009999'},{...source,student:'OTHER'}]){engine.setCourseSources([bad]);const r=engine.calculate({id:'CT::'+expected.ct});assert.equal(r.cells.H,null);assert.equal(r.cells.Q,null);assert.equal(r.cells.AF,'CHECK');}
+});
+test('read-only Hub Price name is distinct from the monetary Course fee shown beside it',()=>{
+ const page={url:expected.url,titles:['Contract '+expected.ct],pairs:[{label:'Price name',value:payload.courseFee},{label:'Course fee',value:'7.200.000 VNĐ'},{label:'Package',value:'2 months'},{label:'Hour/week',value:'3 hrs/week'},{label:'Discount',value:'0 VNĐ'}]};
+ const result=parseCoursePage(page,expected);assert.equal(result.payload.courseFee,payload.courseFee);assert.equal(result.payload.discount,null);assert.equal(courseLabel('Course fee'),null);assert.equal(courseLabel('Price name : *'),'courseFee');assert.equal(courseLabel('Hour / week'),'hoursPerWeek');
+ const onlyMoney=parseCoursePage({...page,pairs:page.pairs.filter(p=>p.label!=='Price name')},expected);assert.equal(onlyMoney.payload.courseFee,null);
+});
+test('a labeled Contract No verifies read-only detail pages with a generic heading',()=>{
+ const page={url:expected.url,titles:['Contract detail'],pairs:[{label:'Contract No.',value:expected.ct},{label:'Student ID',value:expected.student},{label:'Price name',value:payload.courseFee},{label:'Hour/week',value:'3 hrs/week'},{label:'Package',value:'2 months'}]};
+ assert.equal(parseCoursePage(page,expected).payload.ct,expected.ct);
+ assert.equal(parseCoursePage({...page,pairs:page.pairs.filter(p=>p.label!=='Contract No.')},expected).error,'identity');
+ assert.equal(parseCoursePage({...page,titles:['Contract QA2610-CT-009999']},expected).error,'identity');
+ assert.equal(parseCoursePage({...page,pairs:page.pairs.map(p=>p.label==='Student ID'?{...p,value:'QA-OTHER'}:p)},expected).error,'student');
+});
+test('Course info failure reports a bounded reason and field names without copying source content',()=>{
+ const conflict=courseFailure('conflict',['courseFee','<input password=secret>']);assert.match(conflict.message,/nhiều giá trị/);assert.deepEqual(conflict.diagnostic.fields,['courseFee']);assert.equal(conflict.code,'course_unavailable');
+ assert.match(courseFailure('student').message,/Student ID/);assert.match(courseFailure('identity').message,/Contract code/);assert.match(courseFailure('arbitrary page body').message,/Chưa tìm thấy/);assert.ok(!JSON.stringify(conflict).includes('password'));
 });
