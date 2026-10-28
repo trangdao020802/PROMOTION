@@ -1,8 +1,9 @@
+import {backgroundRuntime} from './helpers/existing-hub-runtime.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
-import {coursePageFromDocument,parseCoursePage} from '../src/core/hub-course.mjs';
+import {coursePageFromDocument,parseCoursePage,courseFailure} from '../src/core/hub-course.mjs';
 test('the Hub Contract reader reads labeled H:L controls and never inspects credential values',async()=>{
  const ct='QA2610-CT-000007',student='QA-DOM',url='https://hub24.apollo.vn:7777/contract/detail/12345',nodes=[],controls=new Map(),messages=[],ticks=[];
  const node=(textContent='',extra={})=>({textContent,hidden:false,getAttribute:()=>null,getClientRects:()=>[{}],querySelectorAll:()=>[],...extra});
@@ -46,13 +47,11 @@ test('background DOM activity cannot reset the Course info stability clock',asyn
  for(let i=0;i<20;i++){clock+=50;for(const observe of observers)observe([{type:'childList',target:{textContent:'Unrelated widget update'}}]);for(const tick of ticks)tick();}
  for(let i=0;i<12;i++)await Promise.resolve();assert.equal(messages.filter(m=>m.type==='course-complete').length,1);assert.ok(!messages.some(m=>m.type==='course-failure'));
 });
-test('the extension forwards a specific Course info failure only from the bound Hub tab',async()=>{
- const messages=[],store={},listeners=[];
- const chrome={storage:{session:{get:async key=>({[key]:store[key]}),set:async value=>Object.assign(store,value),remove:async key=>delete store[key]}},tabs:{create:async()=>({id:20}),update:async()=>{},remove:async()=>{},sendMessage:async(id,m)=>messages.push({id,...m}),onRemoved:{addListener:()=>{}},onUpdated:{addListener:()=>{}}},runtime:{onMessage:{addListener:f=>listeners.push(f)}}};
- const context=vm.createContext({chrome,URL,console,Date,Promise,setTimeout,clearTimeout});context.importScripts=(...names)=>{for(const name of names)vm.runInContext(fs.readFileSync(new URL('../reference/hub/'+name,import.meta.url),'utf8').replaceAll('https://promotion-installment.trangdao2802.chatgpt.site','https://promotion-hub-2026.roundskunk11.chatgpt.site'),context);};
- vm.runInContext(fs.readFileSync(new URL('../reference/hub/background.js',import.meta.url),'utf8'),context);
- const send=(m,tab=10,location='https://promotion-hub-2026.roundskunk11.chatgpt.site/')=>new Promise(resolve=>listeners[0](m,{frameId:0,tab:{id:tab},documentId:'qa-doc',url:location},resolve));
- await send({type:'course-start',id:'qa-course-failure',course:{ct,student,url}});
- await send({type:'course-failure',id:'qa-course-failure',reason:'conflict',fields:['courseFee']},21,url);assert.ok(store.job);assert.ok(!messages.some(m=>m.type==='error'));
- await send({type:'course-failure',id:'qa-course-failure',reason:'conflict',fields:['courseFee','password=value']},20,url);assert.equal(store.job,undefined);const error=messages.at(-1);assert.equal(error.code,'course_unavailable');assert.match(error.message,/nhiều giá trị/);assert.match(error.message,/courseFee/);assert.ok(!JSON.stringify(error).includes('password'));
+test('the extension forwards a specific Course info failure only from the bound Hub tab and agent',async()=>{
+ const r=backgroundRuntime();await r.send({type:'course-start',id:'qa-course-failure',course:{ct,student,url}});
+ const failure={type:'agent-complete',id:'qa-course-failure',agentKey:'qa-agent',error:true,...courseFailure('conflict',['courseFee','password=value'])};failure.type='agent-complete';
+ await r.send(failure,21,url);assert.ok(r.store.job);assert.ok(!r.messages.some(m=>m.type==='error'));
+ await r.send({...failure,agentKey:'wrong-agent'},20,url);assert.ok(r.store.job);
+ await r.send(failure,20,'https://hub24.apollo.vn:7777/home');assert.equal(r.store.job,undefined);
+ const error=r.messages.find(m=>m.type==='error');assert.equal(error.code,'course_unavailable');assert.match(error.message,/nhiều giá trị/);assert.match(error.message,/courseFee/);assert.ok(!JSON.stringify(error).includes('password'));assert.deepEqual(r.mutations,[]);
 });

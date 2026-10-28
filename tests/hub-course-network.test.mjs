@@ -1,3 +1,4 @@
+import {backgroundRuntime} from './helpers/existing-hub-runtime.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -47,15 +48,15 @@ test('the XHR observer ignores unrelated IDs and reads the matching response wit
  const xhr=new r.XHR();xhr.open('GET',api);xhr.status=200;xhr.responseType='json';xhr.response=record();xhr.responseURL=api;for(const load of r.loads)load.fn();assert.ok(r.messages.some(m=>m.type==='snapshot'));assert.equal(r.calls.length,0);
  const before=r.messages.length,bad=new r.XHR();bad.open('GET',api.replace('12345','99999'));bad.status=200;bad.responseType='json';bad.response=record();bad.responseURL=api.replace('12345','99999');for(const load of r.loads.filter(l=>l.xhr===bad))load.fn();assert.equal(r.messages.length,before);
 });
-test('silent Course info tasks never activate a tab, including login and failure paths',async()=>{
- const updates=[],closed=[],messages=[],store={},listeners=[],tabUpdates=[];
- const chrome={storage:{session:{get:async k=>({[k]:store[k]}),set:async v=>Object.assign(store,v),remove:async k=>delete store[k]}},tabs:{create:async options=>(updates.push(options),{id:20}),update:async(id,options)=>updates.push(options),remove:async id=>closed.push(id),sendMessage:async(id,m)=>messages.push(m),onRemoved:{addListener:()=>{}},onUpdated:{addListener:fn=>tabUpdates.push(fn)}},runtime:{onMessage:{addListener:fn=>listeners.push(fn)}}};
- const context=vm.createContext({chrome,URL,Date,Promise,console,setTimeout,clearTimeout});context.importScripts=(...names)=>{for(const name of names)vm.runInContext(fs.readFileSync(new URL('../reference/hub/'+name,import.meta.url),'utf8').replaceAll('https://promotion-installment.trangdao2802.chatgpt.site','https://promotion-hub-2026.roundskunk11.chatgpt.site'),context);};
- vm.runInContext(fs.readFileSync(new URL('../reference/hub/background.js',import.meta.url),'utf8'),context);
- const send=(m,tab=10,url='https://promotion-hub-2026.roundskunk11.chatgpt.site/')=>new Promise(resolve=>listeners[0](m,{frameId:0,tab:{id:tab},documentId:'qa',url},resolve));
- for(const type of ['course-failure','login']){await send({type:'course-start',id:'qa-silent',course:expected});await send({type,id:'qa-silent',reason:'empty'},20,expected.url);assert.equal(store.job,undefined);}
- await send({type:'course-start',id:'qa-auth-redirect',course:expected});tabUpdates[0](20,{url:'https://hub24.apollo.vn:10000/login?returnUrl=qa'});await vm.runInContext('serial',context);assert.equal(store.job,undefined);
- assert.ok(!updates.some(u=>u.active===true));assert.equal(closed.length,3);assert.ok(messages.some(m=>m.code==='hub_login'));
+test('Course info success, failure and navigation leave the existing Hub tab untouched',async()=>{
+ const r=backgroundRuntime();
+ for(const message of [{payload:parseContractDetailProjection(projectContractDetail(record(),api,expected.url),expected).payload},{error:true,code:'hub_login',message:'Đăng nhập Hub.'},{error:true,code:'hub_timeout',message:'Hết giờ.'}]){
+  await r.send({type:'course-start',id:'qa-silent',course:expected});
+  await r.send({type:'agent-complete',id:'qa-silent',agentKey:'qa-agent',...message},20,r.tabs[0].url);
+  assert.equal(r.store.job,undefined);
+ }
+ await r.send({type:'course-start',id:'qa-auth-redirect',course:expected});r.updated[0](20,{url:'https://hub24.apollo.vn:10000/login?returnUrl=qa'});await r.flush();assert.equal(r.store.job,undefined);
+ assert.deepEqual(r.mutations,[]);assert.equal(r.tabs[0].url,'https://hub24.apollo.vn:7777/home');assert.ok(r.messages.some(m=>m.code==='hub_login'));
 });
 async function bootstrapRuntime(job){
  const messages=[],posted=[],listeners=[],context=vm.createContext({URL,Promise,Date,console,location:{origin:'https://hub24.apollo.vn:7777',href:expected.url,pathname:'/contract/detail/12345'}});

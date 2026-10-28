@@ -140,3 +140,10 @@ Cầu nối quan sát request GetContractDetail?contractId= của chính tab Hub
 Tiến độ lưu sau mỗi CT đã lưu đủ trường, tách theo bộ nguồn / CT / Student ID. Hết giờ, dừng hoặc tải lại trang rồi bấm Tiếp tục sẽ bỏ qua CT đã hoàn tất, kể cả lượt đã chọn đọc lại toàn bộ. Trường đọc dở được giữ và tiếp tục bổ sung. Tạo lượt đọc mới bắt đầu lại tiến độ, giữ các dữ liệu đã lưu. Lấy xong Input không tự duyệt chính sách, voucher hoặc chênh lệch tiền.
 
 142 kiểm thử đạt. Giao diện đã thử 3 CT giả: ngắt tại CT thứ hai, tải lại trang, tiếp tục đúng 2 CT còn lại; CT thứ nhất chỉ đọc 1 lần. JSON/API, DOM và Chrome API trong bài thử là mô phỏng; chưa xác nhận phản hồi API tài khoản Hub thật. Xem [hướng dẫn](docs/silent-input-resume.md). Cần cập nhật tiện ích 1.6.4 rồi tải lại Promotion và Hub.
+
+
+## Không tạo tab mới khi lấy link / Input · 1.6.5
+
+Tự gắn link CT/DEP, tìm một mã và Tự lấy Input dùng tab Hub có sẵn, không tạo, chuyển, đổi URL hay đóng tab đó. Mở hoặc tải lại Hub và đăng nhập trước. Chưa có tab sẵn sàng thì báo lỗi để kiểm tra. GetContractDetail chỉ dùng route thực tế đã quan sát; ID lấy từ link đã xác minh. Khung đọc ẩn trong tab Hub bổ sung danh sách / DOM khi cần và được dọn sau lượt đọc. Hub chặn khung thì dừng, không mở tab thay thế.
+
+Tiến độ CT đã lưu được giữ; hết giờ hoặc hủy rồi bấm lấy tiếp sẽ bỏ qua CT đã đủ. 153 kiểm thử đạt, gồm Chrome API cấm create/update/remove ở cả ba luồng, sai agent, sai CT/học viên, thiếu tab, hủy, timeout và chuyển trang. Kiểm tra giao diện dùng dữ liệu giả; chưa xác nhận frame/API tài khoản Hub thật. Cập nhật tiện ích **1.6.5**, tải lại Promotion và các tab Hub. Chi tiết tại [hướng dẫn](docs/silent-input-resume.md).
