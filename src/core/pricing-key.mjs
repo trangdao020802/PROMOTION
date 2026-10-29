@@ -10,7 +10,9 @@ export function packageIdentity(value){
   const total=/^(18|24|36)\s+split$/.exec(s)?.[1];
   return {months:total?Number(total)/2:months,key:total?`${total} SPLIT`:months?`${months*2} SPLIT`:null,variant:'split'};
  }
- return {months,key:months,variant:/s26|summer|combo he/.test(s)?'summer':/upsell|upgrade|nang cap/.test(s)?'upgrade':/trai nghiem|trial/.test(s)?'trial':'standard'};
+ const summer=/\bs\d{2}(?:\s*[-/]\s*\d+)?\b/.exec(s)?.[0]?.replace(/[\s/]/g,c=>c==='/'?'-':'').toUpperCase();
+ if(summer||/summer|combo he/.test(s))return {months,key:months?`${summer??'SUMMER'}|${months}M`:null,variant:'summer'};
+ return {months,key:months,variant:/upsell|upgrade|nang cap/.test(s)?'upgrade':/trai nghiem|trial/.test(s)?'trial':'standard'};
 }
 export function pricingIdentity(course,hours,pkg,context={}){
  const s=priceText(course),p=packageIdentity(pkg),years=[...new Set(s.match(/\b20\d{2}\b/g)??[])],layers=[...s.matchAll(/\b(?:layer|l)\s*[-:]?\s*([123])\b/g)].map(m=>Number(m[1]));

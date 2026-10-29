@@ -1,15 +1,15 @@
 import {courseHourTotals} from '../core/course-hours.mjs';
 import {ContractEngine,packageKey} from '../core/contracts.mjs';
 import {financialResult} from '../core/reconcile.mjs';
-import {discountPolicyMatch,discountPolicyCheck,discountOffers,promotionResult,regularTwoMonthPrice} from '../core/promotions.mjs';
+import {discountPolicyMatch,discountPolicyCheck,discountOffers,promotionResult} from '../core/promotions.mjs';
 import {voucherCode,customVoucherIssue,withVoucherRegistry,voucherCenterApplies} from '../core/vouchers.mjs';
 import {dateSerial,fullPaymentDay} from '../core/verification.mjs';
 import {reviewAccepted,applyReviews} from '../core/reviews.mjs';
-import {auditPriceFor,toleranceFor,auditPolicyChecks,auditPackageKey,voucherBasisFor} from '../core/audit-policy.mjs';
-import {roadmapSchedule} from '../core/price-catalog.mjs';
+import {toleranceFor,auditPolicyChecks,auditPackageKey,voucherBasisFor} from '../core/audit-policy.mjs';
+import {priceFor} from '../core/price-resolver.mjs';
+export {priceFor} from '../core/price-resolver.mjs';
 import {offerConsistencyChecks,voucherPolicyChecks} from '../core/policy-consistency.mjs';
-import {pricingIdentity,canonicalCourseName,priceText} from '../core/pricing-key.mjs';
-import {matchTypedPrice} from '../core/policy-pack.mjs';
+import {priceText} from '../core/pricing-key.mjs';
 import {legacyDiscountFor} from '../core/legacy-discount.mjs';
 const own=(o,k)=>Object.hasOwn(o,k),number=x=>typeof x==='number'&&Number.isFinite(x);
 const between=(d,a,b)=>number(d)&&d>=dateSerial(a)&&d<dateSerial(b)+1;
@@ -17,51 +17,6 @@ const difference=(a,b)=>number(a)&&number(b)?a-b:null;
 const text=x=>String(x??'').trim();
 const unique=a=>[...new Set(a.filter(x=>x!==null&&x!==undefined&&x!==''))];
 
-export function priceFor(data,cells,context){
- const identity=pricingIdentity(cells.H,cells.I,cells.J,context);
- if(/vtdh|vung tin dong hanh/.test(priceText(cells.L))&&identity.variant==='standard'){identity.variant='vtdh';identity.key=identity.key.replace('|standard|','|vtdh|');}
- const typed=matchTypedPrice(data.policy,identity,cells.D,{...context,center:cells.B});
- if(identity.conflicts.length)return {identity,key:identity.key,gross:null,discount:null,maxTerms:null,refs:[],issue:'CHECK - KHÓA GIÁ MÂU THUẪN: '+identity.conflicts.join(', ')};
- if(typed)return typed;
- const canonical=canonicalCourseName(identity);
- if(canonical&&identity.year===2026&&['standard','ahp','split'].includes(identity.variant)){
-  const normalized={...cells,H:canonical,I:identity.hours+' hrs/week',J:identity.variant==='split'?String(identity.packageKey):identity.months+' months'};
-  // AHP uses Layer 2 from 17/03/2026, explicitly stated in the primary policy.
-  if(identity.variant==='ahp'&&cells.D<dateSerial('2026-03-17'))return {identity,key:identity.key,refs:[],gross:null,discount:null,issue:'CHECK - AHP LAYER 2 CHỈ ÁP DỤNG TỪ 17/03/2026'};
-  const result=standardPriceFor(data,normalized,{...context,group:'ATLS'});
-  if(result)return {...result,identity,key:identity.key,refs:[...result.refs,...(identity.variant==='ahp'?[{file:'2026 Price & Promotion - update 10.10.26.xlsx',sheet:'Thông tin khác (Trả góp,AHP,Đặc',row:93}]:[])]};
- }
- if(identity.variant==='summer')return {identity,key:identity.key,refs:[],gross:null,discount:null,maxTerms:null,issue:'CHECK - COMBO SUMMER: '+identity.key+'. Cần bảng đúng S26/S26-2, kỳ hiệu lực và phân bổ học phí hè; bảng đề xuất không thay bản đã duyệt. Bổ sung tại Cập nhật chính sách.'};
- if(identity.variant==='upgrade'||identity.year===2024&&identity.months===15)return {identity,key:identity.key,refs:[],gross:null,discount:null,maxTerms:null,issue:'CHECK - UPSELL 15 THÁNG: cần gói 18 tháng gốc, khoản gói trải nghiệm trước đó và căn cứ giá giữ lại; không nhân đơn giá 12/18 tháng tùy ý. Bổ sung quy tắc đúng CT tại Cập nhật chính sách.'};
- if(identity.year===2024&&identity.variant==='vtdh')return {identity,key:identity.key,refs:[],gross:null,discount:null,maxTerms:null,issue:'CHECK - VTDH2024: cần lịch thanh toán gốc P.12M/P.18M và căn cứ tiếp tục CT cũ. Văn bản 2025 ghi dừng áp dụng mới từ 14/01/2026; không thay bằng lộ trình VTDH2026.'};
- if(identity.year===2024)return {identity,key:identity.key,refs:[],gross:null,discount:null,maxTerms:null,issue:'CHECK - GÓI ĐẶC THÙ GIÁ 2024: '+identity.key+'. Các gói chuẩn đã có giá; bổ sung căn cứ đúng gói này tại Cập nhật chính sách.'};
- if(identity.variant==='vtdh')return {identity,key:identity.key,refs:[],gross:null,discount:null,maxTerms:null,issue:'CHECK - VTDH: cần năm/layer/giờ và gói CT 2 tháng hoặc kỳ cuối 10 tháng; gói 18 tháng đóng một lần dùng bảng thường.'};
- if(identity.year&&canonical)return {identity,key:identity.key,refs:[],gross:null,discount:null,maxTerms:null,issue:'CHECK - CHƯA CÓ GIÁ CHO KHÓA '+identity.key+': bổ sung đúng phiên bản, gói và ngày hiệu lực trong Cập nhật chính sách.'};
- return standardPriceFor(data,cells,context);
-}
-function standardPriceFor(data,cells,context){
- const course=text(cells.H),hours=Number(/^([34])\s*(?:hrs|hours|giờ)/i.exec(text(cells.I))?.[1]),date=cells.D,pkg=auditPackageKey(cells.J,cells.L,date,packageKey(cells.J),data.policy.auditPolicy);
- const layer=Number(/^(?:ATLS|AGLS) - New Price 2026 - Layer ([123])$/i.exec(course)?.[1]);
- // A named September cash offer owns its fixed VND column. An October
- // invoice can require approval, but cannot change that offer into Q4's rate.
- const septemberCash=discountOffers(cells.L).some(label=>['BBSEP26_CASH','BBSEP26_STRAIGHT'].includes(discountPolicyMatch(label,date).ruleKey));
- if(septemberCash){
-  if(!/^ATLS\b/i.test(course)||text(context.group).toUpperCase()!=='ATLS'||/VTDH|vững tin/i.test([course,cells.J,cells.L].join(' ')))return null;
-  const schedule=roadmapSchedule(data.policy,{layer,hours,pkg,phase:'september'});if(!schedule)return null;
-  return {...schedule,policyKey:'BBSEP26_CASH',issue:schedule.issue??(between(date,'2026-09-01','2026-09-30')?null:'CHECK - NGOÀI THỜI KỲ DISCOUNT BIG BANG SEP')};
- }
- const separatePolicy=/VTDH|vững tin/i.test([course,cells.J,cells.L].join(' '));
- const phase=between(date,'2026-10-06','2026-12-31')?'q4':between(date,'2026-10-01','2026-10-05')?'october':between(date,'2026-03-01','2026-09-30')?'base':null;
- if(phase&&!separatePolicy&&/^ATLS\b/i.test(course)&&text(context.group).toUpperCase()==='ATLS'){
-  const schedule=roadmapSchedule(data.policy,{layer,hours,pkg,phase});
-  if(schedule){const tooEarly=phase==='base'&&date<dateSerial(/^new$/i.test(text(context.contractType))?'2026-03-01':'2026-03-17');return {...schedule,issue:schedule.issue??(tooEarly?'CHECK - CHƯA ĐẾN NGÀY ÁP DỤNG GIÁ 2026':null)};}
- }
- if(data.policy.auditPolicy){const matched=auditPriceFor(data,{course,hours,pkg,date,layer,cells,context});if(matched)return matched;}
- if(layer&&hours&&pkg===2&&phase&&!separatePolicy){const trial=regularTwoMonthPrice(data,{course,hours:cells.I,package:cells.J,group:context.group});if(trial)return {hours,pkg,layer,phase,months:2,gross:trial.amount,maxTerms:0,discount:0,straight:0,loyalty:0,referral:0,refs:trial.refs}}
- const choices=data.policy.prices.filter(r=>r.C===course&&r.D===text(cells.I)&&r.E===text(cells.J)&&number(r.J)&&r.J>0&&!/Report.*chưa có/i.test(r.I));
- if(choices.length&&unique(choices.map(r=>r.J)).length===1&&phase)return {hours,pkg,layer,phase,months:typeof pkg==='number'?pkg:null,gross:choices[0].J,maxTerms:null,discount:null,straight:0,loyalty:0,referral:0,refs:choices.map(r=>({file:'Bang_gia_chung_doi_chieu_Report.xlsx',sheet:'Bảng giá chung',row:r.row}))};
- return null;
-}
 
 class IndependentCalculator{
  constructor(data){this.data=data}
@@ -85,7 +40,7 @@ class IndependentCalculator{
   if(pricing?.identity?.year===2024&&cells.D>=dateSerial('2026-03-01'))checks.push('XÁC MINH - GIÁ LỊCH SỬ 2024: xác minh đăng ký/chốt phí theo bản cũ trước khi giá 2026 có hiệu lực; không tự chuyển ưu đãi 2026 vào gói cũ.');
   const reviewed=id=>reviewAccepted(patch,id,{cells,context,reconciliation:account});
   cells.AJ=pricing?.hours??null;cells.AK=pricing?.pkg??packageKey(cells.J);cells.AO=pricing?.phase==='q4'?'BBQ426':pricing?.phase==='october'?'OCT_BASE':'BASE2026';
-  cells.M=pricing?.gross??null;cells.N=pricing?.short?pricing.discount:label&&label!=='0'?null:pricing?0:null;cells.O=0;cells.S=pricing?(/installment/i.test(text(context.method))?pricing.maxTerms:0):null;cells.BD=pricing?.issue?.startsWith('XÁC MINH')?'OK':pricing?.issue??(pricing?'OK':/VTDH|vững tin/i.test([cells.H,cells.J,cells.L].join(' '))?'CHECK - VTDH CÓ POLICY RIÊNG':'CHECK - CHƯA CÓ RULE / ĐỦ ĐẦU VÀO');
+  cells.M=pricing?.gross??null;cells.N=pricing?.short?pricing.discount:label&&label!=='0'?null:number(pricing?.gross)?0:null;cells.O=0;cells.S=pricing?(/installment/i.test(text(context.method))?pricing.maxTerms:0):null;cells.BD=pricing?.issue?.startsWith('XÁC MINH')?'OK':pricing?.issue??(pricing?'OK':/VTDH|vững tin/i.test([cells.H,cells.J,cells.L].join(' '))?'CHECK - VTDH CÓ POLICY RIÊNG':'CHECK - CHƯA CÓ RULE / ĐỦ ĐẦU VÀO');
   cells.AL=label&&label!=='0'?match.ruleKey||'OTHER':'NONE';cells.BO=match.issues[0]||'OK';cells.CH='OK';
   let loyaltyMissing=false,straightMissing=false;const discountComponents=[],monthComponents=[];
   const awardMonths=(kind,months)=>{if(number(months)&&months>0)monthComponents.push({kind,months});};

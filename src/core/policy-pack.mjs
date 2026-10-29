@@ -26,6 +26,8 @@ export function validatePolicyRows(rows){
   if(!num(scope.hours)||scope.hours<=0||scope.hours>40)e.push('giờ/tuần');
   if(!variants.includes(scope.variant))e.push('loại gói');
   if(!num(scope.months)||scope.months<=0||scope.months>120)e.push('số tháng');
+  const summerKey=/^(?:S\d{2}(?:-\d+)?|SUMMER)\|(\d+(?:\.\d+)?)M$/.exec(String(scope.packageKey??''));
+  if(scope.variant==='summer'&&(!summerKey||Number(summerKey[1])!==scope.months))e.push('mã phiên bản hè (ví dụ S26-2|12M) khớp số tháng');
   if(!num(scope.gross)||scope.gross<=0||scope.gross>1e10)e.push('giá gốc');
   if(!num(scope.discount)||scope.discount<0||scope.discount>scope.gross)e.push('giảm tiền');
   if(scope.monthly!=null&&(!num(scope.monthly)||Math.abs(scope.monthly*scope.months-scope.gross)>1))e.push('giá tháng × tháng khác giá gốc');

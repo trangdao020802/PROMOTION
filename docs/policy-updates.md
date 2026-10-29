@@ -28,6 +28,12 @@ Không hỗ trợ diễn giải tự động một văn bản Excel/PDF bất k�
 
 ## Hiệu năng và phạm vi kiểm thử
 
+Bảng giá chung, RULE và bộ tính theo Contract dùng chung hàm chọn chính sách. Khóa đối chiếu gồm chương trình, năm giá, layer, giờ/tuần, loại gói và phiên bản; chính sách cập nhật còn xét ngày, center và đối tượng. Một khoản trong bảng tổng hợp hoặc Report chỉ là tham chiếu khi chưa có chính sách đúng khóa. Các giá trị chưa xác định không được chuyển thành số 0.
+
+Gói `12 months (S26-2)` có 12 tháng và khóa gói `S26-2|12M`. `12 months (S26)` có khóa `S26|12M`; hai phiên bản không áp giá thay nhau hoặc thay cho gói 12 tháng thường. Khi cập nhật, dùng `variant=summer`, `packageKey=S26-2|12M`, `months=12`, điền giá/quyền lợi đã được duyệt, ngày hiệu lực và phạm vi. Web từ chối bản hè chỉ ghi số tháng mà thiếu mã phiên bản. Sau khi áp dụng, Bảng giá, RULE và CT đúng phạm vi cùng nhận quy tắc mới.
+
+Với dữ liệu phát hành hiện tại, dòng tham chiếu AGLS Layer 1, 3 giờ/tuần, 12 tháng S26-2 giữ 38.700.000 VND và Report 43.200.000 VND trong phần căn cứ. Chúng chưa phải giá gốc được bộ tính chấp nhận cho gói hè. Giá, giảm, net, kỳ trả góp và các quyền lợi tiếp tục chưa xác định cho đến khi có chính sách đúng phiên bản. Việc duyệt điều kiện hồ sơ không tạo ra giá còn thiếu.
+
 Cầu nối 1.6.6 dùng GetContractDetail ở route thực sự quan sát được; thử đọc HTML tĩnh của URL CT đã xác minh trước khi phải nạp ứng dụng Hub trong khung ẩn. MutationObserver xử lý ngay khi Course info xuất hiện. Khung ẩn giữ nguyên URL/focus của tab Hub. Luồng tự gắn link và lấy Input không tạo/đổi/đóng tab; lỗi và hủy cũng không mở tab dự phòng.
 
 Lưu từng CT tái sử dụng chỉ mục nhận diện của bộ nguồn, chỉ cập nhật nguồn khóa học/CT bị ảnh hưởng và gửi một gói nhỏ sang worker. Tiến độ vẫn lưu theo CT/học viên; thiếu dữ liệu tiếp tục ở lượt sau. Kiểm thử batch kiểm chứng một lần dựng nguồn cho nhiều CT, cùng kiểm thử HTML tĩnh, DOM mutation, nhầm học viên, hủy, timeout và không thao tác tab.
