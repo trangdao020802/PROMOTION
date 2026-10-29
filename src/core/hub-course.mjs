@@ -1,3 +1,4 @@
+import {normalizeHubDiscount} from './hub-discount.mjs';
 const HUB='https://hub24.apollo.vn:7777';
 const text=v=>String(v??'').trim().replace(/\s+/g,' ');
 const label=v=>text(v).replace(/[\s:*]+$/,'').replace(/\s*\/\s*/g,'/').toLowerCase();
@@ -6,7 +7,7 @@ export const COURSE_FIELDS=['courseFee','hoursPerWeek','package','giftcode','dis
 export const COURSE_LABELS={
  'price name':'courseFee','course fee koc':'courseFee','hour/week':'hoursPerWeek','hours/week':'hoursPerWeek','hours per week':'hoursPerWeek',
  'package':'package','package before discount':'package','package (before discount)':'package','student id':'student','student code':'student',
- 'giftcode no':'giftcode','giftcode no.':'giftcode','giftcode':'giftcode','gift code':'giftcode','discount apply':'discount','promotion apply':'discount',
+ 'giftcode no':'giftcode','giftcode no.':'giftcode','giftcode':'giftcode','gift code':'giftcode','discount apply':'discount','promotion apply':'discount','discount':'discount',
  'group koc':'groupKoc','contract type':'contractType',
  'contract no':'contract','contract no.':'contract','contract code':'contract','contract number':'contract'
 };
@@ -26,7 +27,7 @@ export function coursePageFromDocument(root,{staticDocument=false}={}){
   }
   if(query(element,'label,dt,th,.control-label').some(e=>visible(e)&&courseLabel(e.textContent)))return null;
   const value=element.innerText??element.textContent;
-  return key==='discount'?String(value??'').split(/\n+/).map(text).filter(Boolean).join(';'):value;
+  return value;
  };
  const pairs=[];
  for(const node of query(root,'label,dt,th,td,.control-label,.form-label,[class*="col-"]')){
@@ -43,7 +44,8 @@ export function coursePageFromDocument(root,{staticDocument=false}={}){
     if(!parent||query(parent,'label,dt,th,.control-label,.form-label').filter(e=>visible(e)&&courseLabel(e.textContent)).length>1)break;
    }
   }
-  if(text(value))pairs.push({label:node.textContent,value:text(value)});
+  if(key==='discount'&&!normalizeHubDiscount(value,{wrappedOnly:label(node.textContent)==='discount'}))continue;
+  if(text(value))pairs.push({label:node.textContent,value:key==='discount'?String(value).trim():text(value)});
  }
  return {titles:query(root,'h1,h2,h3,h4,h5,h6,[role="heading"],.page-title,.content-header,.breadcrumb').filter(visible).map(e=>e.textContent),pairs};
 }
@@ -64,7 +66,7 @@ export function coursePayload(v,expected){
  const result={...request};
  for(const key of COURSE_FIELDS){
   if(v[key]!=null&&(typeof v[key]!=='string'||!text(v[key])||text(v[key]).length>(key==='discount'?2000:200)))return null;
-  result[key]=v[key]==null?null:text(v[key]);
+  result[key]=v[key]==null?null:key==='discount'?normalizeHubDiscount(v[key]):text(v[key]);
  }
  if(!COURSE_FIELDS.some(k=>result[k]!==null))return null;
  if(result.hoursPerWeek&&!/^\d+(?:\.\d+)?\s*(?:hrs?|hours?)\s*\/\s*week$/i.test(result.hoursPerWeek))return null;
@@ -79,7 +81,7 @@ export function parseCoursePage(page,expected){
  const pairs=page.pairs??[],hasBefore=pairs.some(p=>/before discount/i.test(p.label)&&COURSE_LABELS[label(p.label)]==='package'),values={};
  for(const pair of pairs){
   const key=COURSE_LABELS[label(pair.label)];if(!key||key==='contract'||hasBefore&&key==='package'&&!/before discount/i.test(pair.label))continue;
-  let value=text(pair.value);if(!value)continue;
+  let value=key==='discount'?normalizeHubDiscount(pair.value,{wrappedOnly:label(pair.label)==='discount'}):text(pair.value);if(!value)continue;
   if(['giftcode','discount'].includes(key)&&/^(?:0|[-—]+|none|no (?:giftcode|discount)|n\/a)$/i.test(value))value='0';
   else if(/^[-—]+$/.test(value)||value==='0')continue;
   (values[key]??=new Set()).add(value);

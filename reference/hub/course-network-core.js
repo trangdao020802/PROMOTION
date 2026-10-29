@@ -26,6 +26,59 @@ var PromotionHubCourseNetwork = (() => {
     projectContractDetail: () => projectContractDetail
   });
 
+  // src/core/hub-discount.mjs
+  var clean = (value) => value.trim().replace(/\s+/g, " ");
+  var benefit = /^\d[\d.,]*(?:[ \t]+\d{3})*\s*(?:%|months?|tháng|vnd|vnđ|đ|₫)\s*/iu;
+  var amountOnly = /^\d[\d.,\s]*(?:%|months?|tháng|vnd|vnđ|đ|₫)?$/iu;
+  var noOffer = /^(?:0|[-—]+|none|no discount|n\/a)$/i;
+  function normalizeHubDiscount(value, { wrappedOnly = false } = {}) {
+    if (typeof value !== "string" || value.length > 2e3) return null;
+    const entries = [];
+    let depth = 0, start = 0;
+    for (let i = 0; i < value.length; i++) {
+      if (value[i] === "(") depth++;
+      else if (value[i] === ")") depth = Math.max(0, depth - 1);
+      else if (depth === 0 && /[;\r\n]/.test(value[i])) {
+        entries.push(value.slice(start, i));
+        start = i + 1;
+      }
+    }
+    entries.push(value.slice(start));
+    const names = [];
+    let zero = false;
+    for (const entry of entries) {
+      let rest = entry.trim();
+      if (!rest) continue;
+      if (noOffer.test(rest)) {
+        zero = true;
+        continue;
+      }
+      if (amountOnly.test(rest)) continue;
+      if (!benefit.test(rest)) {
+        if (!wrappedOnly) names.push(clean(rest));
+        continue;
+      }
+      while (rest) {
+        const prefix = benefit.exec(rest);
+        if (!prefix || rest[prefix[0].length] !== "(") return null;
+        const open = prefix[0].length;
+        let nested = 1, close = open + 1;
+        for (; close < rest.length && nested; close++) {
+          if (rest[close] === "(") nested++;
+          else if (rest[close] === ")") nested--;
+        }
+        if (nested) return null;
+        const name = clean(rest.slice(open + 1, close - 1));
+        if (!name) return null;
+        names.push(name);
+        rest = rest.slice(close).trim();
+      }
+    }
+    const unique = [...new Set(names)];
+    if (unique.length > 100) return null;
+    return unique.length ? unique.join(";") : zero && !wrappedOnly ? "0" : null;
+  }
+
   // src/core/hub-course.mjs
   var HUB = "https://hub24.apollo.vn:7777";
   var text = (v) => String(v ?? "").trim().replace(/\s+/g, " ");
@@ -48,7 +101,7 @@ var PromotionHubCourseNetwork = (() => {
     const result = { ...request };
     for (const key of COURSE_FIELDS) {
       if (v[key] != null && (typeof v[key] !== "string" || !text(v[key]) || text(v[key]).length > (key === "discount" ? 2e3 : 200))) return null;
-      result[key] = v[key] == null ? null : text(v[key]);
+      result[key] = v[key] == null ? null : key === "discount" ? normalizeHubDiscount(v[key]) : text(v[key]);
     }
     if (!COURSE_FIELDS.some((k) => result[k] !== null)) return null;
     if (result.hoursPerWeek && !/^\d+(?:\.\d+)?\s*(?:hrs?|hours?)\s*\/\s*week$/i.test(result.hoursPerWeek)) return null;
@@ -97,6 +150,8 @@ var PromotionHubCourseNetwork = (() => {
     return result.length <= 2e3 ? result : null;
   }
   function fields(obj) {
+    const namedDiscount = normalizeHubDiscount(offer(obj, ["DiscountApply", "DiscountApplyName", "PromotionApply", "PromotionApplyName"], ["ListDiscountApply", "ListDiscount", "ListPromotion"], ["DiscountName", "PromotionName", "Name"]));
+    const displayedDiscount = normalizeHubDiscount(scalar(obj, ["Discount"], 2e3), { wrappedOnly: true });
     let hours = pick(obj, ["HourWeekName", "HowweekName", "HowWeekName", "HoursPerWeek", "HourPerWeek", "HourWeek", "HoursWeek"]);
     if (typeof hours === "number" && hours > 0 && hours <= 168) hours = hours + " hrs/week";
     if (typeof hours === "string") {
@@ -109,7 +164,7 @@ var PromotionHubCourseNetwork = (() => {
       hoursPerWeek: hours,
       package: scalar(obj, ["PackageBeforeDiscountName", "PackageBeforeDiscount", "ProductPackageName", "PackageName", "ProductPackage"]),
       giftcode: offer(obj, ["GiftcodeNo", "GiftCodeNumber", "Giftcode"], ["ListGiftCode", "ListGiftcodes"], ["GiftcodeNo", "GiftCodeNumber", "Code"]),
-      discount: offer(obj, ["DiscountApply", "DiscountApplyName", "PromotionApply", "PromotionApplyName"], ["ListDiscountApply", "ListDiscount", "ListPromotion"], ["DiscountName", "PromotionName", "Name"]),
+      discount: namedDiscount && namedDiscount !== "0" ? namedDiscount : displayedDiscount ?? namedDiscount,
       groupKoc: scalar(obj, ["GroupKOC", "ProductGroupName"]),
       contractType: scalar(obj, ["ContractTypeName"])
     };

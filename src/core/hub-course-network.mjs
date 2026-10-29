@@ -1,4 +1,5 @@
 import {courseRequest,coursePayload,COURSE_FIELDS} from './hub-course.mjs';
+import {normalizeHubDiscount} from './hub-discount.mjs';
 export const COURSE_NETWORK_CHANNEL='promotion-hub/course-network/v1';
 const HUB='https://hub24.apollo.vn:7777';
 const text=v=>typeof v==='string'?v.trim().replace(/\s+/g,' '):'';
@@ -25,13 +26,15 @@ function offer(obj,names,arrays,itemNames){
  const result=[...new Set(values)].join(';');return result.length<=2000?result:null;
 }
 function fields(obj){
+ const namedDiscount=normalizeHubDiscount(offer(obj,['DiscountApply','DiscountApplyName','PromotionApply','PromotionApplyName'],['ListDiscountApply','ListDiscount','ListPromotion'],['DiscountName','PromotionName','Name']));
+ const displayedDiscount=normalizeHubDiscount(scalar(obj,['Discount'],2000),{wrappedOnly:true});
  let hours=pick(obj,['HourWeekName','HowweekName','HowWeekName','HoursPerWeek','HourPerWeek','HourWeek','HoursWeek']);
  if(typeof hours==='number'&&hours>0&&hours<=168)hours=hours+' hrs/week';
  if(typeof hours==='string'){hours=text(hours).replace(/^(\d+(?:[.,]\d+)?)\s*(?:giờ\s*\/\s*tuần|hours?\s*per\s*week)$/i,(_,n)=>n.replace(',','.')+' hrs/week');if(/^\d+(?:\.\d+)?$/.test(hours))hours+=' hrs/week';}
  if(typeof hours!=='string'||!/^\d+(?:\.\d+)?\s*(?:hrs?|hours?)\s*\/\s*week$/i.test(hours)||!(parseFloat(hours)>0&&parseFloat(hours)<=168))hours=null;
  return {courseFee:scalar(obj,['PriceName','CourseFeeKOC']),hoursPerWeek:hours,package:scalar(obj,['PackageBeforeDiscountName','PackageBeforeDiscount','ProductPackageName','PackageName','ProductPackage']),
   giftcode:offer(obj,['GiftcodeNo','GiftCodeNumber','Giftcode'],['ListGiftCode','ListGiftcodes'],['GiftcodeNo','GiftCodeNumber','Code']),
-  discount:offer(obj,['DiscountApply','DiscountApplyName','PromotionApply','PromotionApplyName'],['ListDiscountApply','ListDiscount','ListPromotion'],['DiscountName','PromotionName','Name']),
+  discount:namedDiscount&&namedDiscount!=='0'?namedDiscount:displayedDiscount??namedDiscount,
   groupKoc:scalar(obj,['GroupKOC','ProductGroupName']),contractType:scalar(obj,['ContractTypeName'])};
 }
 // Project only the requested course facts. No address, seller, receipt, token,

@@ -18,6 +18,17 @@ test('ListCourseInfo projection keeps only explicit course names and excludes nu
  const raw=record();delete raw.ListCourseInfo[0].PriceName;delete raw.ListCourseInfo[0].HowWeekName;delete raw.ListCourseInfo[0].ProductPackageName;
  const noNames=parseContractDetailProjection(projectContractDetail(raw,api,expected.url),expected).payload;assert.equal(noNames.courseFee,null);assert.equal(noNames.hoursPerWeek,null);assert.equal(noNames.package,null);
 });
+test('API Discount names use the same outer-parenthesis extraction as the Course info display',()=>{
+ const names=['2026 October - Promotion Discount - 12 months','2026 October - Promotion Referral - 1 month add-on','Sep/Oct 2026 - Tặng Tháng (TRẢ THẲNG) - All layer - Tặng 1 tháng'];
+ const labels=names.map((name,i)=>(i?'1 Months':'10.00%')+' ('+name+')');
+ for(const patch of [{DiscountApply:labels.join(';')},{ListDiscount:labels.map(DiscountName=>({DiscountName}))},{Discount:labels.join('\n')}]){
+  const raw={...record(),...patch},projection=projectContractDetail(raw,api,expected.url);
+  assert.equal(projection.fields.discount,names.join(';'));
+  assert.equal(parseContractDetailProjection(projection,expected).payload.discount,names.join(';'));
+ }
+ const raw={...record(),Discount:'3.870.000 VNĐ'};delete raw.ListDiscount;
+ assert.equal(parseContractDetailProjection(projectContractDetail(raw,api,expected.url),expected).payload.discount,null);
+});
 test('network input refuses another contract, student, ID or more than one course',()=>{
  for(const [field,value,error]of [['ContractNo','QA2610-CT-009999','identity'],['ContractId',99999,'identity'],['StudentCode','QA-OTHER','student']]){const raw=record();raw[field]=value;assert.equal(parseContractDetailProjection(projectContractDetail(raw,api,expected.url),expected).error,error);}
  const raw=record();raw.ListCourseInfo.push({...raw.ListCourseInfo[0],PriceName:'ATLS - Layer 2'});assert.equal(parseContractDetailProjection(projectContractDetail(raw,api,expected.url),expected).error,'conflict');raw.ListCourseInfo=[];assert.equal(parseContractDetailProjection(projectContractDetail(raw,api,expected.url),expected).error,'empty');

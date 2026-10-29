@@ -54,6 +54,18 @@ test('Hub inputs fill group 01 and recalculate money independently; receipt fiel
 test('discount and full giftcode can be read; policy approvals are still independent from the new inputs',()=>{
  const {engine,source}=fixture({pkg:'12 months',gross:38700000,discount:3870000,totalHours:163,offer:'Q4 2026 Promotion Discount - 12 months',giftcode:'QA-UNAPPROVED'});engine.setCourseSources([source]);const r=engine.calculate({id:'CT::'+expected.ct});assert.equal(r.cells.K,'QA-UNAPPROVED');assert.equal(r.cells.L,source.discount);assert.equal(r.cells.N,3870000);assert.equal(r.cells.O,null);assert.equal(r.cells.AF,'CHECK');
 });
+test('saved decorated Hub discounts populate detail column L as names and preserve manual edits',()=>{
+ const name='2026 October - Promotion Discount - 12 months',{engine,source}=fixture({pkg:'12 months',gross:38700000,discount:3870000,totalHours:150});
+ // Existing saved sources predate the parser update and need no extra Hub read.
+ engine.setCourseSources([{...source,discount:'10.00% ('+name+')'}]);
+ const record={id:'CT::'+expected.ct},row=engine.calculate(record);
+ assert.equal(row.cells.L,name);assert.equal(row.cells.N,3870000);
+ const manual='2026 October - Promotion Referral - 1 month add-on';
+ assert.equal(engine.calculate(record,{L:manual}).cells.L,manual);
+ const group=engine.groups.get(record.id);group.courseCandidates.push({L:name,ref:{file:'QA-PaymentList.csv',sheet:'CSV',row:2}});
+ engine.updateCourseSource({...source,discount:'10.00% ('+name+')'});
+ assert.equal(engine.calculate(record).cells.L,name);assert.ok(!group.warnings.some(w=>w.startsWith('L:')));
+});
 test('Hub from a retired CT or different student cannot populate the receiving CT',()=>{
  const {engine,source}=fixture();for(const bad of [{...source,ct:'QA2610-CT-009999'},{...source,student:'OTHER'}]){engine.setCourseSources([bad]);const r=engine.calculate({id:'CT::'+expected.ct});assert.equal(r.cells.H,null);assert.equal(r.cells.Q,null);assert.equal(r.cells.AF,'CHECK');}
 });

@@ -34,7 +34,7 @@ function dataset(rows){
  const day=parseDate('2026-10-10'),records=rows.map((r,i)=>({sourceKey:'p',sourceRow:i+2,cells:{B:'QA CENTER',C:'QA1',D:'QA2610-PAY-'+String(i+4).padStart(6,'0'),E:r.ct,R:r.cells.F,S:'DỮ LIỆU GIẢ',O:day,P:'QA00'+i,I:'Paid',F:'Payment',G:'New',X:'ATLS',Z:'',AA:'',AB:'',AQ:'',AO:'',AH:'Online Payments',AJ:'',AC:7200000,AD:0,AE:0,AF:7200000,AG:25}}));
  return {id:'qa-local',fileIds:[],bundle:{kind:'source-bundle-v1',scope:{from:'2026-10-01',to:'2026-10-31',center:''},cutoff:parseDate('2026-10-31'),records,cash:records,transfers:[],exports:records.map(r=>({sourceKey:'e',sourceRow:r.sourceRow,ct:r.cells.E,student:r.cells.R,target:7200000,paid:7200000,totalHours:25,contractType:'New',center:'QA1'})),sources:['payment','export','transfer'].map((role,fileIndex)=>({key:['p','e','t'][fileIndex],role,fileIndex,fileName:'QA-'+role+'.csv',sheetName:'CSV',headerRow:1,rowCount:records.length}))}};
 }
-async function runPanel({existing=false,count=1,lookupError=false,version='1.6.6',timeoutOnce=false,partialOnce=false,persisted=null}={}){
+async function runPanel({existing=false,count=1,lookupError=false,version='1.6.7',timeoutOnce=false,partialOnce=false,persisted=null}={}){
  const qa={states:[],stores:{links:new Map(),datasets:new Map(),courseSources:new Map()},network:[],lookups:[],reads:[],saved:[],links:[],busy:[],attempts:new Map()};
  if(persisted)qa.stores=persisted;
  const ct='QA2610-CT-000004',student='QA-INPUTS',url='https://hub24.apollo.vn:7777/contract/detail/12345';
@@ -63,7 +63,7 @@ test('Input panel reports an interrupted batch without claiming all contracts we
  const {qa}=await runPanel({count:2,lookupError:true});assert.equal(qa.saved.length,0);assert.equal(qa.lookups.length,1);assert.match(qa.states[2],/Đã dừng/);assert.match(qa.states[2],/1\/2 CT/);assert.equal(qa.network.length,0);
 });
 test('the old Course info reader must be updated before starting a bulk read',{timeout:5000},async()=>{
- for(const version of ['1.6.2','1.6.3','1.6.4']){const {qa}=await runPanel({version});assert.match(qa.states[2],/1.6.6/);assert.equal(qa.states[4],true);assert.equal(qa.lookups.length,0);assert.equal(qa.reads.length,0);assert.equal(qa.saved.length,0);}
+ for(const version of ['1.6.2','1.6.3','1.6.4','1.6.6']){const {qa}=await runPanel({version});assert.match(qa.states[2],/1.6.7/);assert.equal(qa.states[4],true);assert.equal(qa.lookups.length,0);assert.equal(qa.reads.length,0);assert.equal(qa.saved.length,0);}
 });
 test('retry after a timeout skips completed contracts and continues the failed and untouched contracts',{timeout:5000},async()=>{
  const {qa,retry}=await runPanel({count:3,timeoutOnce:true});assert.equal(qa.saved.length,1);assert.equal(qa.reads.length,2);assert.match(qa.states[2],/2\/3 CT/);await retry();assert.equal(qa.saved.length,3);assert.equal(qa.reads.length,4);assert.equal(qa.attempts.get('QA2610-CT-000004'),1);assert.equal(qa.attempts.get('QA2610-CT-000005'),2);assert.equal(qa.attempts.get('QA2610-CT-000006'),1);await retry();assert.equal(qa.reads.length,4);assert.equal(qa.network.length,0);

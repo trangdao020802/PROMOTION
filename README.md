@@ -168,3 +168,10 @@ Cầu nối 1.6.6 đọc nền trong tab Hub hiện có, ưu tiên API/HTML đã
 Giá ghép bằng khóa chương trình, năm, layer, giờ và loại gói; không cần Course Fee trùng nguyên văn. Bổ sung 160 dòng chính sách có cấu trúc cho giá lịch sử2024, gói chia đôi, VTDH2026, trải nghiệm, IELTS, Premium và giá tuần. Quy tắc cũ/mới và điều kiện của từng CT được kiểm tra riêng.
 
 Quy tắc & voucher → Bảng giá chung / RULE → Cập nhật chính sách giá trên web: tải mẫu CSV hoặc nhập XLSX/JSON, xem trước, kiểm tra và áp dụng. Có lịch sử phiên bản, khôi phục, xuất JSON; dữ liệu chính sách cập nhật lưu tại trình duyệt. Xem [nguồn, cách cập nhật và giới hạn đã xác minh](docs/policy-updates.md).
+
+
+## Discount apply lấy từ Hub
+
+Cầu nối 1.6.7 lấy tên chương trình trong cặp ngoặc ngoài cùng của Discount. Ví dụ `10.00% (2026 October - Promotion Discount - 12 months)` tự điền `2026 October - Promotion Discount - 12 months` vào Chi tiết hồ sơ → Discount apply. Giữ nguyên ngoặc bên trong như `(TRẢ THẲNG)`, ghép nhiều chương trình bằng dấu chấm phẩy và loại mục trùng. Dữ liệu DOM, API và nguồn Hub đã lưu dùng cùng bộ đọc; chỉnh sửa tay vẫn được ưu tiên. Số tiền Discount đứng riêng không được xem là tên chương trình.
+
+Tải cầu nối mới, giải nén, tải lại tiện ích ở chrome://extensions hoặc edge://extensions rồi tải lại Promotion và tab Hub. Kiểm chứng bằng 200 kiểm thử tự động, gồm đủ ba ví dụ yêu cầu; dữ liệu kiểm thử Hub là giả lập.

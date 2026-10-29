@@ -1,6 +1,7 @@
 // Course evidence is independent of receipts. Never infer hours from cash or
 // total hours, nor copy the package of a retired/intermediate CT.
 import {pricingIdentity,weeklyHours,priceText} from './pricing-key.mjs';
+import {normalizeHubDiscount} from './hub-discount.mjs';
 const columns={H:'courseFee',I:'hoursPerWeek',J:'package',K:'giftcode',L:'discount'};
 const text=v=>String(v??'').trim();
 const present=v=>v!==null&&v!==undefined&&!['','0','-','—','N/A'].includes(text(v).toUpperCase());
@@ -28,7 +29,7 @@ export function applyCourseInfo(book,group,hubSources=[]){
  Object.assign(group.raw,group.hubInputBase);
  const exact=(book.extensions.courseEvidence??[]).filter(e=>e.ct===group.ct&&e.student===String(group.cells.F));
  const candidates=[...(group.courseCandidates??[]),...exact.map(e=>({...Object.fromEntries(Object.entries(columns).map(([col,key])=>[col,e[key]??null])),ref:e.ref})),
-  ...hubSources.filter(e=>e.ct===group.ct&&e.student===String(group.cells.F)).map(e=>({H:e.courseFee,I:e.hoursPerWeek,J:e.package,K:e.giftcode,L:e.discount,ref:{file:'Hub · '+e.ct,sheet:'Contract inputs',url:e.url}}))];
+  ...hubSources.filter(e=>e.ct===group.ct&&e.student===String(group.cells.F)).map(e=>({H:e.courseFee,I:e.hoursPerWeek,J:e.package,K:e.giftcode,L:normalizeHubDiscount(e.discount),ref:{file:'Hub · '+e.ct,sheet:'Contract inputs',url:e.url}}))];
  const course=resolveCourseInfo(candidates);
  Object.assign(group.cells,course.values);group.courseInfo=course;
  group.warnings=group.warnings.filter(w=>!w.startsWith(NO_CT)&&!Object.keys(columns).some(k=>w.startsWith(k+':'))&&!/^(?:groupKoc|contractType):/.test(w));

@@ -32,6 +32,61 @@ var PromotionHubCourse = (() => {
     missingContractInputs: () => missingContractInputs,
     parseCoursePage: () => parseCoursePage
   });
+
+  // src/core/hub-discount.mjs
+  var clean = (value) => value.trim().replace(/\s+/g, " ");
+  var benefit = /^\d[\d.,]*(?:[ \t]+\d{3})*\s*(?:%|months?|tháng|vnd|vnđ|đ|₫)\s*/iu;
+  var amountOnly = /^\d[\d.,\s]*(?:%|months?|tháng|vnd|vnđ|đ|₫)?$/iu;
+  var noOffer = /^(?:0|[-—]+|none|no discount|n\/a)$/i;
+  function normalizeHubDiscount(value, { wrappedOnly = false } = {}) {
+    if (typeof value !== "string" || value.length > 2e3) return null;
+    const entries = [];
+    let depth = 0, start = 0;
+    for (let i = 0; i < value.length; i++) {
+      if (value[i] === "(") depth++;
+      else if (value[i] === ")") depth = Math.max(0, depth - 1);
+      else if (depth === 0 && /[;\r\n]/.test(value[i])) {
+        entries.push(value.slice(start, i));
+        start = i + 1;
+      }
+    }
+    entries.push(value.slice(start));
+    const names = [];
+    let zero = false;
+    for (const entry of entries) {
+      let rest = entry.trim();
+      if (!rest) continue;
+      if (noOffer.test(rest)) {
+        zero = true;
+        continue;
+      }
+      if (amountOnly.test(rest)) continue;
+      if (!benefit.test(rest)) {
+        if (!wrappedOnly) names.push(clean(rest));
+        continue;
+      }
+      while (rest) {
+        const prefix = benefit.exec(rest);
+        if (!prefix || rest[prefix[0].length] !== "(") return null;
+        const open = prefix[0].length;
+        let nested = 1, close = open + 1;
+        for (; close < rest.length && nested; close++) {
+          if (rest[close] === "(") nested++;
+          else if (rest[close] === ")") nested--;
+        }
+        if (nested) return null;
+        const name = clean(rest.slice(open + 1, close - 1));
+        if (!name) return null;
+        names.push(name);
+        rest = rest.slice(close).trim();
+      }
+    }
+    const unique = [...new Set(names)];
+    if (unique.length > 100) return null;
+    return unique.length ? unique.join(";") : zero && !wrappedOnly ? "0" : null;
+  }
+
+  // src/core/hub-course.mjs
   var HUB = "https://hub24.apollo.vn:7777";
   var text = (v) => String(v ?? "").trim().replace(/\s+/g, " ");
   var label = (v) => text(v).replace(/[\s:*]+$/, "").replace(/\s*\/\s*/g, "/").toLowerCase();
@@ -54,6 +109,7 @@ var PromotionHubCourse = (() => {
     "gift code": "giftcode",
     "discount apply": "discount",
     "promotion apply": "discount",
+    "discount": "discount",
     "group koc": "groupKoc",
     "contract type": "contractType",
     "contract no": "contract",
@@ -76,7 +132,7 @@ var PromotionHubCourse = (() => {
       }
       if (query(element, "label,dt,th,.control-label").some((e) => visible(e) && courseLabel(e.textContent))) return null;
       const value = element.innerText ?? element.textContent;
-      return key === "discount" ? String(value ?? "").split(/\n+/).map(text).filter(Boolean).join(";") : value;
+      return value;
     };
     const pairs = [];
     for (const node of query(root, 'label,dt,th,td,.control-label,.form-label,[class*="col-"]')) {
@@ -97,7 +153,8 @@ var PromotionHubCourse = (() => {
           if (!parent || query(parent, "label,dt,th,.control-label,.form-label").filter((e) => visible(e) && courseLabel(e.textContent)).length > 1) break;
         }
       }
-      if (text(value)) pairs.push({ label: node.textContent, value: text(value) });
+      if (key === "discount" && !normalizeHubDiscount(value, { wrappedOnly: label(node.textContent) === "discount" })) continue;
+      if (text(value)) pairs.push({ label: node.textContent, value: key === "discount" ? String(value).trim() : text(value) });
     }
     return { titles: query(root, 'h1,h2,h3,h4,h5,h6,[role="heading"],.page-title,.content-header,.breadcrumb').filter(visible).map((e) => e.textContent), pairs };
   }
@@ -124,7 +181,7 @@ var PromotionHubCourse = (() => {
     const result = { ...request };
     for (const key of COURSE_FIELDS) {
       if (v[key] != null && (typeof v[key] !== "string" || !text(v[key]) || text(v[key]).length > (key === "discount" ? 2e3 : 200))) return null;
-      result[key] = v[key] == null ? null : text(v[key]);
+      result[key] = v[key] == null ? null : key === "discount" ? normalizeHubDiscount(v[key]) : text(v[key]);
     }
     if (!COURSE_FIELDS.some((k) => result[k] !== null)) return null;
     if (result.hoursPerWeek && !/^\d+(?:\.\d+)?\s*(?:hrs?|hours?)\s*\/\s*week$/i.test(result.hoursPerWeek)) return null;
@@ -141,7 +198,7 @@ var PromotionHubCourse = (() => {
     for (const pair of pairs) {
       const key = COURSE_LABELS[label(pair.label)];
       if (!key || key === "contract" || hasBefore && key === "package" && !/before discount/i.test(pair.label)) continue;
-      let value = text(pair.value);
+      let value = key === "discount" ? normalizeHubDiscount(pair.value, { wrappedOnly: label(pair.label) === "discount" }) : text(pair.value);
       if (!value) continue;
       if (["giftcode", "discount"].includes(key) && /^(?:0|[-—]+|none|no (?:giftcode|discount)|n\/a)$/i.test(value)) value = "0";
       else if (/^[-—]+$/.test(value) || value === "0") continue;

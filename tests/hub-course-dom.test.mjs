@@ -37,6 +37,16 @@ test('read-only neighboring columns and nested label columns match the supplied 
  assert.equal(parseCoursePage({url,...coursePageFromDocument(readonly({duplicate:true}))},{ct,student,url}).error,'conflict');
  assert.equal(parseCoursePage({url,...coursePageFromDocument(readonly({wrongStudent:true}))},{ct,student,url}).error,'student');
 });
+test('the read-only Discount field supplies program names, preserving nested parentheses',()=>{
+ const names=['2026 October - Promotion Discount - 12 months','2026 October - Promotion Referral - 1 month add-on','Sep/Oct 2026 - Tặng Tháng (TRẢ THẲNG) - All layer - Tặng 1 tháng'];
+ const display=['10.00% ('+names[0]+')','1 Months ('+names[1]+')','1 Months ('+names[2]+')'].join('\n');
+ const labelNode=element('Discount',{tagName:'LABEL',nextElementSibling:element(display)});
+ const document={querySelectorAll:s=>s.startsWith('h1,')?[element(ct)]:s.startsWith('label,dt')?[labelNode]:[]};
+ const result=parseCoursePage({url,...coursePageFromDocument(document)},{ct,student,url});
+ assert.equal(result.payload.discount,names.join(';'));
+ const pairs=[{label:'Discount',value:display},{label:'Discount apply',value:names.join(';')}];
+ assert.equal(parseCoursePage({url,titles:[ct],pairs},{ct,student,url}).payload.discount,names.join(';'));
+});
 test('background DOM activity cannot reset the Course info stability clock',async()=>{
  const document=readonly({nested:true}),messages=[],ticks=[],observers=[];let clock=0;
  class Clock extends Date{static now(){return clock;}}
