@@ -1,6 +1,6 @@
 import {voucherRequest,voucherPayload} from '../core/hub-voucher.mjs';
 const CHANNEL='promotion-hub/v1';
-export const VOUCHER_BRIDGE_VERSION='1.6.7';
+export const VOUCHER_BRIDGE_VERSION='1.6.8';
 const error=(message,code)=>Object.assign(Error(message),{code});
 export function voucherBridgeMessage(action,voucher,{window:target=globalThis.window,signal,onProgress=()=>{},timeoutMs}={}){
  return new Promise((resolve,reject)=>{
@@ -8,7 +8,7 @@ export function voucherBridgeMessage(action,voucher,{window:target=globalThis.wi
   const cancel=()=>target.postMessage({channel:CHANNEL,direction:'request',action:'cancel',id},target.location.origin);
   const clear=()=>{clearTimeout(timer);target.removeEventListener('message',listener);signal?.removeEventListener('abort',abort);};
   const abort=()=>{cancel();clear();reject(error('Đã dừng tra Voucher.','cancelled'));};
-  const timeout=()=>{if(action!=='ping')cancel();clear();reject(error(action==='ping'?'Cần cập nhật cầu nối Hub 1.6.7 để tự tìm Voucher.':'Hub chưa trả đủ thông tin Voucher; các ô đang nhập được giữ lại.',action==='ping'?'bridge':'timeout'));};
+  const timeout=()=>{if(action!=='ping')cancel();clear();reject(error(action==='ping'?'Cần cập nhật cầu nối Hub 1.6.8 để tự tìm Voucher.':'Hub chưa trả đủ thông tin Voucher; các ô đang nhập được giữ lại.',action==='ping'?'bridge':'timeout'));};
   const reset=ms=>{clearTimeout(timer);timer=setTimeout(timeout,timeoutMs??ms);};
   const listener=event=>{
    const packet=event.data;if(event.source!==target||event.origin!==target.location.origin||!packet||packet.channel!==CHANNEL||packet.direction!=='response'||packet.id!==id)return;
@@ -25,7 +25,7 @@ export async function readHubVoucher(code,options={}){
  const request=voucherRequest({code});if(!request)throw error('Nhập Giftcode No đầy đủ trước khi tìm.','voucher_invalid');
  const ready=await voucherBridgeMessage('ping',null,options);
  const parts=/^(\d+)\.(\d+)\.(\d+)$/.exec(String(ready.version??'')),version=parts?Number(parts[1])*1e6+Number(parts[2])*1e3+Number(parts[3]):0;
- if(!ready.capabilities?.includes('voucher')||version<1006007)throw error('Cần cầu nối 1.6.7 để đọc đúng đơn vị giảm và Center code. Cập nhật rồi tải lại Promotion và Hub.','bridge');
+ if(!ready.capabilities?.includes('voucher')||version<1006008)throw error('Cần cầu nối 1.6.8 để đọc đúng đơn vị giảm và Center code. Cập nhật rồi tải lại Promotion và Hub.','bridge');
  const result=await voucherBridgeMessage('voucher',request,options),payload=voucherPayload(result.payload,request);
  if(!payload)throw error('Kết quả Hub không khớp Giftcode đầy đủ hoặc link chi tiết.','voucher_invalid');
  return payload;

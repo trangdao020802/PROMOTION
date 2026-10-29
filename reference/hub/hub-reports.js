@@ -1,8 +1,9 @@
 // Runs only in the isolated content-script world, in the dedicated report tab.
 (() => {
  const P=globalThis.PromotionHub,R=globalThis.PromotionHubReports;
- if(!P||!R||location.origin!==P.HUB||window.top!==window)return;
- const send=m=>chrome.runtime.sendMessage(m);
+ const binding=/^promotion-hub:([\w-]{1,80}):([\w-]{1,80})$/.exec(window.name??'');
+ if(!P||!R||location.origin!==P.HUB||window.top!==window&&!binding)return;
+ const send=m=>chrome.runtime.sendMessage({...m,...(binding?{frameJob:binding[1],frameKey:binding[2]}:{})});
  void send({type:'context'}).then(job=>{
   if(job?.kind!=='report'||!R.reportPeriod(job.month)||!Object.hasOwn(R.HUB_REPORTS,job.report))return;
   const spec=R.HUB_REPORTS[job.report],period=R.reportPeriod(job.month),startedAt=Date.now(),renderMs=R.reportRenderMs(job.report),renderDeadline=startedAt+renderMs,validationMs=job.report==='payment'?renderMs:30_000;

@@ -79,6 +79,73 @@ var PromotionHubCourseNetwork = (() => {
     return unique.length ? unique.join(";") : zero && !wrappedOnly ? "0" : null;
   }
 
+  // src/core/pricing-key.mjs
+  var priceText = (value) => String(value ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[đĐ]/g, "d").toLowerCase().replace(/[–—_]/g, " ").replace(/\s+/g, " ").trim();
+  var single = (values) => {
+    const distinct = [...new Set(values)];
+    return distinct.length === 1 ? distinct[0] : null;
+  };
+  var courseText = (value) => priceText(value).replace(/new\s*price\s*(?=20\d{2})/g, "new price ").replace(/(atls|agls|ielts|ahp|premium)(?=new|20\d{2}|layer)/g, "$1 ").replace(/(20\d{2})(?=layer|vtdh)/g, "$1 ").replace(/[.;,:|_()[\]{}]/g, " ").replace(/\s+/g, " ").trim();
+  var isWeeklyCourse = (value) => /\b(?:goi\s*tuan|tuan|weekly|weeks)\b/.test(courseText(value));
+  function weeklyHours(value) {
+    const s = priceText(value);
+    if (/^\d+(?:[.,]\d+)?$/.test(s)) return Number(s.replace(",", "."));
+    return single([...s.matchAll(/\b(\d+(?:[.,]\d+)?)\s*(?:hrs?|hours?|gio|h)\s*(?:\/|per|moi|[.;,])\s*(?:weeks?|tuan|w)\b/g)].map((m) => Number(m[1].replace(",", "."))));
+  }
+  function packageIdentity(value, { weekly = false } = {}) {
+    const s = priceText(value).replace(/^[\s;:,.]+/, "").replace(/(\d)[.;:,]\s*(?=[a-z])/g, "$1 "), n = /^(\d+(?:[.,]\d+)?)\s*(?:months?|thang|t)(?:\b|$)/.exec(s), months = n ? Number(n[1].replace(",", ".")) : /^\d+(?:[.,]\d+)?$/.test(s) ? Number(s.replace(",", ".")) : null;
+    if (weekly || /\b(?:weeks?|tuan)\b/.test(s)) {
+      const w = Number(/^(\d+(?:[.,]\d+)?)/.exec(s)?.[1]?.replace(",", "."));
+      return { months: null, weeks: w > 0 ? w : null, unit: "weeks", key: w > 0 ? w + " WEEKS" : null, variant: "weekly" };
+    }
+    if (/\bsplit\b|chia doi|siblings?/.test(s)) {
+      const total = /^(18|24|36)\s*(?:(?:months?|thang)\s*)?(?:split\b|\(?chia\s*doi\b)/.exec(s)?.[1];
+      return { months: total ? Number(total) / 2 : months, key: total ? `${total} SPLIT` : months ? `${months * 2} SPLIT` : null, variant: "split" };
+    }
+    const summer = /\bs\d{2}(?:\s*[-/]\s*\d+)?\b/.exec(s)?.[0]?.replace(/[\s/]/g, (c) => c === "/" ? "-" : "").toUpperCase();
+    if (summer || /summer|combo he/.test(s)) return { months, key: months ? `${summer ?? "SUMMER"}|${months}M` : null, variant: "summer" };
+    return { months, key: months, variant: /upsell|upgrade|nang cap/.test(s) ? "upgrade" : /trai nghiem|trial/.test(s) ? "trial" : "standard" };
+  }
+  function pricingIdentity(course, hours, pkg, context = {}) {
+    const s = courseText(course), p = packageIdentity(pkg, { weekly: isWeeklyCourse(course) }), years = [...new Set(s.match(/\b20\d{2}\b/g) ?? [])], layers = [...s.matchAll(/\b(?:layer|l)\s*[-:]?\s*([0123])\b/g)].map((m) => Number(m[1]));
+    const families = [...s.matchAll(/\b(atls|agls|ielts|ahp|premium)\b/g)].map((m) => m[1].toUpperCase()), family = single(families) ?? (families.length && families.every((f) => ["ATLS", "AGLS"].includes(f)) ? "ATLS" : !families.length ? "ATLS" : null);
+    const ahp = /\bahp\b|apollo\s*@\s*home/.test(s), vtdh = /\bvtdh\b|vung tin dong hanh/.test(s) || /\bvtdh\b|vung tin dong hanh/.test(priceText(pkg)) && !/vtdh[ -]*full/.test(priceText(pkg));
+    const variant = p.variant === "weekly" ? "weekly" : ahp ? "ahp" : vtdh ? "vtdh" : family === "IELTS" ? "ielts" : family === "PREMIUM" ? "premium" : p.variant;
+    if (variant === "premium") {
+      const size = /\bgroup\s*:?\s*0?([125])(?:\s*[-–]\s*0?([48]))?\s*(?:persons?|people|hv)/.exec(s);
+      if (size && p.months === 4.5) p.key = size[1] + (size[2] ? "-" + size[2] : "") + "|4.5M";
+    }
+    const year = years.length === 1 ? Number(years[0]) : null, layer = ahp ? 2 : single(layers), weekly = weeklyHours(hours);
+    const conflicts = [];
+    if (years.length > 1) conflicts.push("nhi\u1EC1u n\u0103m gi\xE1");
+    if (new Set(layers).size > 1 && !ahp) conflicts.push("nhi\u1EC1u layer");
+    if (new Set(families).size > 1 && !ahp && !families.every((f) => ["ATLS", "AGLS"].includes(f))) conflicts.push("nhi\u1EC1u ch\u01B0\u01A1ng tr\xECnh");
+    const courseHours = weeklyHours(course), namedMonths = /(\d+)\s*(?:thang|months?)\s*dong\s*(?:1|mot)\s*lan/.exec(s), paymentMode = /dong\s*(?:1|mot)\s*lan/.test(s) ? "once" : vtdh ? "staged" : null;
+    if (namedMonths && !String(pkg ?? "").trim() && variant === "standard") {
+      p.months = Number(namedMonths[1]);
+      p.key = p.months;
+    }
+    if (courseHours && weekly && courseHours !== weekly) conflicts.push("gi\u1EDD trong Course Fee kh\xE1c Hour/week");
+    if (namedMonths && p.months && Number(namedMonths[1]) !== p.months) conflicts.push("s\u1ED1 th\xE1ng trong Course Fee kh\xE1c Package");
+    return {
+      group: ahp ? "AHP" : family,
+      family: ahp ? "ATLS" : family,
+      year,
+      layer,
+      hours: weekly,
+      months: p.months,
+      weeks: p.weeks ?? null,
+      unit: p.unit ?? "months",
+      courseMonths: namedMonths ? Number(namedMonths[1]) : null,
+      paymentMode,
+      packageKey: p.key,
+      variant,
+      conflicts,
+      courseKey: [ahp ? "AHP" : family ?? "?", year ?? "?", `layer${layer ?? "?"}`, variant === "weekly" ? "goituan" : namedMonths ? namedMonths[1] + "thang" : variant, paymentMode === "once" ? "dong1lan" : ""].filter(Boolean).join("|"),
+      key: [ahp ? "AHP" : family ?? "?", year ?? "?", layer ?? "?", weekly ?? "?", variant, p.key ?? "?"].join("|")
+    };
+  }
+
   // src/core/hub-course.mjs
   var HUB = "https://hub24.apollo.vn:7777";
   var text = (v) => String(v ?? "").trim().replace(/\s+/g, " ");
@@ -104,8 +171,16 @@ var PromotionHubCourseNetwork = (() => {
       result[key] = v[key] == null ? null : key === "discount" ? normalizeHubDiscount(v[key]) : text(v[key]);
     }
     if (!COURSE_FIELDS.some((k) => result[k] !== null)) return null;
-    if (result.hoursPerWeek && !/^\d+(?:\.\d+)?\s*(?:hrs?|hours?)\s*\/\s*week$/i.test(result.hoursPerWeek)) return null;
+    if (result.giftcode && /^\d[\d.,\s]*\s*(?:vnd|vnđ|đ|₫|%)$/i.test(result.giftcode)) result.giftcode = null;
+    if (result.hoursPerWeek) {
+      const hours = weeklyHours(result.hoursPerWeek);
+      if (!(hours > 0 && hours <= 168)) return null;
+      result.hoursPerWeek = hours + " hrs/week";
+    }
     if (result.hoursPerWeek && !(parseFloat(result.hoursPerWeek) > 0 && parseFloat(result.hoursPerWeek) <= 168)) return null;
+    const identity = pricingIdentity(result.courseFee, result.hoursPerWeek, result.package);
+    if (identity.unit === "weeks" && identity.weeks) result.package = identity.weeks + " weeks";
+    if (!result.package && identity.paymentMode === "once" && identity.courseMonths && identity.variant === "standard") result.package = identity.courseMonths + " months";
     return result;
   }
 

@@ -46,6 +46,7 @@ export async function localFetch(input,options={}){
  try{
   if(options.signal?.aborted)throw new DOMException('Đã hủy','AbortError');
   const url=new URL(String(input),globalThis.location?.origin||'https://local.invalid'),path=url.pathname,method=options.method||'GET';
+  if(path==='/api/vouchers'&&method==='GET'){const code=voucherCode(url.searchParams.get('code'));return response(code?{voucher:await get('vouchers',code)||null}:{vouchers:await all('vouchers')});}
   if(!path.startsWith('/api/'))return nativeFetch(input,options);
   const body=typeof options.body==='string'?JSON.parse(options.body):options.body;
   if(path==='/api/policy-versions'){

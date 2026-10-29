@@ -10,6 +10,7 @@ import {priceFor} from '../core/price-resolver.mjs';
 export {priceFor} from '../core/price-resolver.mjs';
 import {offerConsistencyChecks,voucherPolicyChecks} from '../core/policy-consistency.mjs';
 import {priceText} from '../core/pricing-key.mjs';
+import {voucherDetailURL} from '../core/hub-voucher.mjs';
 import {legacyDiscountFor} from '../core/legacy-discount.mjs';
 const own=(o,k)=>Object.hasOwn(o,k),number=x=>typeof x==='number'&&Number.isFinite(x);
 const between=(d,a,b)=>number(d)&&d>=dateSerial(a)&&d<dateSerial(b)+1;
@@ -110,15 +111,17 @@ class IndependentCalculator{
   if(!code&&hasDescription)cells.O=null;
   if(code){
    cells.O=null;let issue=voucher?customVoucherIssue(voucher,cells.F):cells.CI;
+   const pending=issue==='CHECK - VOUCHER MỚI CHƯA ĐƯỢC DUYỆT / KHÔNG ÁP DỤNG'&&voucher.status==='PENDING'&&voucherDetailURL(voucher.hubUrl)&&voucher.hubCheckedAt&&['ACTIVE','CLOSED'].includes(voucher.hubStatus)?customVoucherIssue({...voucher,status:'APPROVED'},cells.F)===null:false;
+   const approvalIssue=pending?issue:null;if(pending)issue=null;
    if(!issue&&(!between(cells.D,voucher.startDate,voucher.endDate)))issue='CHECK - GIFTCODE NGOÀI NGÀY HIỆU LỰC';
    if(!issue&&!voucherCenterApplies(voucher.center,cells.B))issue=`CHECK - GIFTCODE SAI CENTER (voucher: ${voucher.center}; hồ sơ: ${cells.B??'chưa có'})`;
-   if(!issue&&number(cells.M)&&number(cells.N)){
+   if(!issue&&(voucher.type==='amount'||number(cells.M)&&number(cells.N))){
     const basis=voucher.percentBasis&&voucher.percentBasis!=='policy-default'?voucher.percentBasis:voucherBasisFor(data,cells.D);
     const base=basis==='gross'?cells.M:cells.M-cells.N;let amount=voucher.type==='percent'?Math.round(base*voucher.rate):voucher.amount;
     if(voucher.type==='percent'){if(number(voucher.minimum))amount=Math.max(amount,voucher.minimum);if(voucher.maximum>0)amount=Math.min(amount,voucher.maximum);}
     if(!number(amount)||amount<0)issue='CHECK - GIFTCODE SAI GIÁ TRỊ';else {cells.O=amount;cells.CI='OK'}
    }else if(!issue)issue='CHECK - CHƯA CÓ CƠ SỞ TÍNH GIFTCODE';
-   if(issue)cells.CI=issue;
+   if(issue)cells.CI=issue;else if(approvalIssue)cells.CI=approvalIssue;
   }
   checks.push(...(legacy?[]:offerConsistencyChecks(cells,context,pricing)),...voucherPolicyChecks({cells,context,pricing,patch,account,voucher}));
   if(number(cells.M)&&number(cells.N)&&number(cells.O)&&cells.N+cells.O>cells.M)checks.push('CHECK - TỔNG DISCOUNT VÀ GIFTCODE VƯỢT GIÁ GỐC: kiểm tra trùng học bổng hoặc sai cơ sở %.');

@@ -18,17 +18,17 @@ export default function ReferenceTable({section,rows,disabled,onVoucherEdit}:any
  </table></div>;
  const typed=rows.filter((r:any)=>r.id),visible=typed.filter((r:any)=>(phase==='all'||r.regime===phase||['supplement','legacy'].includes(r.regime)&&phase!=='reference'&&(!r.from||r.from<=(PRICE_PHASES as any)[phase]?.to)&&(!r.to||r.to>=(PRICE_PHASES as any)[phase]?.from)||!r.regime&&phase!=='reference'&&(!r.from||r.from<=(PRICE_PHASES as any)[phase]?.to)&&(!r.to||r.to>=(PRICE_PHASES as any)[phase]?.from))&&(state==='all'||r.status===state));
  const master=section==='master';
- const columns=master?['Khóa học / Layer / giờ','Gói / số tháng tính','Kỳ chính sách','Giá tháng chưa giảm','Giá gốc','Giảm theo gói','Sau giảm · chưa voucher','Tháng tặng có điều kiện','Kỳ trả góp tối đa','Phạm vi tính','Truy vết / căn cứ']
+ const columns=master?['Khóa học / Layer / giờ','Gói / thời lượng tính','Kỳ chính sách','Đơn giá chưa giảm · tháng / tuần','Giá gốc','Giảm theo gói','Sau giảm · chưa voucher','Tháng tặng có điều kiện','Kỳ trả góp tối đa','Phạm vi tính','Truy vết / căn cứ']
   :['Khóa quy tắc','Khóa / Layer / giờ','Gói / hiệu lực','Cách tính / quyền lợi','Điều kiện áp dụng','Cộng gộp / thứ tự','Minh chứng cần có','Tình trạng','Truy vết / căn cứ'];
  return <>
   <div className="price-table-tools"><label>Kỳ chính sách<select aria-label="Kỳ chính sách bảng giá" value={phase} onChange={e=>setPhase(e.target.value)}><option value="all">Tất cả kỳ</option>{Object.entries(PRICE_PHASES).map(([id,p]:any)=><option key={id} value={id}>{p.label}</option>)}<option value="reference">Khóa / gói cần chính sách riêng</option></select></label><label>Phạm vi tính<select aria-label="Phạm vi tính bảng giá" value={state} onChange={e=>setState(e.target.value)}><option value="all">Tất cả tình trạng</option>{Object.entries(coverage).map(([id,label])=><option key={id} value={id}>{String(label)}</option>)}</select></label><span>{visible.length} dòng · tiền VND · tháng tặng chưa quy đổi thành tiền</span></div>
   <div className="reference-scroll"><table key={section} className={'reference-table canonical-'+section} aria-label={master?'Bảng giá chung thống nhất':'Quy tắc và điều kiện áp dụng'}>
    <thead><tr>{columns.map(s=><th key={s}>{s}</th>)}</tr></thead>
    <tbody>{visible.map((r:any)=>master?<tr key={r.id} className={'price-status-'+r.status}>
-    <td><strong>{r.course}</strong><small>{r.group} · {r.koc??'chưa có KOC'} · {r.year??'chưa có năm'} · Layer {r.layer??'?'} · {r.hours??'?'} giờ/tuần</small></td>
-    <td>{r.package}<small>{typeof r.months==='number'?r.months+' tháng tính học phí':'Chưa xác định số tháng'}</small></td>
+    <td><strong>{r.course}</strong><small>{r.group} · {r.koc??'chưa có KOC'} · {r.year??'chưa có năm'} · {r.layer===0?'Không chia Layer':`Layer ${r.layer??'?'}`} · {r.hours??'?'} giờ/tuần</small></td>
+    <td>{r.package}<small>{r.unit==='weeks'?`${r.weeks??'?'} tuần tính học phí`:typeof r.months==='number'?r.months+' tháng tính học phí':'Chưa xác định số tháng'}</small></td>
     <td>{r.regimeLabel}<small>{day(r.from)} – {day(r.to)}</small>{r.renewFrom&&r.renewFrom!==r.from&&<small>Current từ {day(r.renewFrom)}</small>}</td>
-    <td className="numeric"><Amount n={r.monthly}/></td><td className="numeric"><Amount n={r.gross}/></td><td className="numeric"><Amount n={r.discount}/></td><td className="numeric"><Amount n={r.net}/></td>
+    <td className="numeric"><Amount n={r.unit==='weeks'?r.unitPrice:r.monthly}/><small>{r.unit==='weeks'?'VND / tuần':'VND / tháng'}</small></td><td className="numeric"><Amount n={r.gross}/></td><td className="numeric"><Amount n={r.discount}/></td><td className="numeric"><Amount n={r.net}/></td>
     <td>Trả thẳng: {r.straight??'Chưa xác định'}<small>Loyalty tối đa: {r.loyalty??'Chưa xác định'}</small><small>Referral: {r.referral??'Chưa xác định'}</small></td>
     <td className="numeric">{r.maxTerms===0?'Trả thẳng':r.maxTerms===null?'Chưa có':r.maxTerms+' tháng'}</td>
     <td><span className={'price-coverage '+r.status}>{coverage[r.status]}</span>{r.conditions&&<small>{r.conditions}</small>}</td><td><Sources row={r}/></td>

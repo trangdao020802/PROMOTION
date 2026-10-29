@@ -25,12 +25,13 @@ export function validatePolicyRows(rows){
   if(![1,2,3].includes(scope.layer)&&!(scope.layer===0&&['weekly','premium'].includes(scope.variant)))e.push('layer');
   if(!num(scope.hours)||scope.hours<=0||scope.hours>40)e.push('giờ/tuần');
   if(!variants.includes(scope.variant))e.push('loại gói');
-  if(!num(scope.months)||scope.months<=0||scope.months>120)e.push('số tháng');
+  const weeks=scope.weeks??Number(/^(\d+(?:\.\d+)?) WEEKS$/.exec(String(scope.packageKey))?.[1]);
+  if(scope.variant==='weekly'?!(num(weeks)&&weeks>0&&weeks<=520):!num(scope.months)||scope.months<=0||scope.months>120)e.push(scope.variant==='weekly'?'số tuần':'số tháng');
   const summerKey=/^(?:S\d{2}(?:-\d+)?|SUMMER)\|(\d+(?:\.\d+)?)M$/.exec(String(scope.packageKey??''));
   if(scope.variant==='summer'&&(!summerKey||Number(summerKey[1])!==scope.months))e.push('mã phiên bản hè (ví dụ S26-2|12M) khớp số tháng');
   if(!num(scope.gross)||scope.gross<=0||scope.gross>1e10)e.push('giá gốc');
   if(!num(scope.discount)||scope.discount<0||scope.discount>scope.gross)e.push('giảm tiền');
-  if(scope.monthly!=null&&(!num(scope.monthly)||Math.abs(scope.monthly*scope.months-scope.gross)>1))e.push('giá tháng × tháng khác giá gốc');
+  if(scope.variant!=='weekly'&&scope.monthly!=null&&(!num(scope.monthly)||Math.abs(scope.monthly*scope.months-scope.gross)>1))e.push('giá tháng × tháng khác giá gốc');
   if(!Number.isInteger(scope.maxTerms)||scope.maxTerms<0||scope.maxTerms>36)e.push('kỳ trả góp');
   for(const k of ['straight','loyalty','referral'])if(!num(scope[k])||scope[k]<0||scope[k]>12)e.push(k+' (tháng tặng)');
   const a=day(scope.from),b=day(scope.to);if(a===null||b===null||!Number.isFinite(a)||!Number.isFinite(b)||b<a)e.push('ngày hiệu lực');
@@ -67,9 +68,10 @@ export function matchTypedPrice(policy,identity,date,context={}){
 export function normalizePolicyRow(r,defaults={}){
  const v={...defaults,...r},numeric=k=>{if(v[k]===''||v[k]==null)return null;if(typeof v[k]==='number')return v[k];const n=Number(String(v[k]).replace(/[.\s](?=\d{3}(?:\D|$))/g,'').replace(',','.'));return Number.isFinite(n)?n:null;};
  const identity=pricingIdentity(v.course??'',v.hours,v.package??'',{group:v.group});
- const months=numeric('months')??identity.months;
+ const weeks=numeric('weeks')??identity.weeks??Number(/^(\d+(?:\.\d+)?) WEEKS$/.exec(String(v.packageKey))?.[1]),weekly=(v.variant||identity.variant)==='weekly';
+ const months=weekly?null:numeric('months')??identity.months;
  return {group:String(v.group??identity.group??'').toUpperCase(),year:numeric('year')??identity.year,layer:numeric('layer')??identity.layer,hours:numeric('hours')??identity.hours,variant:v.variant||identity.variant,
-  packageKey:v.packageKey||identity.packageKey||months,months,monthly:numeric('monthly'),gross:numeric('gross'),discount:numeric('discount'),maxTerms:numeric('maxTerms'),
+  packageKey:weekly&&weeks>0?weeks+' WEEKS':v.packageKey||identity.packageKey||months,months,...(weekly?{weeks:weeks>0?weeks:null}:{}),monthly:weekly?null:numeric('monthly'),gross:numeric('gross'),discount:numeric('discount'),maxTerms:numeric('maxTerms'),
   straight:numeric('straight')??0,loyalty:numeric('loyalty')??0,referral:numeric('referral')??0,from:v.from??'',to:v.to??'',center:v.center||'*',contractType:v.contractType||'*',
   source:v.source||'',approval:v.approval||'',course:v.course||'',discountLabels:Array.isArray(v.discountLabels)?v.discountLabels:String(v.discountLabels||'').split(';').map(s=>s.trim()).filter(Boolean),conditions:v.conditions||'',...(v.totalHours?{totalHours:Number(v.totalHours)}:{})};
 }

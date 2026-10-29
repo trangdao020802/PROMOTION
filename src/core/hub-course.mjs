@@ -1,4 +1,5 @@
 import {normalizeHubDiscount} from './hub-discount.mjs';
+import {weeklyHours,pricingIdentity} from './pricing-key.mjs';
 const HUB='https://hub24.apollo.vn:7777';
 const text=v=>String(v??'').trim().replace(/\s+/g,' ');
 const label=v=>text(v).replace(/[\s:*]+$/,'').replace(/\s*\/\s*/g,'/').toLowerCase();
@@ -69,8 +70,11 @@ export function coursePayload(v,expected){
   result[key]=v[key]==null?null:key==='discount'?normalizeHubDiscount(v[key]):text(v[key]);
  }
  if(!COURSE_FIELDS.some(k=>result[k]!==null))return null;
- if(result.hoursPerWeek&&!/^\d+(?:\.\d+)?\s*(?:hrs?|hours?)\s*\/\s*week$/i.test(result.hoursPerWeek))return null;
+ if(result.giftcode&&/^\d[\d.,\s]*\s*(?:vnd|vnđ|đ|₫|%)$/i.test(result.giftcode))result.giftcode=null;
+ if(result.hoursPerWeek){const hours=weeklyHours(result.hoursPerWeek);if(!(hours>0&&hours<=168))return null;result.hoursPerWeek=hours+' hrs/week';}
  if(result.hoursPerWeek&&!(parseFloat(result.hoursPerWeek)>0&&parseFloat(result.hoursPerWeek)<=168))return null;
+ const identity=pricingIdentity(result.courseFee,result.hoursPerWeek,result.package);if(identity.unit==='weeks'&&identity.weeks)result.package=identity.weeks+' weeks';
+ if(!result.package&&identity.paymentMode==='once'&&identity.courseMonths&&identity.variant==='standard')result.package=identity.courseMonths+' months';
  return result;
 }
 export function parseCoursePage(page,expected){
@@ -95,15 +99,15 @@ export function parseCoursePage(page,expected){
 export function missingContractInputs(row){
  if(row?.kind!=='contract'||!String(row.ct||row.cells?.contractTotal||'').includes('-CT-'))return [];
  const c=row.cells??{},missing=['H','I','J'].filter(k=>!text(c[k]));
- if(!text(c.K)&&(Number(c.V)>0||text(row.context?.voucherDescription)&&text(row.context.voucherDescription)!=='0'))missing.push('K');
- if(!text(c.L)&&Number(c.U)>0)missing.push('L');
+ if((!text(c.K)||text(c.K)==='0')&&(Number(c.V)>0||text(row.context?.voucherDescription)&&text(row.context.voucherDescription)!=='0'))missing.push('K');
+ if((!text(c.L)||text(c.L)==='0')&&Number(c.U)>0)missing.push('L');
  return missing;
 }
-export function contractInputPlan(rows,{refresh=false,completed=[]}={}){
+export function contractInputPlan(rows,{refresh=false,completed=[],needsVoucher=()=>false}={}){
  const unique=new Map(),students=new Map();
  for(const row of rows??[]){const ct=text(row.ct||row.cells?.contractTotal),student=text(row.cells?.F);if(row.kind!=='contract'||!/^[A-Z0-9]+-CT-\d{4,20}$/.test(ct)||!/^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,149}$/.test(student)||Object.hasOwn(Object.prototype,student))continue;(students.get(ct)??(students.set(ct,new Set()),students.get(ct))).add(student);unique.set(ct+'|'+student,row);}
  const done=new Set(completed);
- return [...unique.values()].filter(r=>(refresh||missingContractInputs(r).length>0)&&students.get(text(r.ct||r.cells.contractTotal)).size===1&&!done.has(text(r.ct||r.cells.contractTotal)+'|'+text(r.cells.F)));
+ return [...unique.values()].filter(r=>(refresh||missingContractInputs(r).length>0||needsVoucher(r))&&students.get(text(r.ct||r.cells.contractTotal)).size===1&&!done.has(text(r.ct||r.cells.contractTotal)+'|'+text(r.cells.F)));
 }
 export async function fillContractInputs(rows,io){
  const results=[];
@@ -122,8 +126,8 @@ export async function fillContractInputs(rows,io){
    const expected={ct,student,url:link.url},payload=coursePayload(await io.read(expected),expected);
    if(!payload)throw Error('Thông tin trả về không khớp CT / Student ID.');
    if(io.signal?.aborted)break;
-   const saved=await io.save(row,payload),checkpoint=await io.checkpoint?.(row,payload,saved);
-   results.push({ct,status:checkpoint?.complete===false?'partial':'saved',fields:COURSE_FIELDS.filter(k=>payload[k]!==null),missing:checkpoint?.missing??[]});io.saved?.(row,payload);
+   const saved=await io.save(row,payload),completion=await io.afterSave?.(row,payload,saved),checkpoint=await io.checkpoint?.(row,payload,saved);
+   results.push({ct,status:checkpoint?.complete===false?'partial':'saved',fields:COURSE_FIELDS.filter(k=>payload[k]!==null),missing:checkpoint?.missing??[],...(completion?{voucher:completion}:{})});io.saved?.(row,payload);
   }catch(e){
    if(io.signal?.aborted)break;
    results.push({ct,status:'check',message:String(e.message??e)});

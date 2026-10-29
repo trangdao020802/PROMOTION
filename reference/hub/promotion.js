@@ -5,7 +5,7 @@
   window.addEventListener('message', event => {
     const m = event.data;
     if (event.source !== window || event.origin !== P.SITE || !m || m.channel !== P.CHANNEL || m.direction !== 'request' || typeof m.id !== 'string' || !/^[\w-]{1,80}$/.test(m.id)) return;
-    if (m.action === 'ping') { reply({id: m.id, type: 'ready', version: P.VERSION,capabilities:['lookup','index','report','course','contract-inputs','course-network','no-new-tabs','voucher']}); return; }
+    if (m.action === 'ping') { reply({id: m.id, type: 'ready', version: P.VERSION,capabilities:['lookup','index','report','course','contract-inputs','course-network','no-new-tabs','voucher','background-voucher','background-reports']}); return; }
     if (!['lookup','index','report','course','voucher','cancel'].includes(m.action) || (m.action === 'lookup' && !P.code(m.ct))) return;
     if(m.action==='voucher'&&!globalThis.PromotionHubVoucher?.voucherRequest(m.voucher))return;
     if(m.action==='course'&&!globalThis.PromotionHubCourse?.courseRequest(m.course))return;

@@ -1,3 +1,4 @@
+import {backgroundRuntime} from './helpers/existing-hub-runtime.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -76,7 +77,7 @@ test('Voucher provenance allows only observed read/detail routes on the exact Hu
  assert.ok(voucherCodesURL('/giftcode/listgiftcode/12345',url));assert.ok(voucherCodesURL('/giftcode/codes?giftcodeId=12345',url));assert.equal(voucherCodesURL('/giftcode/listgiftcode/99999',url),null);assert.equal(voucherCodesURL('https://example.com/giftcode/listgiftcode/12345',url),null);
  assert.equal(voucherPayload({...payload(),code:'OTHER'},{code}),null);assert.equal(voucherPayload({...payload(),rate:5},{code}),null);
 });
-function bridgeWindow({capabilities=['voucher'],wrong=false,version='1.6.7'}={}){
+function bridgeWindow({capabilities=['voucher'],wrong=false,version='1.6.8'}={}){
  const listeners=new Set(),target={location:{origin:'https://promotion-hub-2026.roundskunk11.chatgpt.site'},addEventListener:(type,fn)=>listeners.add(fn),removeEventListener:(type,fn)=>listeners.delete(fn),postMessage:m=>{
   if(m.direction!=='request'||m.action==='cancel')return;
   const reply={channel:m.channel,direction:'response',id:m.id,...m.action==='ping'?{type:'ready',version,capabilities}:{type:'voucher-result',payload:wrong?{...payload(),code:'OTHER'}:payload()}};
@@ -85,25 +86,25 @@ function bridgeWindow({capabilities=['voucher'],wrong=false,version='1.6.7'}={})
 }
 test('the Site bridge requires Voucher capability and validates returned identity',async()=>{
  assert.equal((await readHubVoucher(code,{window:bridgeWindow(),timeoutMs:100})).rate,.15);
- await assert.rejects(readHubVoucher(code,{window:bridgeWindow({capabilities:[]}),timeoutMs:100}),/1.6.7/);
- await assert.rejects(readHubVoucher(code,{window:bridgeWindow({version:'1.6.0'}),timeoutMs:100}),/1.6.7/);
- await assert.rejects(readHubVoucher(code,{window:bridgeWindow({version:'1.6.1'}),timeoutMs:100}),/1.6.7/);
- await assert.rejects(readHubVoucher(code,{window:bridgeWindow({version:'1.6.2'}),timeoutMs:100}),/1.6.7/);
+ await assert.rejects(readHubVoucher(code,{window:bridgeWindow({capabilities:[]}),timeoutMs:100}),/1.6.8/);
+ await assert.rejects(readHubVoucher(code,{window:bridgeWindow({version:'1.6.0'}),timeoutMs:100}),/1.6.8/);
+ await assert.rejects(readHubVoucher(code,{window:bridgeWindow({version:'1.6.1'}),timeoutMs:100}),/1.6.8/);
+ await assert.rejects(readHubVoucher(code,{window:bridgeWindow({version:'1.6.2'}),timeoutMs:100}),/1.6.8/);
  await assert.rejects(readHubVoucher(code,{window:bridgeWindow({wrong:true}),timeoutMs:100}),/không khớp/);
  const controller=new AbortController();controller.abort();await assert.rejects(readHubVoucher(code,{window:bridgeWindow(),signal:controller.signal,timeoutMs:100}),/Đã dừng/);
 });
-test('the extension binds Voucher replies to the initiating tab, full code and observed detail URL',async()=>{
- const messages=[],closed=[],store={},listeners=[];
- const chrome={storage:{session:{get:async key=>({[key]:store[key]}),set:async value=>Object.assign(store,value),remove:async key=>delete store[key]}},tabs:{create:async()=>({id:20}),update:async()=>{},remove:async id=>closed.push(id),sendMessage:async(id,m)=>messages.push({id,...m}),onRemoved:{addListener:()=>{}},onUpdated:{addListener:()=>{}}},runtime:{onMessage:{addListener:f=>listeners.push(f)}}};
- const context=vm.createContext({chrome,URL,console,Date,Promise,setTimeout,clearTimeout});context.importScripts=(...names)=>{for(const name of names){const path=new URL('../reference/hub/'+name,import.meta.url);vm.runInContext(fs.readFileSync(path,'utf8').replaceAll('https://promotion-installment.trangdao2802.chatgpt.site','https://promotion-hub-2026.roundskunk11.chatgpt.site'),context);}};
- vm.runInContext(fs.readFileSync(new URL('../reference/hub/background.js',import.meta.url),'utf8'),context);
- const send=(m,tab=10,location='https://promotion-hub-2026.roundskunk11.chatgpt.site/')=>new Promise(resolve=>listeners[0](m,{frameId:0,tab:{id:tab},documentId:'doc',url:location},resolve));
- await send({type:'voucher-start',id:'qa-job',voucher:{code}});assert.equal(store.job.kind,'voucher');assert.equal(store.job.voucher.code,code);
- await send({type:'voucher-search-applied',id:'qa-job',code},20,'https://hub24.apollo.vn:7777/giftcode/manage');
- await send({type:'voucher-detail',id:'qa-job',row:{url,label:'QA 15%',center:'North, South'}},20,'https://hub24.apollo.vn:7777/giftcode/manage');assert.equal(store.job.detailUrl,url);
- const wrong=await send({type:'voucher-codes',id:'qa-job',url:'https://hub24.apollo.vn:7777/giftcode/listgiftcode/999',pairs:page().pairs},20,url);assert.ok(wrong.error);assert.equal(store.job.stage,'voucher-detail');
- const codesUrl='https://hub24.apollo.vn:7777/giftcode/listgiftcode/12345';await send({type:'voucher-codes',id:'qa-job',url:codesUrl,pairs:page().pairs},20,url);assert.equal(store.job.stage,'voucher-codes');
- await send({type:'voucher-complete',id:'qa-job',payload:payload()},21,codesUrl);assert.ok(store.job);assert.equal(messages.some(m=>m.type==='voucher-result'),false);
- const mismatch=await send({type:'voucher-complete',id:'qa-job',payload:{...payload(),code:'OTHER'}},20,codesUrl);assert.ok(mismatch.error);assert.ok(store.job);
- await send({type:'voucher-complete',id:'qa-job',payload:payload()},20,codesUrl);assert.equal(store.job,undefined);assert.equal(messages.at(-1).type,'voucher-result');assert.deepEqual(closed,[20]);
+test('the extension binds silent Voucher replies to its one managed frame, full code and observed detail URL',async()=>{
+ const r=backgroundRuntime(),manage='https://hub24.apollo.vn:7777/giftcode/manage',binding={frameJob:'qa-job',frameKey:'qa-agent'};
+ const send=(m,path=manage,tab=20,extra={})=>r.send({...binding,id:'qa-job',...m},tab,path,{frameId:4,documentId:'qa-frame',...extra});
+ await r.send({type:'voucher-start',id:'qa-job',voucher:{code}});assert.equal(r.store.job.kind,'voucher');
+ await send({type:'context'});await send({type:'voucher-search-applied',code});
+ await send({type:'voucher-detail',row:{url,label:'QA 15%',center:'North, South'}});assert.equal(r.store.job.detailUrl,url);
+ await send({type:'context'},url);
+ const wrong=await send({type:'voucher-codes',url:'https://hub24.apollo.vn:7777/giftcode/listgiftcode/999',pairs:page().pairs},url);assert.ok(wrong.error);assert.equal(r.store.job.stage,'voucher-detail');
+ const codesUrl='https://hub24.apollo.vn:7777/giftcode/listgiftcode/12345';await send({type:'voucher-codes',url:codesUrl,pairs:page().pairs},url);assert.equal(r.store.job.stage,'voucher-codes');await send({type:'context'},codesUrl);
+ await send({type:'voucher-complete',payload:payload()},codesUrl,21);assert.ok(r.store.job);
+ await send({type:'voucher-complete',payload:payload()},codesUrl,20,{frameId:5});assert.ok(r.store.job);
+ await send({type:'voucher-complete',payload:payload(),frameKey:'wrong'},codesUrl);assert.ok(r.store.job);
+ const mismatch=await send({type:'voucher-complete',payload:{...payload(),code:'OTHER'}},codesUrl);assert.ok(mismatch.error);assert.ok(r.store.job);
+ await send({type:'voucher-complete',payload:payload()},codesUrl);assert.equal(r.store.job,undefined);assert.ok(r.messages.some(m=>m.type==='voucher-result'));assert.deepEqual(r.mutations,[]);
 });

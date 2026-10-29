@@ -5962,6 +5962,13 @@
         "B107:J142"
       ],
       "reviewedAt": "2026-10-29"
+    },
+    {
+      "file": "Chinh-sach-gia-khuyen-mai-apollo-2026.pdf",
+      "sha256": "fd31f14902dae605fba8e104fb337cc668c0af6eb84c8510283187448ab60976",
+      "role": "policy-summary",
+      "pages": 3,
+      "verification": "Đối chiếu bảng tổng hợp KOC và timeline với lộ trình/nguồn chi tiết. Không dùng số tháng hoặc ưu đãi tổng hợp để suy giá tuần hay mã gói hè S26/S26-2 chưa được ánh xạ."
     }
   ],
   "decisions": [

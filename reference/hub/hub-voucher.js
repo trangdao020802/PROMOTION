@@ -1,13 +1,15 @@
 (() => {
  const P=globalThis.PromotionHub,V=globalThis.PromotionHubVoucher;
- if(location.origin!==P.HUB||window.top!==window)return;
- void chrome.runtime.sendMessage({type:'context'}).then(job=>{
+ const binding=/^promotion-hub:([\w-]{1,80}):([\w-]{1,80})$/.exec(window.name??'');
+ if(location.origin!==P.HUB||window.top!==window&&!binding)return;
+ const bridge=m=>chrome.runtime.sendMessage({...m,...(binding?{frameJob:binding[1],frameKey:binding[2]}:{})});
+ void bridge({type:'context'}).then(job=>{
   if(job?.kind!=='voucher'||!V.voucherRequest(job.voucher))return;
   let done=false,inspecting=false,searched=false,filtering=false,lastChange=Date.now(),login=false;
   const deadline=Date.now()+90_000,code=job.voucher.code;
   const visible=e=>!e.hidden&&e.getAttribute('aria-hidden')!=='true'&&(!e.getClientRects||e.getClientRects().length>0);
   const text=e=>String(e?.textContent??'').trim().replace(/\s+/g,' ');
-  const send=message=>chrome.runtime.sendMessage({id:job.id,...message});
+  const send=message=>bridge({id:job.id,...message});
   const finish=async message=>{if(done)return;done=true;clearInterval(timer);observer.disconnect();const result=await send(message);if(result?.error)await send({type:'voucher-failure',reason:'unsupported'});};
   const setInput=(input,value)=>{const setter=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')?.set;if(!setter)throw Error('input');setter.call(input,value);for(const type of ['input','change','keyup'])input.dispatchEvent(new Event(type,{bubbles:true}));};
   const busy=()=>[...document.querySelectorAll('[aria-busy="true"],.dataTables_processing,#nprogress')].some(visible);

@@ -1,6 +1,6 @@
 // Isolated broker hosted by an already open Hub tab. Its URL/focus are untouched.
 (() => {
- const P=globalThis.PromotionHub,I=globalThis.PromotionHubIndex,C=globalThis.PromotionHubCourse,N=globalThis.PromotionHubCourseNetwork;
+ const P=globalThis.PromotionHub,I=globalThis.PromotionHubIndex,C=globalThis.PromotionHubCourse,N=globalThis.PromotionHubCourseNetwork,R=globalThis.PromotionHubReports,V=globalThis.PromotionHubVoucher;
  if(!P||!I||!C||!N||location.origin!==P.HUB||window.top!==window)return;
  const channel='promotion-hub/existing-tab/v1',agentKey=crypto.randomUUID();let job=null;
  const visible=e=>!e.hidden&&e.getAttribute?.('aria-hidden')!=='true'&&(!e.getClientRects||e.getClientRects().length>0);
@@ -47,11 +47,11 @@
  }
  function frame(j){
   if(job!==j||j.frame||!document.documentElement)return;
-  const element=document.createElement('iframe');element.name='promotion-hub-read:'+j.id;
+  const element=document.createElement('iframe');element.name=j.special?'promotion-hub:'+j.id+':'+agentKey:'promotion-hub-read:'+j.id;
   element.setAttribute('aria-hidden','true');element.setAttribute('inert','');element.tabIndex=-1;
-  element.setAttribute('sandbox','allow-scripts allow-same-origin');
+  element.setAttribute('sandbox','allow-scripts allow-same-origin'+(j.special?' allow-forms':''));
   element.style.cssText='position:fixed;left:-10000px;top:0;width:1280px;height:900px;opacity:0;pointer-events:none;border:0';
-  element.src=j.course?.url||I.indexURL(j.codes,j.id,j.fields);j.frame=element;
+  element.src=j.targetURL||j.course?.url||I.indexURL(j.codes,j.id,j.fields);j.frame=element;
   element.addEventListener('load',()=>{if(job===j){j.loaded=true;j.loadedAt=Date.now();inspect(j);}});
   document.documentElement.appendChild(element);
  }
@@ -74,6 +74,7 @@
    j.observer.observe(root.documentElement||root,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['value','selected','aria-busy','aria-hidden']});
   }
   if([...root.querySelectorAll('input[type="password"]')].some(visible)||/\/(?:login|signin|sign-in)(?:\/|$)/i.test(new URL(url).pathname)){failure(j,'hub_login','Đăng nhập trong tab Hub đang mở rồi bấm lấy tiếp. Tiến độ đã lưu được giữ.');return;}
+  if(j.special){if(expired)failure(j,'hub_timeout','Hub chưa trả đủ dữ liệu trong nền; bấm lấy tiếp.');return;}
   if(j.course){
    if(url!==j.course.url){failure(j,'course_unavailable','Hub chuyển khỏi CT cần đọc; chưa lưu dữ liệu.');return;}
    if(j.activatedRoot!==root){j.activatedRoot=root;j.frame.contentWindow.postMessage({channel,type:'activate',id:j.id,course:j.course},P.HUB);}
@@ -124,12 +125,19 @@
   if(m.type==='hub-agent-ping'){respond({ready:true,version:P.VERSION,agentKey});return;}
   if(m.agentKey!==agentKey)return;
   if(m.type==='hub-agent-stop'){if(job?.id===m.id)stop(job);respond({});return;}
+  if(m.type==='hub-agent-navigate'){
+   const j=job;if(!j||!j.special||j.id!==m.id)return;
+   let valid=false;try{const u=new URL(m.url);valid=u.origin===P.HUB&&!u.username&&!u.password&&!u.hash&&(j.kind==='report'?R.reportURLMatches(m.url,j.report,j.month,Number(u.searchParams.get('ps'))):u.pathname.toLowerCase()==='/giftcode/manage'||!!V.voucherDetailURL(m.url)||!!V.voucherCodesURL(m.url,j.targetURL));}catch{}
+   if(!valid){failure(j,'hub_frame_unavailable','URL đọc nền không hợp lệ.');respond({});return;}
+   j.loaded=false;j.deadline=Date.now()+j.duration;j.targetURL=m.url;j.frame.src=m.url;respond({});return;
+  }
   if(m.type!=='hub-agent-run'||job||typeof m.id!=='string'||!/^\w[\w-]{0,79}$/.test(m.id)){respond({error:'Tab Hub đang bận hoặc yêu cầu không hợp lệ.'});return;}
-  const course=m.kind==='course'&&C.courseRequest(m.course);let codes;
-  try{if(!course){const groups=I.indexGroups(m.codes);if(groups.length!==1)throw Error();codes=groups[0].codes;}}catch{respond({error:'Danh sách CT / DEP không hợp lệ.'});return;}
-  job={id:m.id,course:course||null,codes,deadline:Date.now()+30_000};const j=job;
+  const course=m.kind==='course'&&C.courseRequest(m.course),special=['voucher','report'].includes(m.kind);let codes,targetURL;
+  try{if(special){if(m.kind==='voucher'){if(!V.voucherRequest(m.voucher))throw Error();targetURL=V.HUB_VOUCHERS;}else {if(!Object.hasOwn(R.HUB_REPORTS,m.report)||!R.reportPeriod(m.month))throw Error();targetURL=R.reportURL(m.report,m.month,50);}}else if(!course){const groups=I.indexGroups(m.codes);if(groups.length!==1)throw Error();codes=groups[0].codes;}}catch{respond({error:'Yêu cầu đọc Hub không hợp lệ.'});return;}
+  const duration=special?Math.min(Number(m.duration)||300000,m.kind==='report'?R.reportRenderMs(m.report)+120000:300000):30_000;
+  job={id:m.id,kind:m.kind,special,targetURL,report:m.report,month:m.month,course:course||null,codes,duration,deadline:Date.now()+duration};const j=job;
   j.timer=setInterval(()=>inspect(j),1000);respond({accepted:true});
-  if(course){post(j,'read-course',{course});j.routeTimer=setTimeout(()=>readPage(j),150);}else readPage(j);
+  if(special)frame(j);else if(course){post(j,'read-course',{course});j.routeTimer=setTimeout(()=>readPage(j),150);}else readPage(j);
  });
  window.addEventListener('pagehide',()=>{if(job)stop(job);});
 })();

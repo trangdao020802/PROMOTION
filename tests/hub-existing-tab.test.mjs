@@ -78,7 +78,7 @@ function isolatedRuntime({blocked=false}={}){
  context.window={addEventListener:(type,fn)=>listeners.push({type,fn}),postMessage:m=>posts.push(m)};context.window.top=context.window;
  context.document={documentElement:{appendChild:e=>frames.push(e)},createElement:()=>{const e={style:{},setAttribute:(k,v)=>{e[k]=v;},addEventListener:(type,fn)=>{e[type]=fn;},remove:()=>{e.removed=true;},contentDocument:root,contentWindow:{location:{href:'about:blank'},postMessage:m=>posts.push(m)}};if(blocked)Object.defineProperty(e.contentWindow,'location',{get:()=>{throw Error('blocked');}});return e;}};
  const chromeMessages=[];context.chrome={runtime:{id:'qa-extension',sendMessage:async m=>{messages.push(m);return {};},onMessage:{addListener:fn=>chromeMessages.push(fn)}}};
- load(context,['core.js','index-core.js','course-core.js','course-network-core.js','reuse-agent.js']);
+ load(context,['core.js','report-core.js','voucher-core.js','index-core.js','course-core.js','course-network-core.js','reuse-agent.js']);
  const send=(m,sender={id:'qa-extension'})=>{let reply;chromeMessages[0](m,sender,v=>{reply=v;});return reply;};
  const packet=(m,source=context.window,host=origin)=>listeners.filter(l=>l.type==='message').forEach(l=>l.fn({source,origin:host,data:{channel,id:'qa-isolated',...m}}));
  const tick=ms=>{clock+=ms;for(const fn of [...timers.values()])fn();};
@@ -131,4 +131,12 @@ test('DOM mutation completes a background iframe read without waiting for a poll
  const r=isolatedRuntime(),observers=[];r.context.MutationObserver=class{constructor(fn){this.fn=fn;observers.push(this);}observe(){}disconnect(){this.disconnected=true;}};
  r.send({type:'hub-agent-run',id:'qa-isolated',agentKey:'qa-agent',kind:'course',course});r.packet({type:'route-missing'});const f=r.frames[0];f.contentWindow.location.href=course.url;f.contentDocument=inertCourseDocument({empty:true});f.load();assert.equal(r.messages.length,0);assert.equal(observers.length,1);
  const full=inertCourseDocument();const queries=full.querySelectorAll;f.contentDocument.querySelectorAll=s=>queries(s).map(e=>({...e,getClientRects:()=>[{}],...(e.nextElementSibling?{nextElementSibling:{...e.nextElementSibling,getClientRects:()=>[{}]}}:{})}));observers[0].fn([]);await drain();assert.equal(r.messages.length,1);assert.equal(r.messages[0].payload.courseFee,'ATLS New Price 2026 Layer1');assert.equal(f.removed,true);assert.equal(observers[0].disconnected,true);
+});
+
+test('voucher and report readers use managed offscreen frames without navigating the Hub tab',()=>{
+ for(const request of [{kind:'voucher',voucher:{code:'QA-SILENT'}},{kind:'report',report:'payment',month:'2026-10'}]){
+  const r=isolatedRuntime();r.send({type:'hub-agent-run',id:'qa-isolated',agentKey:'qa-agent',duration:300000,...request});assert.equal(r.frames.length,1);
+  assert.match(r.frames[0].name,/^promotion-hub:qa-isolated:qa-agent$/);assert.ok(r.frames[0].inert!==undefined);assert.equal(r.frames[0].sandbox,'allow-scripts allow-same-origin allow-forms');
+  assert.equal(r.context.location.href,origin+'/home');r.send({type:'hub-agent-stop',id:'qa-isolated',agentKey:'qa-agent'});assert.equal(r.frames[0].removed,true);
+ }
 });

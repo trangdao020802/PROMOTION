@@ -1,7 +1,7 @@
 import {COURSE_FIELDS,missingContractInputs} from './hub-course.mjs';
 const columns={H:'courseFee',I:'hoursPerWeek',J:'package',K:'giftcode',L:'discount'};
 export const inputKey=(ct,student)=>String(ct)+'|'+String(student);
-export function inputTargets(rows,refresh=false){return rows.map(row=>({ct:row.ct||row.cells.contractTotal,student:String(row.cells.F),required:[...new Set([...(refresh?['courseFee','hoursPerWeek','package']:[]),...missingContractInputs(row).map(k=>columns[k])])]}));}
+export function inputTargets(rows,refresh=false){return rows.map(row=>{const required=[...new Set([...(refresh?['courseFee','hoursPerWeek','package']:[]),...missingContractInputs(row).map(k=>columns[k])])];return {ct:row.ct||row.cells.contractTotal,student:String(row.cells.F),required:required.length?required:['giftcode']};});}
 export function validInputTargets(targets){return Array.isArray(targets)&&targets.length>0&&targets.length<=20000&&targets.every(t=>t&&/^[A-Z0-9]+-CT-\d{4,20}$/.test(t.ct)&&/^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,149}$/.test(t.student)&&Array.isArray(t.required)&&t.required.length>0&&t.required.length<=7&&t.required.every(k=>COURSE_FIELDS.includes(k)))&&new Set(targets.map(t=>inputKey(t.ct,t.student))).size===targets.length;}
 export function newInputRun(old,targets,refresh,runId,reset=false){
  if(!validInputTargets(targets))throw Error('Danh sách CT / trường cần đọc không hợp lệ.');

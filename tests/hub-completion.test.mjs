@@ -1,0 +1,46 @@
+import test from 'node:test';import assert from 'node:assert/strict';
+import {fillContractInputs,contractInputPlan} from '../src/core/hub-course.mjs';
+import {completeContractVoucher,rowNeedsVoucher,newCompletionRequest} from '../src/core/hub-completion.mjs';
+import {AuditEngine} from '../src/local/calculation.mjs';import {buildModel} from '../src/local/model.mjs';
+import {policyData} from '../scripts/policy-data.mjs';import {dateSerial} from '../src/core/verification.mjs';
+const expected={ct:'QA2610-CT-000204',student:'QA-COMPLETE',url:'https://hub24.apollo.vn:7777/contract/detail/204'};
+test('automatic source/link requests work in an HTTP preview without crypto.randomUUID',()=>{
+ const crypto={getRandomValues:bytes=>bytes.fill(31)};const request=newCompletionRequest('dataset',crypto);assert.equal(request.scope,'dataset');assert.match(request.id,/^complete-[a-f0-9]{32}$/);
+});
+function fixture(){
+ const c={B:'QA CENTER',C:'QA1',D:'QA2610-PAY-000204',E:expected.ct,R:expected.student,S:'DỮ LIỆU GIẢ',O:dateSerial('2026-10-10'),P:'QA204',I:'Paid',F:'Payment',G:'New',X:'ATLS',Z:'',AA:'',AB:'',AQ:'0',AO:'',AH:'Online Payments',AJ:'',AC:7200000,AD:0,AE:720000,AF:6480000,AG:25},r={sourceKey:'p',sourceRow:2,cells:c};
+ const bundle={kind:'source-bundle-v1',scope:{from:'2026-10-01',to:'2026-10-31',center:''},cutoff:dateSerial('2026-10-31'),records:[r],cash:[r],transfers:[],exports:[{sourceKey:'e',sourceRow:2,ct:expected.ct,student:expected.student,target:6480000,paid:6480000,totalHours:25,contractType:'New',center:'QA1'}],sources:['payment','export','transfer'].map((role,fileIndex)=>({key:['p','e','t'][fileIndex],role,fileIndex,fileName:'QA-'+role+'.csv',sheetName:'CSV',headerRow:1,rowCount:1}))};
+ const engine=new AuditEngine(buildModel(bundle,policyData())),record={id:'CT::'+expected.ct},vouchers=new Map(),calls=[];
+ const row=engine.calculate(record),payload={...expected,courseFee:'NewPrice2026Layer1',hoursPerWeek:'3 hrs/week',package:'2 months',giftcode:'QA-FULL-10',discount:'0'};
+ const source={code:'QA-FULL-10',url:'https://hub24.apollo.vn:7777/giftcode/detail/204',label:'QA 10%',center:'QA1',startDate:'2026-10-01',endDate:'2026-10-31',type:'percent',rate:.1,amount:null,minimum:0,maximum:0,status:'ACTIVE',creator:'QA',description:'QA synthetic only',studentId:expected.student,studentName:'DỮ LIỆU GIẢ',checkedAt:'2026-10-29T08:00:00.000Z'};
+ const voucherIO={progress:()=>{},loadVoucher:async code=>vouchers.get(code),readVoucher:async()=>{calls.push('voucher-read');return source;},saveVoucher:async v=>{calls.push('voucher-save');vouchers.set(v.code,v);engine.setVouchers([...vouchers.values()]);return v;}};
+ let link;
+ const io={loadLink:async()=>link,lookup:async ct=>{calls.push('lookup');return {ct,url:expected.url};},saveLink:async value=>{calls.push('link-save');return link=value;},read:async()=>{calls.push('course-read');return payload;},save:async(row,p)=>{calls.push('source-save');engine.updateCourseSource(p);return {row:engine.calculate(record),source:{...p,version:1}};},afterSave:(row,p,saved)=>completeContractVoucher(row,p,saved,voucherIO),checkpoint:async()=>{calls.push('checkpoint');return {complete:true};}};
+ return {engine,record,row,payload,source,vouchers,calls,io,voucherIO};
+}
+test('one link → Course info → Voucher operation fills inputs, computes payable and differences, then checkpoints',async()=>{
+ const f=fixture(),before={...f.row.cells};const results=await fillContractInputs([f.row],f.io);
+ assert.equal(results[0].status,'saved');assert.equal(results[0].voucher.state,'saved');assert.deepEqual(f.calls,['lookup','link-save','course-read','source-save','voucher-read','voucher-save','checkpoint']);
+ const r=f.engine.calculate(f.record);assert.equal(r.cells.K,'QA-FULL-10');assert.equal(r.cells.M,7200000);assert.equal(r.cells.O,720000);assert.equal(r.cells.Q,6480000);assert.equal(r.cells.AB,0);assert.equal(r.cells.AC,0);
+ for(const key of ['T','U','V','W','X'])assert.equal(r.cells[key],before[key]);
+ assert.equal(f.vouchers.get('QA-FULL-10').status,'PENDING');assert.equal(r.cells.AF,'CHECK');assert.match(r.cells.CI,/CHƯA ĐƯỢC DUYỆT/);
+ f.engine.setVouchers([{...f.vouchers.get('QA-FULL-10'),status:'APPROVED'}]);assert.equal(f.engine.calculate(f.record).cells.AF,'OK');
+});
+test('a voucher timeout leaves the CT unfinished and retry reuses its saved link and source identity',async()=>{
+ const f=fixture();f.voucherIO.readVoucher=async()=>{throw Object.assign(Error('QA timeout'),{code:'timeout'});};
+ const first=await fillContractInputs([f.row],f.io);assert.equal(first[0].status,'check');assert.ok(!f.calls.includes('checkpoint'));
+ const partial=f.engine.calculate(f.record);assert.equal(partial.cells.K,'QA-FULL-10');assert.equal(partial.cells.O,null);
+ const plan=contractInputPlan([partial],{needsVoucher:row=>rowNeedsVoucher(row,[])});assert.equal(plan.length,1);
+ f.voucherIO.readVoucher=async()=>f.source;const next=await fillContractInputs(plan,f.io);assert.equal(next[0].status,'saved');assert.equal(f.calls.filter(c=>c==='lookup').length,1);
+});
+test('manual voucher values are preserved and a different Hub value requires review',async()=>{
+ const f=fixture(),prior={...f.source,hubUrl:f.source.url,hubCheckedAt:'',studentId:expected.student,studentName:'DỮ LIỆU GIẢ',rate:.2,status:'PENDING',approvalNote:'QA manual'};
+ f.vouchers.set(prior.code,prior);delete prior.hubUrl;
+ const result=await completeContractVoucher(f.row,f.payload,{row:{...f.row,cells:{...f.row.cells,K:prior.code}}},f.voucherIO);
+ assert.equal(result.state,'review');assert.equal(f.vouchers.get(prior.code).rate,.2);assert.equal(f.vouchers.get(prior.code).status,'PENDING');
+});
+test('another student cannot receive the looked-up Voucher, and a cash Giftcode amount never supplies its code',async()=>{
+ const f=fixture();f.voucherIO.readVoucher=async()=>({...f.source,studentId:'QA-OTHER'});
+ await assert.rejects(completeContractVoucher(f.row,f.payload,{row:{...f.row,cells:{...f.row.cells,K:f.source.code}}},f.voucherIO),/Student ID/);assert.equal(f.vouchers.size,0);
+ await assert.rejects(completeContractVoucher(f.row,{...f.payload,giftcode:'0'},{row:{...f.row,cells:{...f.row.cells,K:'0'}}},f.voucherIO),/chưa xác định/);
+});

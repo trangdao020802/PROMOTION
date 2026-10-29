@@ -182,3 +182,12 @@ Tải cầu nối mới, giải nén, tải lại tiện ích ở chrome://exten
 Bảng giá chung, RULE và bộ tính theo Contract cùng gọi một hàm chọn chính sách. Giá, số tháng, mức giảm, net, tháng tặng, kỳ trả góp và trạng thái thiếu chính sách được đối chiếu bằng cùng đầu vào. Kiểm thử so khớp toàn bộ 445 dòng của bộ chính sách hiện tại; 205 kiểm thử tự động đạt.
 
 `12 months (S26-2)` được nhận diện là 12 tháng với mã `S26-2|12M`, tách khỏi `S26|12M` và gói 12 tháng thường. Khi chưa có chính sách đúng phiên bản, số tiền trong bảng tham chiếu/Report chỉ nằm trong căn cứ; các trường tài chính và tháng tặng chưa xác định không bị điền thành 0. Cập nhật chính sách đúng ngày, center và đối tượng sẽ áp dụng đồng thời ở Bảng giá, RULE và CT phù hợp. Xem [cách cập nhật](docs/policy-updates.md).
+
+
+## Gói tuần và luồng Hub hợp nhất 1.6.8
+
+Nhận diện Course fee theo chương trình/năm/Layer/loại gói và các dữ kiện rõ như 18 tháng đóng một lần. Chuẩn hóa chữ hoa/thường, dấu tiếng Việt, dấu phân cách và khoảng trắng; thiếu tên chương trình mặc định ATLS. Course fee gói tuần dùng Weeks, số tuần × Hour/week và đúng bảng giá tuần, không đổi thành số tháng lẻ.
+
+Tải/mở nguồn mới và hoàn tất gắn link hàng loạt tự chuyển sang hoàn thiện CT nhận tiền: tìm link còn thiếu → lấy Course info → tra đủ Giftcode No → lưu Voucher → tính tiền phải đóng và chênh lệch → lưu tiến độ từng CT. Voucher PENDING đã có căn cứ Hub và đủ dữ liệu có thể tính số tiền nhưng vẫn CHECK chờ duyệt. Thông tin tay, tiền thu và luồng Transfer được giữ.
+
+Báo cáo, Voucher, link CT/DEP và Input đều dùng tab Hub hiện có, không tạo/đổi/chuyển/đóng tab trình duyệt. Cập nhật cầu nối 1.6.8 rồi tải lại Promotion và tab Hub đã đăng nhập. 219 kiểm thử tự động đạt; đã kiểm tra giao diện bằng ba nguồn giả và bảng Weeks. Hub có xác thực được kiểm chứng bằng fixture, chưa dùng phiên riêng thực tế. Xem [luồng hoàn thiện và kiểm chứng](docs/unified-hub-completion.md).

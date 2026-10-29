@@ -16,7 +16,7 @@ function calculated(policy,inputs){
  const result=priceFor({policy},inputs.cells,inputs.context),identity=result?.identity??pricingIdentity(inputs.cells.H,inputs.cells.I,inputs.cells.J,inputs.context);
  const issue=result?.issue??(result?null:'CHECK - CHƯA CÓ GIÁ CHÍNH SÁCH ĐÃ XÁC MINH');
  return {...Object.fromEntries(financial.map(k=>[k,result?.[k]??(k==='months'?identity.months:null)])),pricingKey:result?.key??identity.key,variant:identity.variant,
-  issue,refs:result?.refs??[],resolution:inputs,
+  unit:result?.unit??identity.unit,weeks:result?.weeks??identity.weeks,unitPrice:result?.unitPrice??result?.monthly??null,issue,refs:result?.refs??[],resolution:inputs,
   status:/NHIỀU RULE|MÂU THUẪN|BẢNG GIÁ KHÔNG THỐNG NHẤT/.test(issue??'')?'conflict':!num(result?.gross)?'missing':issue?.startsWith('XÁC MINH')?'manual-policy':issue?'conflict':'ready'};
 }
 export function courseIdentity(course,hours){
@@ -44,7 +44,7 @@ export function buildPriceCatalogue(policy){
  }
  for(const [i,r]of (policy.typedPrices??[]).entries()){
   const resolution=typedPriceInputs(r),selected=calculated(r.override?policy:published,resolution);
-  rows.push({...r,...selected,id:r.override?'update-'+r.revision+'-'+i:'supplement-'+i,course:resolution.cells.H,package:resolution.cells.J,packageKey:r.packageKey??r.months,
+  rows.push({...r,...selected,id:r.override?'update-'+r.revision+'-'+i:'supplement-'+i,course:resolution.cells.H,package:resolution.cells.J,packageKey:r.packageKey??r.months,koc:r.koc??(r.variant==='weekly'?'Giá tuần toàn quốc':['vtdh','ahp'].includes(r.variant)?'All KOC':['IELTS','PREMIUM'].includes(r.group)?r.group:r.hours===3?'Kindergarten':'Primary / Secondary'),
    regime:r.regime??'supplement',regimeLabel:r.override?'Chính sách cập nhật · '+(r.revisionTitle||'Bản đang dùng'):'Chính sách bổ sung · '+r.variant,
    note:[selected.issue,r.approval,r.override?'Ưu tiên trong đúng khóa, ngày và phạm vi của bản cập nhật.':''].filter(Boolean).join(' ')});
  }

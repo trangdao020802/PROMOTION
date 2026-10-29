@@ -4,7 +4,7 @@ import {packageKey} from './contracts.mjs';
 import {discountOffers,discountPolicyMatch,regularTwoMonthPrice} from './promotions.mjs';
 import {auditPriceFor,auditPackageKey} from './audit-policy.mjs';
 import {dateSerial} from './verification.mjs';
-import {pricingIdentity,canonicalCourseName,priceText} from './pricing-key.mjs';
+import {pricingIdentity,canonicalCourseName,priceText,isWeeklyCourse} from './pricing-key.mjs';
 import {matchTypedPrice} from './policy-pack.mjs';
 import {PRICE_PHASES,roadmapSchedule} from './price-schedule.mjs';
 const number=x=>typeof x==='number'&&Number.isFinite(x);
@@ -16,6 +16,8 @@ export function priceFor(data,cells,context={}){
  const identity=selected.identity??pricingIdentity(cells.H,cells.I,cells.J,context),phase=PRICE_PHASES[selected.regime??selected.phase];
  const result={hours:identity.hours,layer:identity.layer,pkg:identity.packageKey,months:identity.months,monthly:null,gross:null,discount:null,net:null,maxTerms:null,straight:null,loyalty:null,referral:null,from:phase?.from??null,to:phase?.to??null,
   ...selected,identity,key:selected.key??identity.key};
+ result.unit=identity.unit;result.weeks=identity.weeks;
+ if(identity.variant==='weekly'){result.months=null;result.monthly=null;result.unitPrice=number(result.gross)&&identity.weeks>0?result.gross/identity.weeks:null;}
  result.net=number(result.gross)&&number(result.discount)?result.gross-result.discount:null;
  if(!result.refs?.length){
   const prices=data.policy.prices??[],exact=prices.filter(r=>r.C===cells.H&&r.D===cells.I&&r.E===cells.J);
@@ -27,9 +29,10 @@ export function priceFor(data,cells,context={}){
 // Keep edition, trial, payment-stage and class-size facts in their own keys.
 export function typedPriceInputs(row){
  const family=row.group==='ATLS/AGLS'?'ATLS':row.group;
- let course=row.course||`${family} - New Price ${row.year} - Layer ${row.layer}`;
+ let course=row.course||(row.variant==='weekly'&&row.layer===0?`${family} - New Price ${row.year} (Nationwide)`:row.variant==='premium'&&row.layer===0?`${family} - New Price ${row.year}`:`${family} - New Price ${row.year} - Layer ${row.layer}`);
  if(row.variant==='vtdh'&&!/vtdh|vung tin dong hanh/.test(priceText(course)))course+=' VTDH';
  if(row.variant==='ahp'&&!/ahp/.test(priceText(course)))course+=' AHP';
+ if(row.variant==='weekly'&&!isWeeklyCourse(course))course+=' (gói tuần)';
  if(row.variant==='premium')course+=' Group '+String(row.packageKey).split('|')[0]+' persons';
  const edition=/^([^|]+)\|[\d.]+M$/.exec(String(row.packageKey))?.[1];
  const pkg=row.package??(row.variant==='split'?`${row.months} months siblings`:row.variant==='weekly'?String(row.packageKey).replace('WEEKS','weeks'):`${row.months} months${row.variant==='trial'?' trial':row.variant==='upgrade'?' upgrade':row.variant==='summer'?' ('+(edition??'Summer')+')':''}`);
