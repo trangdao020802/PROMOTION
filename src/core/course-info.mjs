@@ -15,8 +15,12 @@ function valueKey(col,value,course){
 export function resolveCourseInfo(candidates){
  const values={},fields={},warnings=[];
  for(const col of Object.keys(columns)){
-  const available=candidates.filter(r=>present(r[col]));
-  const rows=available.some(r=>!r.fallback)?available.filter(r=>!r.fallback):available,distinct=[...new Set(rows.map(r=>valueKey(col,r[col],values.H??r.H)))];
+  const available=candidates.filter(r=>present(r[col])||['K','L'].includes(col)&&text(r[col])==='0');
+  let rows=available.some(r=>!r.fallback)?available.filter(r=>!r.fallback):available;
+  // Never promote an intermediary CT's offer over the receiving CT. Within
+  // that CT, a named program/code can fill a source's empty applied list.
+  const applied=rows.filter(r=>present(r[col]));if(['K','L'].includes(col)&&applied.length)rows=applied;
+  const distinct=[...new Set(rows.map(r=>valueKey(col,r[col],values.H??r.H)))];
   const named=col==='H'?[...new Set(rows.map(r=>pricingIdentity(r.H,'','').courseMonths).filter(v=>v!=null))]:[];
   const best=col==='H'?[...rows].sort((a,b)=>Number(!!pricingIdentity(b.H,'','').courseMonths)-Number(!!pricingIdentity(a.H,'','').courseMonths))[0]:rows[0];
   values[col]=distinct.length===1&&named.length<2?text(best[col]):null;
@@ -38,6 +42,7 @@ export function applyCourseInfo(book,group,hubSources=[]){
  Object.assign(group.cells,course.values);group.courseInfo=course;
  group.warnings=group.warnings.filter(w=>!w.startsWith(NO_CT)&&!Object.keys(columns).some(k=>w.startsWith(k+':'))&&!/^(?:groupKoc|contractType):/.test(w));
  group.warnings.push(...course.warnings);
+ group.hubOfferPending=hubSources.some(e=>e.ct===group.ct&&e.student===String(group.cells.F))?{discount:!text(course.values.L),giftcode:!text(course.values.K)}:null;
  if(group.noCTInvoice&&!course.complete)group.warnings.push(NO_CT+'; bổ sung các trường khóa học còn thiếu từ CT nhận / Export');
  if(exact.length===1){const e=exact[0];if(e.center)group.cells.B=e.center;if(e.centerName)group.cells.A=e.centerName;if(e.contractType)group.raw.G=e.contractType;}
  const hub=hubSources.filter(e=>e.ct===group.ct&&e.student===String(group.cells.F));

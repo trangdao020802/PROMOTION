@@ -191,3 +191,12 @@ Nhận diện Course fee theo chương trình/năm/Layer/loại gói và các d�
 Tải/mở nguồn mới và hoàn tất gắn link hàng loạt tự chuyển sang hoàn thiện CT nhận tiền: tìm link còn thiếu → lấy Course info → tra đủ Giftcode No → lưu Voucher → tính tiền phải đóng và chênh lệch → lưu tiến độ từng CT. Voucher PENDING đã có căn cứ Hub và đủ dữ liệu có thể tính số tiền nhưng vẫn CHECK chờ duyệt. Thông tin tay, tiền thu và luồng Transfer được giữ.
 
 Báo cáo, Voucher, link CT/DEP và Input đều dùng tab Hub hiện có, không tạo/đổi/chuyển/đóng tab trình duyệt. Cập nhật cầu nối 1.6.8 rồi tải lại Promotion và tab Hub đã đăng nhập. 219 kiểm thử tự động đạt; đã kiểm tra giao diện bằng ba nguồn giả và bảng Weeks. Hub có xác thực được kiểm chứng bằng fixture, chưa dùng phiên riêng thực tế. Xem [luồng hoàn thiện và kiểm chứng](docs/unified-hub-completion.md).
+
+
+## Bản 27 · Discount theo CT tổng và duyệt trong Chi tiết hồ sơ
+
+Cầu nối 1.6.9 đọc Discount/Giftcode ở cấp CT tổng và khóa học, hỗ trợ CourseInfos/Discounts dạng JSON; giá, giờ và gói có trước không kết thúc sớm lượt đọc ưu đãi. Lượt đã lưu từ bộ đọc cũ được đọc lại để cập nhật mã còn thiếu. Không dùng tiền thu để suy ra tên ưu đãi hoặc tự áp mức giảm.
+
+Chi tiết hồ sơ → Duyệt & xác nhận có đầy đủ các mục duyệt áp dụng, ngoại lệ trả góp và duyệt Voucher khi đủ hồ sơ. Tích/bỏ tích tự lưu, tính lại và đồng bộ với bảng; kiểm tra chênh lệch tiền vẫn độc lập. 231 kiểm thử đạt; giao diện đã kiểm tra lưu, bỏ duyệt và mở lại sau tải trang bằng dữ liệu giả. Phiên Hub riêng được kiểm tra bằng fixture GET/DOM, chưa truy cập trực tiếp.
+
+Xem [luồng và phạm vi kiểm chứng](docs/unified-hub-completion.md) và [ảnh mục duyệt](reference/qa/detail-approvals-v27.jpg). Cập nhật cầu nối 1.6.9 rồi tải lại Promotion và Hub trước khi lấy lại Input.

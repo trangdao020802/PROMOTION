@@ -29,9 +29,9 @@ test('Package Before wins over generic/after; full discount combinations and gif
 });
 test('the bulk plan uses unique final contracts, skips deposits and does not guess a course from received cash',()=>{
  const a=row(),b={...row('QA2610-CT-000005'),cells:{...row().cells,contractTotal:'QA2610-CT-000005',H:'Fee',I:'3 hrs/week',J:'12 months',U:1}},deposit={...row(),kind:'unlinked',ct:null};
- assert.deepEqual(missingContractInputs(a),['H','I','J']);assert.deepEqual(missingContractInputs(b),['L']);assert.equal(contractInputPlan([a,a,b,deposit]).length,2);
+ assert.deepEqual(missingContractInputs(a),['H','I','J','K','L']);assert.deepEqual(missingContractInputs(b),['K','L']);assert.equal(contractInputPlan([a,a,b,deposit]).length,2);
  assert.equal(contractInputPlan([a,row(expected.ct,'OTHER')]).length,0);
- const complete={...row(),cells:{...row().cells,H:'Fee',I:'3 hrs/week',J:'12 months'}};assert.equal(contractInputPlan([complete]).length,0);assert.equal(contractInputPlan([complete],{refresh:true}).length,1);
+ const complete={...row(),cells:{...row().cells,H:'Fee',I:'3 hrs/week',J:'12 months',K:'0',L:'0'}};assert.equal(contractInputPlan([complete]).length,0);assert.equal(contractInputPlan([complete],{refresh:true}).length,1);
 });
 test('bulk reading reuses a link or resolves and saves it, then saves correctly scoped inputs once',async()=>{
  const calls=[];const io={loadLink:async ct=>(calls.push('load'),null),lookup:async ct=>(calls.push('lookup'),{ct,url:expected.url}),saveLink:async link=>(calls.push('link'),link),read:async target=>(calls.push('read'),payload),save:async(r,p)=>{calls.push('save');assert.equal(p.ct,r.ct);assert.equal(p.student,r.cells.F);}};

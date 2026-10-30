@@ -29,6 +29,18 @@ test('API Discount names use the same outer-parenthesis extraction as the Course
  const raw={...record(),Discount:'3.870.000 VNĐ'};delete raw.ListDiscount;
  assert.equal(parseContractDetailProjection(projectContractDetail(raw,api,expected.url),expected).payload.discount,null);
 });
+test('master CT offers include serialized Discounts/CourseInfos and are not masked by an empty course list',()=>{
+ const names=['2026 October - Promotion Discount - 12 months','Sep/Oct 2026 - Tặng Tháng (TRẢ THẲNG) - All layer - Tặng 1 tháng'];
+ const course={...record().ListCourseInfo[0],ListDiscount:[],ListGiftCode:[]};
+ const master={...record(),ListCourseInfo:[course],Discounts:JSON.stringify(names.map(Name=>({Name}))),GiftCode:'QA-MASTER-CODE'};
+ for(const serialized of [false,true]){
+  const raw={...master};if(serialized){delete raw.ListCourseInfo;raw.CourseInfos=JSON.stringify([course]);}
+  const projection=projectContractDetail({contractInfo:raw},api,expected.url),result=parseContractDetailProjection(projection,expected);
+  assert.equal(result.payload.discount,names.join(';'));assert.equal(result.payload.giftcode,'QA-MASTER-CODE');assert.equal(result.payload.courseFee,course.PriceName);
+ }
+ const childCode={...master,ListCourseInfo:[{...course,GiftCode:'QA-OTHER-CODE'}]};assert.equal(parseContractDetailProjection(projectContractDetail(childCode,api,expected.url),expected).error,'conflict');
+ const unknown={...record(),ListDiscount:[{DiscountId:123}]};assert.equal(parseContractDetailProjection(projectContractDetail(unknown,api,expected.url),expected).payload.discount,null);
+});
 test('network input refuses another contract, student, ID or more than one course',()=>{
  for(const [field,value,error]of [['ContractNo','QA2610-CT-009999','identity'],['ContractId',99999,'identity'],['StudentCode','QA-OTHER','student']]){const raw=record();raw[field]=value;assert.equal(parseContractDetailProjection(projectContractDetail(raw,api,expected.url),expected).error,error);}
  const raw=record();raw.ListCourseInfo.push({...raw.ListCourseInfo[0],PriceName:'ATLS - Layer 2'});assert.equal(parseContractDetailProjection(projectContractDetail(raw,api,expected.url),expected).error,'conflict');raw.ListCourseInfo=[];assert.equal(parseContractDetailProjection(projectContractDetail(raw,api,expected.url),expected).error,'empty');

@@ -19,21 +19,27 @@ const pick=(obj,names)=>{
  return undefined;
 };
 const scalar=(obj,names,max=200)=>{const value=pick(obj,names);return typeof value==='string'&&text(value).length<=max?text(value)||null:null;};
+function listValue(value,limit){
+ if(typeof value==='string'&&value.length<=128000&&/^\s*\[/.test(value)){try{value=JSON.parse(value);}catch{return null;}}
+ return Array.isArray(value)&&value.length<=limit?value:null;
+}
 function offer(obj,names,arrays,itemNames){
- const direct=scalar(obj,names,2000);if(direct)return /^(?:0|none|n\/a|[-—]+)$/i.test(direct)?'0':direct;
- const list=pick(obj,arrays);if(!Array.isArray(list)||list.length>100)return null;if(!list.length)return '0';
- const values=list.map(v=>typeof v==='string'?text(v):scalar(v,itemNames,2000));if(values.some(v=>!v))return null;
- const result=[...new Set(values)].join(';');return result.length<=2000?result:null;
+ const values=[];let absent=false,invalid=false;
+ for(const name of names){const direct=scalar(obj,[name],2000);if(!direct||/^\s*[\[{]/.test(direct))continue;if(/^(?:0|none|n\/a|[-—]+)$/i.test(direct))absent=true;else values.push(direct);}
+ for(const name of arrays){const raw=pick(obj,[name]);if(raw==null)continue;const list=listValue(raw,100);if(!list){invalid=true;continue;}if(!list.length)absent=true;
+  for(const entry of list){const value=typeof entry==='string'?text(entry):scalar(entry,itemNames,2000);if(!value){invalid=true;continue;}values.push(value);}
+ }
+ const result=[...new Set(values)].join(';');return invalid?null:result.length>2000?null:result|| (absent?'0':null);
 }
 function fields(obj){
- const namedDiscount=normalizeHubDiscount(offer(obj,['DiscountApply','DiscountApplyName','PromotionApply','PromotionApplyName'],['ListDiscountApply','ListDiscount','ListPromotion'],['DiscountName','PromotionName','Name']));
+ const namedDiscount=normalizeHubDiscount(offer(obj,['DiscountApply','DiscountApplyName','PromotionApply','PromotionApplyName'],['ListDiscountApply','ListDiscount','Discounts','ListPromotion','ListPromotionApply','PromotionApply'],['DiscountName','PromotionName','Name']));
  const displayedDiscount=normalizeHubDiscount(scalar(obj,['Discount'],2000),{wrappedOnly:true});
  let hours=pick(obj,['HourWeekName','HowweekName','HowWeekName','HoursPerWeek','HourPerWeek','HourWeek','HoursWeek']);
  if(typeof hours==='number'&&hours>0&&hours<=168)hours=hours+' hrs/week';
  if(typeof hours==='string'){hours=text(hours).replace(/^(\d+(?:[.,]\d+)?)\s*(?:giờ\s*\/\s*tuần|hours?\s*per\s*week)$/i,(_,n)=>n.replace(',','.')+' hrs/week');if(/^\d+(?:\.\d+)?$/.test(hours))hours+=' hrs/week';}
  if(typeof hours!=='string'||!/^\d+(?:\.\d+)?\s*(?:hrs?|hours?)\s*\/\s*week$/i.test(hours)||!(parseFloat(hours)>0&&parseFloat(hours)<=168))hours=null;
  return {courseFee:scalar(obj,['PriceName','CourseFeeKOC']),hoursPerWeek:hours,package:scalar(obj,['PackageBeforeDiscountName','PackageBeforeDiscount','ProductPackageName','PackageName','ProductPackage']),
-  giftcode:offer(obj,['GiftcodeNo','GiftCodeNumber','Giftcode'],['ListGiftCode','ListGiftcodes'],['GiftcodeNo','GiftCodeNumber','Code']),
+  giftcode:offer(obj,['GiftcodeNo','GiftCodeNumber','Giftcode'],['ListGiftCode','ListGiftcodes','GiftCodes'],['GiftcodeNo','GiftCodeNumber','GiftCode','Code']),
   discount:namedDiscount&&namedDiscount!=='0'?namedDiscount:displayedDiscount??namedDiscount,
   groupKoc:scalar(obj,['GroupKOC','ProductGroupName']),contractType:scalar(obj,['ContractTypeName'])};
 }
@@ -43,14 +49,14 @@ export function projectContractDetail(value,sourceURL,detailURL){
  const source=courseDetailEndpoint(sourceURL,detailURL);if(!source)return null;
  let objects=[value];
  for(let depth=0;depth<4;depth++){
-  const matches=objects.filter(v=>v&&typeof v==='object'&&!Array.isArray(v)&&Array.isArray(v.ListCourseInfo));
+  const matches=objects.filter(v=>v&&typeof v==='object'&&!Array.isArray(v)&&listValue(pick(v,['ListCourseInfo','CourseInfos']),20));
   if(matches.length){
-   if(matches.length!==1)return null;const root=matches[0],list=root.ListCourseInfo;if(list.length>20)return null;
-   const id=pick(root,['ContractId','Id']),ct=scalar(root,['ContractNo','ContractCode','ContractNumber']),student=scalar(root,['StudentCode','StudentNo','StudentNumber']);
+   if(matches.length!==1)return null;const root=matches[0],list=listValue(pick(root,['ListCourseInfo','CourseInfos']),20);
+   const id=pick(root,['ContractId','Id']),ct=scalar(root,['ContractNo','ContractCode','ContractNumber']),student=scalar(root,['StudentCode','StudentNo','StudentNumber','KidCode']);
    if(id!=null&&!numberId(id))return null;
    return {source,contractId:id==null?null:numberId(id),ct:ct?.toUpperCase()??null,student,fields:fields(root),courses:list.map(row=>fields(row))};
   }
-  objects=objects.flatMap(v=>v&&typeof v==='object'&&!Array.isArray(v)?['Data','data','Result','result','Model','model','Contract'].filter(k=>Object.hasOwn(v,k)).map(k=>v[k]):[]);
+  objects=objects.flatMap(v=>v&&typeof v==='object'&&!Array.isArray(v)?['Data','data','Result','result','Model','model','Contract','contractInfo'].filter(k=>Object.hasOwn(v,k)).map(k=>v[k]):[]);
   if(!objects.length)return null;
  }
  return null;
@@ -63,6 +69,15 @@ export function parseContractDetailProjection(projection,expected,domPayload=nul
  if(!projection.ct&&!coursePayload(domPayload,request))return {error:'identity'};
  if(!Array.isArray(projection.courses)||projection.courses.length!==1)return {error:projection.courses?.length?'conflict':'empty',fields:['courseFee','hoursPerWeek','package']};
  const root=projection.fields??{},course=projection.courses[0]??{},values={};
- for(const key of COURSE_FIELDS)values[key]=course[key]??root[key]??domPayload?.[key]??null;
+ for(const key of COURSE_FIELDS){
+  if(key==='discount'){
+   const offers=[course[key],root[key],domPayload?.[key]].filter(v=>v&&v!=='0');
+   values[key]=offers.length?normalizeHubDiscount(offers.join(';')):[course[key],root[key],domPayload?.[key]].includes('0')?'0':null;
+  }else if(key==='giftcode'){
+   const codes=[...new Set([course[key],root[key],domPayload?.[key]].filter(v=>v&&v!=='0'))];
+   if(codes.length>1)return {error:'conflict',fields:['giftcode']};
+   values[key]=codes[0]??([course[key],root[key],domPayload?.[key]].includes('0')?'0':null);
+  }else values[key]=course[key]??root[key]??domPayload?.[key]??null;
+ }
  const payload=coursePayload({...request,...values},request);return payload?{payload,via:domPayload?'network+dom':'network'}:{error:'format'};
 }

@@ -140,3 +140,12 @@ test('voucher and report readers use managed offscreen frames without navigating
   assert.equal(r.context.location.href,origin+'/home');r.send({type:'hub-agent-stop',id:'qa-isolated',agentKey:'qa-agent'});assert.equal(r.frames[0].removed,true);
  }
 });
+test('partial Course info cannot finish before the master CT Discount info renders',async()=>{
+ const r=isolatedRuntime();r.send({type:'hub-agent-run',id:'qa-isolated',agentKey:'qa-agent',kind:'course',course});r.packet({type:'route-missing'});
+ const f=r.frames[0],full=inertCourseDocument(),queries=full.querySelectorAll;let offersReady=false;
+ const names='2026 October - Promotion Discount - 12 months;Sep/Oct 2026 - Tặng Tháng (TRẢ THẲNG) - All layer - Tặng 1 tháng';
+ f.contentWindow.location.href=course.url;
+ f.contentDocument={...full,querySelectorAll:s=>queries(s).filter(e=>offersReady||!['Giftcode No.','Discount apply'].includes(e.textContent)).map(e=>({...e,getClientRects:()=>[{}],...(e.nextElementSibling?{nextElementSibling:{...e.nextElementSibling,textContent:e.textContent==='Discount apply'?names:e.nextElementSibling.textContent,getClientRects:()=>[{}]}}:{})}))};
+ f.load();r.tick(1000);await drain();assert.equal(r.messages.length,0);assert.ok(!f.removed);
+ offersReady=true;r.tick(1000);await drain();assert.equal(r.messages.length,1);assert.equal(r.messages[0].payload.discount,names);assert.equal(r.messages[0].payload.giftcode,'0');assert.equal(f.removed,true);assert.equal(r.context.location.href,origin+'/home');
+});

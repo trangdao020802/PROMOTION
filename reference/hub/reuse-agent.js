@@ -81,7 +81,7 @@
    const result=courseResult(j,root,url),signature=JSON.stringify(result);
    if(signature!==j.signature){j.signature=signature;j.stableAt=Date.now();clearTimeout(j.settleTimer);j.settleTimer=setTimeout(()=>inspect(j),350);}
    const complete=result.payload&&['courseFee','hoursPerWeek','package','giftcode','discount'].every(k=>result.payload[k]!=null);
-   if(result.payload&&(complete||Date.now()-j.stableAt>=350)||expired){finish(j,result.payload?{payload:result.payload}:C.courseFailure(result.error,result.fields));return;}
+   if(result.payload&&complete||expired){finish(j,result.payload?{payload:result.payload}:C.courseFailure(result.error,result.fields));return;}
   }else{
    if(j.codes[0].includes('-DEP-')&&!j.fields){const fields=discover(root,url);if(fields&&!I.indexURLMatches(url,j.codes,j.id,fields)){j.fields=fields;j.loaded=false;j.frame.src=I.indexURL(j.codes,j.id,fields);return;}}
    if(!I.indexURLMatches(url,j.codes,j.id,j.fields)){failure(j,'index_navigation','Hub không giữ đúng tháng / loại hồ sơ cần đọc; chưa lưu link.');return;}

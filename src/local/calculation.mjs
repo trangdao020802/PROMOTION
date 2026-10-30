@@ -107,8 +107,11 @@ class IndependentCalculator{
    if(!(match.sharedSepOct&&between(cells.D,'2026-09-01','2026-10-31'))&&(match.period==='september'&&pricing.phase!=='base'||match.period==='q4'&&pricing.phase!=='q4'||match.period==='october'&&!['q4','october'].includes(pricing.phase))){cells.BO='CHECK - NGOÀI THỜI KỲ DISCOUNT';checks.push(cells.BO)}
   }
   if(cells.BD!=='OK')checks.push(cells.BD);
-  cells.CI=code||hasDescription?'CHECK - GIFTCODE CHƯA ĐƯỢC DUYỆT / ĐỦ HỒ SƠ':'NO GIFTCODE';
-  if(!code&&hasDescription)cells.O=null;
+  const discountPending=!label&&(group.hubOfferPending?.discount||number(cells.U)&&cells.U>0);
+  if(discountPending){cells.N=null;cells.BO='CHECK - CHƯA ĐỌC ĐỦ DISCOUNT APPLY TỪ CT TỔNG';checks.push(cells.BO);}
+  const giftcodePending=!code&&(hasDescription||group.hubOfferPending?.giftcode||number(cells.V)&&cells.V>0);
+  cells.CI=code||giftcodePending?'CHECK - GIFTCODE CHƯA ĐƯỢC DUYỆT / ĐỦ HỒ SƠ':'NO GIFTCODE';
+  if(giftcodePending)cells.O=null;
   if(code){
    cells.O=null;let issue=voucher?customVoucherIssue(voucher,cells.F):cells.CI;
    const pending=issue==='CHECK - VOUCHER MỚI CHƯA ĐƯỢC DUYỆT / KHÔNG ÁP DỤNG'&&voucher.status==='PENDING'&&voucherDetailURL(voucher.hubUrl)&&voucher.hubCheckedAt&&['ACTIVE','CLOSED'].includes(voucher.hubStatus)?customVoucherIssue({...voucher,status:'APPROVED'},cells.F)===null:false;
@@ -128,6 +131,7 @@ class IndependentCalculator{
   cells.P=number(account.transferIn)?account.transferIn:0;
   cells.Q=number(cells.M)&&number(cells.N)&&number(cells.O)?Math.max(0,cells.M-cells.N-cells.O):null;
   const hoursPending=[];
+  if(discountPending)hoursPending.push('Chưa đọc đủ chương trình Discount apply và tháng tặng của CT tổng.');
   if(!legacy&&!customOffer&&discountOffers(label).some(offer=>{const item=discountPolicyMatch(offer,cells.D);return ['straight','months','referral'].includes(item.kind)&&(!item.ruleKey||item.issues.length);}))hoursPending.push('Nhãn tháng tặng chưa khớp quy tắc được xác minh.');
   if(loyaltyMissing)hoursPending.push('Chưa chốt điều kiện tháng loyalty.');
   if(straightMissing)hoursPending.push('Chưa xác minh trả thẳng và ngày đóng đủ.');

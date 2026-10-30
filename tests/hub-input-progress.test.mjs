@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {inputTargets,validInputTargets,newInputRun,completeInputRun,completedInputs,inputKey} from '../src/core/hub-input-progress.mjs';
+import {inputTargets,validInputTargets,newInputRun,completeInputRun,completedInputs,inputKey,inputRunRequiresRefresh} from '../src/core/hub-input-progress.mjs';
 import {contractInputPlan} from '../src/core/hub-course.mjs';
 const ct='QA2610-CT-000004',student='QA-PROGRESS',row={ct,kind:'contract',cells:{F:student,contractTotal:ct,H:'Price name',I:'3 hrs/week',J:'2 months',K:null,L:null,U:100,V:100}};
 test('resume checkpoints are scoped by CT/student and survive refresh-all mode',()=>{
@@ -19,4 +19,9 @@ test('a partial or wrong-student source cannot remove a CT from the remaining qu
 });
 test('progress rejects duplicate, malformed and unrecognized targets',()=>{
  const target=inputTargets([row],true)[0];for(const targets of [[],[target,target],[{...target,ct:'DEP-123'}],[{...target,student:''}],[{...target,required:['approved']}],[{...target,required:[]}]])assert.equal(validInputTargets(targets),false);
+});
+test('pre-fix checkpoints cannot suppress a read of master CT offers with the updated reader',()=>{
+ const targets=inputTargets([row],true),legacy={runId:'qa-old',refresh:true,targets,completed:[inputKey(ct,student)]};
+ assert.equal(inputRunRequiresRefresh(legacy),true);assert.deepEqual(completedInputs(legacy,true),[]);
+ const next=newInputRun(legacy,targets,true,'qa-new');assert.equal(next.runId,'qa-new');assert.deepEqual(next.completed,[]);assert.equal(inputRunRequiresRefresh(next),false);
 });

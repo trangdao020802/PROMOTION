@@ -99,8 +99,8 @@ export function parseCoursePage(page,expected){
 export function missingContractInputs(row){
  if(row?.kind!=='contract'||!String(row.ct||row.cells?.contractTotal||'').includes('-CT-'))return [];
  const c=row.cells??{},missing=['H','I','J'].filter(k=>!text(c[k]));
- if((!text(c.K)||text(c.K)==='0')&&(Number(c.V)>0||text(row.context?.voucherDescription)&&text(row.context.voucherDescription)!=='0'))missing.push('K');
- if((!text(c.L)||text(c.L)==='0')&&Number(c.U)>0)missing.push('L');
+ if(!text(c.K)||text(c.K)==='0'&&(Number(c.V)>0||text(row.context?.voucherDescription)&&text(row.context.voucherDescription)!=='0'))missing.push('K');
+ if(!text(c.L)||text(c.L)==='0'&&Number(c.U)>0)missing.push('L');
  return missing;
 }
 export function contractInputPlan(rows,{refresh=false,completed=[],needsVoucher=()=>false}={}){

@@ -16,7 +16,7 @@
    const result=projection&&N?N.parseContractDetailProjection(projection,job.course,dom.payload):dom,nextSignature=JSON.stringify(result);
    if(nextSignature!==signature){signature=nextSignature;lastChange=Date.now();}
    const loading=[...document.querySelectorAll('[aria-busy="true"],#nprogress')].some(visible);
-   if(result.payload&&!loading&&Date.now()-lastChange>=600&&(['courseFee','hoursPerWeek','package'].every(k=>result.payload[k])||Date.now()>=deadline)){finish({type:'course-complete',payload:result.payload});return;}
+   if(result.payload&&!loading&&Date.now()-lastChange>=600&&(['courseFee','hoursPerWeek','package','giftcode','discount'].every(k=>result.payload[k]!=null)||Date.now()>=deadline)){finish({type:'course-complete',payload:result.payload});return;}
    if(Date.now()>=deadline)finish({type:'course-failure',reason:loading||result.payload?'loading':result.error,fields:result.fields??[]});
   };
   const timer=setInterval(inspect,750),observer=new MutationObserver(inspect);observer.observe(document.documentElement,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['value','aria-busy','aria-hidden']});inspect();

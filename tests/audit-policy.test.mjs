@@ -86,7 +86,8 @@ test('Q4 and base October retain their own sibling columns when the selected dis
  const {engine}=fixture({pkg:'18 months siblings',hours:'3 hrs/week',label:septemberSplit,gross:58050000,discount:18000000,net:40050000});
  assert.equal(calculate(engine).cells.N,18000000);
  assert.equal(calculate(engine,{L:'2026 October - Promotion Discount - 36/36 siblings - From 06/10'}).cells.N,17415000);
- assert.equal(calculate(engine,{L:''}).cells.N,0);
+ assert.equal(calculate(engine,{L:''}).cells.N,null); // blank is unresolved; explicit no-offer is zero
+ assert.equal(calculate(engine,{L:'0'}).cells.N,0);
  const beforeQ4=fixture({pkg:'18 months siblings',hours:'3 hrs/week',label:'2026 October - Promotion Discount - 36/36 siblings',when:'2026-10-05'});
  assert.equal(calculate(beforeQ4.engine).cells.N,13351500);
 });
