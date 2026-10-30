@@ -24,7 +24,7 @@ Voucher đã được đọc, có mức giảm/đơn vị và đủ căn cứ h�
 
 ## Discount info của CT tổng và duyệt ngay trong hồ sơ
 
-Cầu nối 1.6.9 giữ lượt đọc cho đến khi có cả Discount apply và Giftcode No, hoặc hết hạn để lưu phần đọc được. Giá/giờ/gói tải trước không kết thúc sớm lượt đọc. Bộ đọc nhận danh sách ưu đãi ở cấp CT và cấp khóa học, kể cả `CourseInfos`/`Discounts` dạng JSON được bộ mã Hub đính kèm sử dụng. Danh sách trống ở khóa học không che tên ưu đãi/mã có ở CT tổng; mã khác nhau giữa các nguồn vẫn bị chặn. Không đọc khóa học hay ưu đãi của CT trung gian sang CT nhận.
+Cầu nối 1.6.10 giữ lượt đọc cho đến khi có cả Discount apply và Giftcode No, hoặc hết hạn để lưu phần đọc được. Giá/giờ/gói tải trước không kết thúc sớm lượt đọc. Bộ đọc nhận danh sách ưu đãi ở cấp CT và cấp khóa học, kể cả `CourseInfos`/`Discounts` dạng JSON được bộ mã Hub đính kèm sử dụng. Danh sách trống ở khóa học không che tên ưu đãi/mã có ở CT tổng; mã khác nhau giữa các nguồn vẫn bị chặn. Không đọc khóa học hay ưu đãi của CT trung gian sang CT nhận.
 
 Tên ưu đãi trong Discount info được đưa vào L; số tiền vẫn tính độc lập theo chính sách. Ví dụ 12 tháng, 3 giờ/tuần, giá gốc 38.700.000, giảm 10% và tặng một tháng trả thẳng cho kết quả giảm 3.870.000, phải đóng 34.830.000, giờ tặng 12,5 và tổng giờ làm tròn 163. Chưa đọc đủ ưu đãi khi Hub trả dữ liệu một phần không được ghi Discount/Giftcode là 0. `0` là xác nhận không có mã/ưu đãi; các chỉnh sửa tay vẫn giữ ưu tiên.
 
@@ -34,7 +34,7 @@ Các file `app-core.js`, `hubs.js`, `apollo-assistant.min.js` đính kèm đư�
 
 ## Không tạo tab Hub tự động
 
-Cầu nối 1.6.9 dùng tab Hub đã mở và đăng nhập. Danh sách CT/DEP, Course info, voucher và cả ba báo cáo chạy trong nền. Khi cần, một iframe được quản lý trong tab đó chạy trang Hub, biểu mẫu tìm kiếm và phân trang. Không tạo/chuyển/đổi URL/đóng tab trình duyệt. Khung đọc chỉ được cấp ngữ cảnh đúng lượt, frame, document và URL của từng bước; kết quả từ frame hoặc mã khác bị từ chối.
+Cầu nối 1.6.10 dùng tab Hub đã mở và đăng nhập. Danh sách CT/DEP, Course info, voucher và cả ba báo cáo chạy trong nền. Khi cần, một iframe được quản lý trong tab đó chạy trang Hub, biểu mẫu tìm kiếm và phân trang. Không tạo/chuyển/đổi URL/đóng tab trình duyệt. Khung đọc chỉ được cấp ngữ cảnh đúng lượt, frame, document và URL của từng bước; kết quả từ frame hoặc mã khác bị từ chối.
 
 Nếu Hub hết phiên hoặc chặn khung đọc, lượt dừng và giữ tiến độ; không mở tab thay thế. Người dùng tự đăng nhập lại trên tab Hub rồi bấm lấy tiếp. Tiện ích chỉ đọc/tìm/lọc báo cáo và voucher; không Create/Update voucher hay duyệt thay người dùng trên Hub.
 
@@ -42,4 +42,6 @@ Nếu Hub hết phiên hoặc chặn khung đọc, lượt dừng và giữ ti�
 
 Kiểm thử dùng JSON/DOM và hóa đơn giả cho đọc CT, voucher, báo cáo, nhận diện gói tuần, resume và bảo toàn dòng thu/chuyển. Có kiểm tra giao diện tải ba nguồn giả và Bảng giá tuần. Phiên Hub riêng của người dùng chưa được kiểm tra trực tiếp trong môi trường này. PDF `Chinh-sach-gia-khuyen-mai-apollo-2026.pdf` được ghi nhận làm nguồn tổng hợp KOC/timeline; những mã hè/giá tuần chưa có bảng định lượng đúng phiên bản không được suy từ phần tổng hợp.
 
-Kiểm chứng bản 27: 231 kiểm thử; trình duyệt kiểm tra nguồn giả, Discount apply/tiền phải đóng, tích và bỏ duyệt tại Chi tiết hồ sơ, đồng bộ về bảng, rồi tải lại trang để xác nhận trạng thái đã lưu. Ảnh kiểm chứng: `reference/qa/detail-approvals-v27.jpg`. Tiến độ của bộ đọc cũ không được dùng để bỏ qua lần đọc ưu đãi đầu tiên bằng bản 1.6.9.
+Kiểm chứng bản 27: 231 kiểm thử; trình duyệt kiểm tra nguồn giả, Discount apply/tiền phải đóng, tích và bỏ duyệt tại Chi tiết hồ sơ, đồng bộ về bảng, rồi tải lại trang để xác nhận trạng thái đã lưu. Ảnh kiểm chứng: `reference/qa/detail-approvals-v27.jpg`. Tiến độ của bộ đọc cũ không được dùng để bỏ qua lần đọc ưu đãi đầu tiên bằng bản 1.6.10.
+
+Bản 28 / cầu nối 1.6.10: hỗ trợ đúng hai địa chỉ phát hành đã xác minh của cùng Site (`promotion-hub-2026.quanghuym24.chatgpt.site` và `promotion-hub-2026.roundskunk11.chatgpt.site`), không mở rộng sang các Site khác. Phản hồi luôn gửi về origin của trang đã yêu cầu. GiftCode cùng GiftCodeId đều được API trả rỗng một cách tường minh và không có tiền/mã đối nghịch thì xác nhận không có voucher; trường bị thiếu vẫn chờ đọc. 233 kiểm thử đạt.

@@ -2,8 +2,9 @@
 (() => {
   const HUB = 'https://hub24.apollo.vn:7777';
   const SITE = 'https://promotion-installment.trangdao2802.chatgpt.site';
+  const SITES = [SITE];
   const CHANNEL = 'promotion-hub/v1';
-  const VERSION = '1.6.9';
+  const VERSION = '1.6.10';
   function ct(value) {
     const code = typeof value === 'string' ? value.trim().toUpperCase() : '';
     return /^[A-Z0-9]+-CT-\d{4,20}$/.test(code) ? code : null;
@@ -82,7 +83,7 @@
     const codes = [...new Set((texts.join(' ').toUpperCase().match(/\b[A-Z0-9]+-(?:CT|DEP)-\d{4,20}\b/g) ?? []).filter(c => kind(c) === kind(expected)))];
     return codes.length === 1 && codes[0] === code(expected);
   }
-  function source(url) { try { return new URL(url).origin === SITE; } catch { return false; } }
+  function source(url) { try { return SITES.includes(new URL(url).origin); } catch { return false; } }
   function hub(url) { try { return new URL(url).origin === HUB; } catch { return false; } }
-  globalThis.PromotionHub = Object.freeze({HUB, SITE, CHANNEL, VERSION, ct, code, kind, list, range, depositFields, detail, search, searchMatches, select, confirms, source, hub});
+  globalThis.PromotionHub = Object.freeze({HUB, SITE, SITES:Object.freeze(SITES), CHANNEL, VERSION, ct, code, kind, list, range, depositFields, detail, search, searchMatches, select, confirms, source, hub});
 })();

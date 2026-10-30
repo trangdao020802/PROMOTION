@@ -200,3 +200,6 @@ Cầu nối 1.6.9 đọc Discount/Giftcode ở cấp CT tổng và khóa học, 
 Chi tiết hồ sơ → Duyệt & xác nhận có đầy đủ các mục duyệt áp dụng, ngoại lệ trả góp và duyệt Voucher khi đủ hồ sơ. Tích/bỏ tích tự lưu, tính lại và đồng bộ với bảng; kiểm tra chênh lệch tiền vẫn độc lập. 231 kiểm thử đạt; giao diện đã kiểm tra lưu, bỏ duyệt và mở lại sau tải trang bằng dữ liệu giả. Phiên Hub riêng được kiểm tra bằng fixture GET/DOM, chưa truy cập trực tiếp.
 
 Xem [luồng và phạm vi kiểm chứng](docs/unified-hub-completion.md) và [ảnh mục duyệt](reference/qa/detail-approvals-v27.jpg). Cập nhật cầu nối 1.6.9 rồi tải lại Promotion và Hub trước khi lấy lại Input.
+
+
+Bản 28 dùng cầu nối 1.6.10: hỗ trợ đúng hai địa chỉ đã xác minh của cùng Site (`promotion-hub-2026.quanghuym24.chatgpt.site` và địa chỉ cũ `promotion-hub-2026.roundskunk11.chatgpt.site`), giữ kiểm tra origin của từng yêu cầu. GiftCode/GiftCodeId được Hub trả rõ là rỗng xác nhận không có voucher; trường bị thiếu hoặc có ID/tiền giảm đối nghịch vẫn chờ đọc. 233 kiểm thử đạt; cập nhật cầu nối rồi tải lại Promotion và Hub.

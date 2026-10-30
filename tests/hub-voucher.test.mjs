@@ -77,7 +77,7 @@ test('Voucher provenance allows only observed read/detail routes on the exact Hu
  assert.ok(voucherCodesURL('/giftcode/listgiftcode/12345',url));assert.ok(voucherCodesURL('/giftcode/codes?giftcodeId=12345',url));assert.equal(voucherCodesURL('/giftcode/listgiftcode/99999',url),null);assert.equal(voucherCodesURL('https://example.com/giftcode/listgiftcode/12345',url),null);
  assert.equal(voucherPayload({...payload(),code:'OTHER'},{code}),null);assert.equal(voucherPayload({...payload(),rate:5},{code}),null);
 });
-function bridgeWindow({capabilities=['voucher'],wrong=false,version='1.6.9'}={}){
+function bridgeWindow({capabilities=['voucher'],wrong=false,version='1.6.10'}={}){
  const listeners=new Set(),target={location:{origin:'https://promotion-hub-2026.roundskunk11.chatgpt.site'},addEventListener:(type,fn)=>listeners.add(fn),removeEventListener:(type,fn)=>listeners.delete(fn),postMessage:m=>{
   if(m.direction!=='request'||m.action==='cancel')return;
   const reply={channel:m.channel,direction:'response',id:m.id,...m.action==='ping'?{type:'ready',version,capabilities}:{type:'voucher-result',payload:wrong?{...payload(),code:'OTHER'}:payload()}};
@@ -86,10 +86,10 @@ function bridgeWindow({capabilities=['voucher'],wrong=false,version='1.6.9'}={})
 }
 test('the Site bridge requires Voucher capability and validates returned identity',async()=>{
  assert.equal((await readHubVoucher(code,{window:bridgeWindow(),timeoutMs:100})).rate,.15);
- await assert.rejects(readHubVoucher(code,{window:bridgeWindow({capabilities:[]}),timeoutMs:100}),/1.6.9/);
- await assert.rejects(readHubVoucher(code,{window:bridgeWindow({version:'1.6.0'}),timeoutMs:100}),/1.6.9/);
- await assert.rejects(readHubVoucher(code,{window:bridgeWindow({version:'1.6.1'}),timeoutMs:100}),/1.6.9/);
- await assert.rejects(readHubVoucher(code,{window:bridgeWindow({version:'1.6.2'}),timeoutMs:100}),/1.6.9/);
+ await assert.rejects(readHubVoucher(code,{window:bridgeWindow({capabilities:[]}),timeoutMs:100}),/1.6.10/);
+ await assert.rejects(readHubVoucher(code,{window:bridgeWindow({version:'1.6.0'}),timeoutMs:100}),/1.6.10/);
+ await assert.rejects(readHubVoucher(code,{window:bridgeWindow({version:'1.6.1'}),timeoutMs:100}),/1.6.10/);
+ await assert.rejects(readHubVoucher(code,{window:bridgeWindow({version:'1.6.2'}),timeoutMs:100}),/1.6.10/);
  await assert.rejects(readHubVoucher(code,{window:bridgeWindow({wrong:true}),timeoutMs:100}),/không khớp/);
  const controller=new AbortController();controller.abort();await assert.rejects(readHubVoucher(code,{window:bridgeWindow(),signal:controller.signal,timeoutMs:100}),/Đã dừng/);
 });

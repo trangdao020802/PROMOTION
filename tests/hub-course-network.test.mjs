@@ -41,6 +41,12 @@ test('master CT offers include serialized Discounts/CourseInfos and are not mask
  const childCode={...master,ListCourseInfo:[{...course,GiftCode:'QA-OTHER-CODE'}]};assert.equal(parseContractDetailProjection(projectContractDetail(childCode,api,expected.url),expected).error,'conflict');
  const unknown={...record(),ListDiscount:[{DiscountId:123}]};assert.equal(parseContractDetailProjection(projectContractDetail(unknown,api,expected.url),expected).payload.discount,null);
 });
+test('only explicit empty GiftCode plus empty GiftCodeId confirms no voucher; missing codes stay pending',()=>{
+ const raw=record();delete raw.ListGiftCode;raw.GiftCodeId=null;raw.GiftCode=null;raw.GiftCodeDiscountAmount=null;
+ assert.equal(parseContractDetailProjection(projectContractDetail(raw,api,expected.url),expected).payload.giftcode,'0');
+ for(const patch of [{GiftCodeId:123},{GiftCodeDiscountAmount:1000000}])assert.equal(parseContractDetailProjection(projectContractDetail({...raw,...patch},api,expected.url),expected).payload.giftcode,null);
+ delete raw.GiftCode;delete raw.GiftCodeId;assert.equal(parseContractDetailProjection(projectContractDetail(raw,api,expected.url),expected).payload.giftcode,null);
+});
 test('network input refuses another contract, student, ID or more than one course',()=>{
  for(const [field,value,error]of [['ContractNo','QA2610-CT-009999','identity'],['ContractId',99999,'identity'],['StudentCode','QA-OTHER','student']]){const raw=record();raw[field]=value;assert.equal(parseContractDetailProjection(projectContractDetail(raw,api,expected.url),expected).error,error);}
  const raw=record();raw.ListCourseInfo.push({...raw.ListCourseInfo[0],PriceName:'ATLS - Layer 2'});assert.equal(parseContractDetailProjection(projectContractDetail(raw,api,expected.url),expected).error,'conflict');raw.ListCourseInfo=[];assert.equal(parseContractDetailProjection(projectContractDetail(raw,api,expected.url),expected).error,'empty');

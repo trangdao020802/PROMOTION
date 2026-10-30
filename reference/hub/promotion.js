@@ -1,10 +1,10 @@
 (() => {
   const P = globalThis.PromotionHub;
-  if (location.origin !== P.SITE || window.top !== window) return;
-  const reply = value => window.postMessage({channel: P.CHANNEL, direction: 'response', ...value}, P.SITE);
+  if (!P.source(location.origin) || window.top !== window) return;
+  const origin=location.origin,reply = value => window.postMessage({channel: P.CHANNEL, direction: 'response', ...value}, origin);
   window.addEventListener('message', event => {
     const m = event.data;
-    if (event.source !== window || event.origin !== P.SITE || !m || m.channel !== P.CHANNEL || m.direction !== 'request' || typeof m.id !== 'string' || !/^[\w-]{1,80}$/.test(m.id)) return;
+    if (event.source !== window || event.origin !== origin || !m || m.channel !== P.CHANNEL || m.direction !== 'request' || typeof m.id !== 'string' || !/^[\w-]{1,80}$/.test(m.id)) return;
     if (m.action === 'ping') { reply({id: m.id, type: 'ready', version: P.VERSION,capabilities:['lookup','index','report','course','contract-inputs','course-network','no-new-tabs','voucher','background-voucher','background-reports']}); return; }
     if (!['lookup','index','report','course','voucher','cancel'].includes(m.action) || (m.action === 'lookup' && !P.code(m.ct))) return;
     if(m.action==='voucher'&&!globalThis.PromotionHubVoucher?.voucherRequest(m.voucher))return;

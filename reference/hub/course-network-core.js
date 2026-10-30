@@ -253,6 +253,18 @@ var PromotionHubCourseNetwork = (() => {
     const result = [...new Set(values)].join(";");
     return invalid ? null : result.length > 2e3 ? null : result || (absent ? "0" : null);
   }
+  function giftcodeValue(obj) {
+    let result = offer(obj, ["GiftcodeNo", "GiftCodeNumber", "Giftcode"], ["ListGiftCode", "ListGiftcodes", "GiftCodes"], ["GiftcodeNo", "GiftCodeNumber", "GiftCode", "Code"]);
+    const keys = Object.keys(obj ?? {}), key = (name) => keys.find((k) => k.toLowerCase() === name.toLowerCase()), id = key("GiftCodeId"), code = key("GiftCode");
+    const amounts = ["GiftCodeDiscount", "GiftCodeDiscountAmount", "GiftCodeDiscountAmountMax"].map(key).filter(Boolean);
+    const hasAmount = amounts.some((k) => obj[k] != null && obj[k] !== "" && Number(obj[k]) !== 0);
+    if (result === "0" && (id && obj[id] != null && Number(obj[id]) > 0 || hasAmount)) result = null;
+    if (result == null && id && code && [null, 0, "0"].includes(obj[id]) && [null, ""].includes(obj[code]) && !hasAmount && ["ListGiftCode", "ListGiftcodes", "GiftCodes"].every((name) => {
+      const raw = pick(obj, [name]);
+      return raw == null || listValue(raw, 100)?.length === 0;
+    })) result = "0";
+    return result;
+  }
   function fields(obj) {
     const namedDiscount = normalizeHubDiscount(offer(obj, ["DiscountApply", "DiscountApplyName", "PromotionApply", "PromotionApplyName"], ["ListDiscountApply", "ListDiscount", "Discounts", "ListPromotion", "ListPromotionApply", "PromotionApply"], ["DiscountName", "PromotionName", "Name"]));
     const displayedDiscount = normalizeHubDiscount(scalar(obj, ["Discount"], 2e3), { wrappedOnly: true });
@@ -267,7 +279,7 @@ var PromotionHubCourseNetwork = (() => {
       courseFee: scalar(obj, ["PriceName", "CourseFeeKOC"]),
       hoursPerWeek: hours,
       package: scalar(obj, ["PackageBeforeDiscountName", "PackageBeforeDiscount", "ProductPackageName", "PackageName", "ProductPackage"]),
-      giftcode: offer(obj, ["GiftcodeNo", "GiftCodeNumber", "Giftcode"], ["ListGiftCode", "ListGiftcodes", "GiftCodes"], ["GiftcodeNo", "GiftCodeNumber", "GiftCode", "Code"]),
+      giftcode: giftcodeValue(obj),
       discount: namedDiscount && namedDiscount !== "0" ? namedDiscount : displayedDiscount ?? namedDiscount,
       groupKoc: scalar(obj, ["GroupKOC", "ProductGroupName"]),
       contractType: scalar(obj, ["ContractTypeName"])
