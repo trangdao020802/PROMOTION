@@ -10,6 +10,16 @@ const code='QA-PRIVILEGE15-SEP-FULLCODE',url='https://hub24.apollo.vn:7777/giftc
 const profile={ct:'QA2610-CT-001234',studentId:'QA-STUDENT-15',studentName:'HỌC VIÊN KIỂM THỬ',center:'HN24.TC',centerName:'Times City'};
 const page=(extra={})=>({url,pairs:[{label:'Voucher name *',value:'Ưu đãi kiểm thử 15%'},{label:'Code prefix *',value:'QA-PRIVILEGE15-SEP'},{label:'Minimum',value:'0'},{label:'Discount amount *',value:'15',unit:'%'},{label:'Maximum',value:'0'},{label:'Start date *',value:'05/09/2026 00:00'},{label:'End date *',value:'31/12/2026 23:59'},{label:'Region',value:'Choose region'},{label:'Center',value:'Choose center'},{label:'Status',value:'Active'}],giftcodes:[{code,status:'Used'}],list:{center:'North, South',creator:'QA APPROVER'},checkedAt:'2026-10-27T05:20:00.000Z',...extra});
 const payload=()=>parseVoucherDetail(page(),{code}).payload;
+test('bulk Voucher progress cannot extend its absolute time budget and cancellation releases its listener',{timeout:1000},async()=>{
+ const listeners=new Set(),requests=[];let interval;
+ const target={location:{origin:'https://promotion-hub-2026.quanghuym24.chatgpt.site'},addEventListener:(type,fn)=>listeners.add(fn),removeEventListener:(type,fn)=>listeners.delete(fn),postMessage:packet=>{
+  requests.push(packet);const reply=extra=>{for(const fn of [...listeners])fn({source:target,origin:target.location.origin,data:{channel:'promotion-hub/v1',direction:'response',id:packet.id,...extra}});};
+  if(packet.action==='ping')queueMicrotask(()=>reply({type:'ready',version:'1.6.11',capabilities:['voucher']}));
+  if(packet.action==='voucher')interval=setInterval(()=>reply({type:'progress',message:'QA still loading'}),4);
+  if(packet.action==='cancel')clearInterval(interval);
+ }};
+ try{await assert.rejects(readHubVoucher(code,{window:target,budgetMs:30}),e=>e.code==='timeout');assert.ok(requests.some(r=>r.action==='cancel'));assert.equal(listeners.size,0);}finally{clearInterval(interval);}
+});
 test('Voucher detail reads explicit rate, dates, scope and the exact full Giftcode',()=>{
  const p=payload();assert.equal(p.rate,.15);assert.equal(p.type,'percent');assert.equal(p.minimum,0);assert.equal(p.maximum,0);assert.equal(p.startDate,'2026-09-05');assert.equal(p.endDate,'2026-12-31');assert.equal(p.center,'North, South');assert.equal(p.status,'CLOSED');assert.equal(p.studentName,'');
  assert.equal(parseVoucherDetail(page({giftcodes:[]}),{code}).error,'code_unconfirmed');
@@ -77,7 +87,7 @@ test('Voucher provenance allows only observed read/detail routes on the exact Hu
  assert.ok(voucherCodesURL('/giftcode/listgiftcode/12345',url));assert.ok(voucherCodesURL('/giftcode/codes?giftcodeId=12345',url));assert.equal(voucherCodesURL('/giftcode/listgiftcode/99999',url),null);assert.equal(voucherCodesURL('https://example.com/giftcode/listgiftcode/12345',url),null);
  assert.equal(voucherPayload({...payload(),code:'OTHER'},{code}),null);assert.equal(voucherPayload({...payload(),rate:5},{code}),null);
 });
-function bridgeWindow({capabilities=['voucher'],wrong=false,version='1.6.10'}={}){
+function bridgeWindow({capabilities=['voucher'],wrong=false,version='1.6.11'}={}){
  const listeners=new Set(),target={location:{origin:'https://promotion-hub-2026.roundskunk11.chatgpt.site'},addEventListener:(type,fn)=>listeners.add(fn),removeEventListener:(type,fn)=>listeners.delete(fn),postMessage:m=>{
   if(m.direction!=='request'||m.action==='cancel')return;
   const reply={channel:m.channel,direction:'response',id:m.id,...m.action==='ping'?{type:'ready',version,capabilities}:{type:'voucher-result',payload:wrong?{...payload(),code:'OTHER'}:payload()}};
@@ -86,10 +96,10 @@ function bridgeWindow({capabilities=['voucher'],wrong=false,version='1.6.10'}={}
 }
 test('the Site bridge requires Voucher capability and validates returned identity',async()=>{
  assert.equal((await readHubVoucher(code,{window:bridgeWindow(),timeoutMs:100})).rate,.15);
- await assert.rejects(readHubVoucher(code,{window:bridgeWindow({capabilities:[]}),timeoutMs:100}),/1.6.10/);
- await assert.rejects(readHubVoucher(code,{window:bridgeWindow({version:'1.6.0'}),timeoutMs:100}),/1.6.10/);
- await assert.rejects(readHubVoucher(code,{window:bridgeWindow({version:'1.6.1'}),timeoutMs:100}),/1.6.10/);
- await assert.rejects(readHubVoucher(code,{window:bridgeWindow({version:'1.6.2'}),timeoutMs:100}),/1.6.10/);
+ await assert.rejects(readHubVoucher(code,{window:bridgeWindow({capabilities:[]}),timeoutMs:100}),/1.6.11/);
+ await assert.rejects(readHubVoucher(code,{window:bridgeWindow({version:'1.6.0'}),timeoutMs:100}),/1.6.11/);
+ await assert.rejects(readHubVoucher(code,{window:bridgeWindow({version:'1.6.1'}),timeoutMs:100}),/1.6.11/);
+ await assert.rejects(readHubVoucher(code,{window:bridgeWindow({version:'1.6.2'}),timeoutMs:100}),/1.6.11/);
  await assert.rejects(readHubVoucher(code,{window:bridgeWindow({wrong:true}),timeoutMs:100}),/không khớp/);
  const controller=new AbortController();controller.abort();await assert.rejects(readHubVoucher(code,{window:bridgeWindow(),signal:controller.signal,timeoutMs:100}),/Đã dừng/);
 });

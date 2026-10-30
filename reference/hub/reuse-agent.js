@@ -26,6 +26,7 @@
  function readPage(j){
   if(job!==j||j.readingHTML||j.frame)return;
   if(typeof fetch!=='function'||typeof DOMParser!=='function'){frame(j);return;}
+  if(j.course)post(j,'stop');
   j.readingHTML=true;j.abort=new AbortController();
   const url=j.course?.url||I.indexURL(j.codes,j.id,j.fields);
   void fetch(url,{credentials:'same-origin',cache:'no-store',signal:j.abort.signal}).then(async response=>{
@@ -64,10 +65,10 @@
  function inspect(j){
   if(job!==j)return;
   const expired=Date.now()>=j.deadline;
-  if(!j.frame){if(expired)failure(j,'hub_timeout','Hub chưa trả dữ liệu. Bấm lấy tiếp để đọc CT còn thiếu.');return;}
+  if(!j.frame){if(expired){if(j.course)finish(j,C.courseFailure('loading'));else failure(j,'hub_timeout','Hub chưa trả dữ liệu. Bấm lấy tiếp để đọc CT còn thiếu.');}return;}
   let root,url;
   try{root=j.frame.contentDocument;url=j.frame.contentWindow.location.href;}catch{if(j.loaded||expired)failure(j,'hub_frame_unavailable','Hub yêu cầu đăng nhập hoặc không cho phép đọc trong nền. Kiểm tra tab Hub đang mở rồi thử lại; không tạo tab mới.');return;}
-  if(!root||url==='about:blank'){if(expired)failure(j,'hub_frame_unavailable','Hub chưa cho phép đọc trong nền. Kiểm tra tab Hub rồi thử lại; không tạo tab mới.');return;}
+  if(!root||url==='about:blank'){if(expired){if(j.course)finish(j,C.courseFailure('loading'));else failure(j,'hub_frame_unavailable','Hub chưa cho phép đọc trong nền. Kiểm tra tab Hub rồi thử lại; không tạo tab mới.');}return;}
   if(root!==j.observedRoot&&typeof MutationObserver==='function'){
    j.observer?.disconnect();j.observedRoot=root;
    j.observer=new MutationObserver(()=>{if(!j.inspectQueued){j.inspectQueued=true;Promise.resolve().then(()=>{j.inspectQueued=false;inspect(j);});}});
@@ -105,13 +106,14 @@
   const j=job,m=event.data;if(!j||event.origin!==P.HUB||m?.channel!==channel||m.id!==j.id)return;
   const child=j.frame&&event.source===j.frame.contentWindow;if(event.source!==window&&!child)return;
   if(m.type==='route-missing'&&!child&&j.course){clearTimeout(j.routeTimer);readPage(j);return;}
+  if(m.type==='course-fetch'&&!child&&j.course){clearTimeout(j.routeTimer);j.routeTimer=setTimeout(()=>readPage(j),Math.min(8000,Math.max(0,j.deadline-Date.now())));return;}
   if(m.type==='course'&&j.course){
    if(!m.projection||!N.courseDetailEndpoint(m.projection.source,j.course.url))return;
    const result=N.parseContractDetailProjection(m.projection,j.course);
    if(result.error&&['student','conflict'].includes(result.error)){finish(j,C.courseFailure(result.error));return;}
    if(m.projection.ct&&m.projection.ct!==j.course.ct||m.projection.contractId&&m.projection.contractId!==j.course.url.replace(/\/$/,'').split('/').pop()){finish(j,C.courseFailure('identity'));return;}
    j.projection=m.projection;
-   if(child&&typeof m.route==='string'&&m.route===new URL(m.projection.source).pathname)post(j,'learn-route',{course:j.course,route:m.route});
+   if(child&&typeof m.route==='string'&&m.route===new URL(m.projection.source).pathname)post(j,'learn-route',{course:j.course,source:N.courseDetailEndpoint(m.projection.source,j.course.url)});
    if(result.payload&&['courseFee','hoursPerWeek','package','giftcode','discount'].every(k=>result.payload[k]!=null)){finish(j,{payload:result.payload});return;}
    clearTimeout(j.routeTimer);readPage(j);inspect(j);
   }
@@ -134,7 +136,7 @@
   if(m.type!=='hub-agent-run'||job||typeof m.id!=='string'||!/^\w[\w-]{0,79}$/.test(m.id)){respond({error:'Tab Hub đang bận hoặc yêu cầu không hợp lệ.'});return;}
   const course=m.kind==='course'&&C.courseRequest(m.course),special=['voucher','report'].includes(m.kind);let codes,targetURL;
   try{if(special){if(m.kind==='voucher'){if(!V.voucherRequest(m.voucher))throw Error();targetURL=V.HUB_VOUCHERS;}else {if(!Object.hasOwn(R.HUB_REPORTS,m.report)||!R.reportPeriod(m.month))throw Error();targetURL=R.reportURL(m.report,m.month,50);}}else if(!course){const groups=I.indexGroups(m.codes);if(groups.length!==1)throw Error();codes=groups[0].codes;}}catch{respond({error:'Yêu cầu đọc Hub không hợp lệ.'});return;}
-  const duration=special?Math.min(Number(m.duration)||300000,m.kind==='report'?R.reportRenderMs(m.report)+120000:300000):30_000;
+  const duration=special?Math.min(Number(m.duration)||300000,m.kind==='report'?R.reportRenderMs(m.report)+120000:300000):course?14_000:30_000;
   job={id:m.id,kind:m.kind,special,targetURL,report:m.report,month:m.month,course:course||null,codes,duration,deadline:Date.now()+duration};const j=job;
   j.timer=setInterval(()=>inspect(j),1000);respond({accepted:true});
   if(special)frame(j);else if(course){post(j,'read-course',{course});j.routeTimer=setTimeout(()=>readPage(j),150);}else readPage(j);

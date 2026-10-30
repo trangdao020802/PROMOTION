@@ -66,22 +66,37 @@ test('an existing Hub tab reads only an actually observed GET route, with no gue
  const result=r.messages.find(m=>m.type==='course');assert.ok(result);assert.equal(result.projection.ct,course.ct);assert.ok(!JSON.stringify(result).includes('PRIVATE-DO-NOT-COPY'));
  const count=r.calls.length;r.send({type:'read-course',course:{...course,url:'https://example.com/contract/detail/12345'}});r.send({type:'read-course',course},r.context.window,'https://example.com');await drain();assert.equal(r.calls.length,count);
 });
+test('a direct read retains the observed role and AJAX header and never needs the Hub Angular model',async()=>{
+ const r=mainRuntime(),xhr=new r.XHR();xhr.open('GET',origin+'/qa/GetContractDetail?contractId=87654&userRoleId=23&_=cache');
+ r.send({type:'read-course',course});await drain();assert.equal(r.calls.length,1);assert.equal(r.calls[0].url,origin+'/qa/GetContractDetail?contractId=12345&userRoleId=23');assert.equal(r.calls[0].options.headers['X-Requested-With'],'XMLHttpRequest');assert.equal(r.calls[0].options.cache,'no-store');assert.equal(r.context.window.angular,undefined);assert.ok(r.messages.some(m=>m.type==='course-fetch'));assert.ok(r.messages.some(m=>m.type==='course'));
+ const learned=mainRuntime();learned.send({type:'learn-route',course,source:origin+'/qa/GetContractDetail?contractId=12345&userRoleId=24'});learned.send({type:'read-course',course});await drain();assert.equal(learned.calls[0].url,origin+'/qa/GetContractDetail?contractId=12345&userRoleId=24');
+});
+test('the existing Angular GET client can read immediately with its real role, without scope writes or a guessed endpoint',async()=>{
+ const r=mainRuntime(),root={},scope={sessionInfo:{UserRoleId:41},contractDetail:{ListDiscount:'KEEP',GiftCode:'KEEP'},$apply:()=>{throw Error('Digest/model writes are forbidden');}},calls=[];
+ r.context.document={querySelector:()=>root};
+ const service={getContractDetail:params=>{calls.push(params);new r.XHR().open('GET',origin+'/qa/GetContractDetail?contractId='+params.contractId+'&userRoleId='+params.userRoleId);return Promise.resolve(raw());}};
+ r.context.window.angular={element:()=>({injector:()=>({get:name=>name==='$rootScope'?scope:service})})};
+ r.send({type:'read-course',course});await drain();assert.equal(calls.length,1);assert.equal(calls[0].contractId,'12345');assert.equal(calls[0].userRoleId,41);assert.equal(r.calls.length,0);assert.equal(scope.contractDetail.ListDiscount,'KEEP');assert.equal(scope.contractDetail.GiftCode,'KEEP');
+ const result=r.messages.find(m=>m.type==='course');assert.ok(result);assert.equal(result.projection.source,origin+'/qa/GetContractDetail?contractId=12345&userRoleId=41');assert.ok(!JSON.stringify(result).includes('PRIVATE-DO-NOT-COPY'));
+ const cancelled=mainRuntime();let resolve,aborted=0;const promise=new Promise(r=>{resolve=r;});promise.abort=()=>{aborted++;};cancelled.context.document={querySelector:()=>root};cancelled.context.window.angular={element:()=>({injector:()=>({get:name=>name==='$rootScope'?scope:{getContractDetail:params=>{new cancelled.XHR().open('GET',origin+'/qa/GetContractDetail?contractId='+params.contractId+'&userRoleId=41');return promise;}}})})};
+ cancelled.send({type:'read-course',course});cancelled.send({type:'stop'});resolve(raw());await drain();assert.equal(aborted,1);assert.ok(!cancelled.messages.some(m=>m.type==='course'));
+});
 test('a managed inner frame projects its own request and sends only requested fields to its parent',async()=>{
  const r=mainRuntime({managed:true});await r.context.window.fetch(origin+'/qa/GetContractDetail?contractId=12345');await drain();assert.equal(r.messages.length,0);
  r.send({type:'activate',course},r.context.window.parent);assert.equal(r.messages.at(-1).type,'course');assert.equal(r.messages.at(-1).id,'qa-main');assert.ok(!JSON.stringify(r.messages).includes('PRIVATE-DO-NOT-COPY'));assert.equal(r.calls.length,1);
 });
 function isolatedRuntime({blocked=false}={}){
- let clock=0,next=1;const listeners=[],timers=new Map(),messages=[],posts=[],frames=[];
+ let clock=0,next=1;const listeners=[],timers=new Map(),deadlines=new Map(),messages=[],posts=[],frames=[];
  const root={querySelectorAll:()=>[]};
  class Clock extends Date{static now(){return clock;}}
- const context=vm.createContext({URL,Date:Clock,Promise,Set,Map,console,crypto:{randomUUID:()=> 'qa-agent'},location:{origin,pathname:'/home',href:origin+'/home'},setInterval:fn=>{const id=next++;timers.set(id,fn);return id;},clearInterval:id=>timers.delete(id),setTimeout:fn=>{const id=next++;timers.set(id,fn);return id;},clearTimeout:id=>timers.delete(id)});
+ const context=vm.createContext({URL,Date:Clock,Promise,Set,Map,console,crypto:{randomUUID:()=> 'qa-agent'},location:{origin,pathname:'/home',href:origin+'/home'},setInterval:fn=>{const id=next++;timers.set(id,fn);return id;},clearInterval:id=>timers.delete(id),setTimeout:(fn,ms=0)=>{const id=next++;timers.set(id,fn);deadlines.set(id,clock+ms);return id;},clearTimeout:id=>{deadlines.delete(id);timers.delete(id);}});
  context.window={addEventListener:(type,fn)=>listeners.push({type,fn}),postMessage:m=>posts.push(m)};context.window.top=context.window;
  context.document={documentElement:{appendChild:e=>frames.push(e)},createElement:()=>{const e={style:{},setAttribute:(k,v)=>{e[k]=v;},addEventListener:(type,fn)=>{e[type]=fn;},remove:()=>{e.removed=true;},contentDocument:root,contentWindow:{location:{href:'about:blank'},postMessage:m=>posts.push(m)}};if(blocked)Object.defineProperty(e.contentWindow,'location',{get:()=>{throw Error('blocked');}});return e;}};
  const chromeMessages=[];context.chrome={runtime:{id:'qa-extension',sendMessage:async m=>{messages.push(m);return {};},onMessage:{addListener:fn=>chromeMessages.push(fn)}}};
  load(context,['core.js','report-core.js','voucher-core.js','index-core.js','course-core.js','course-network-core.js','reuse-agent.js']);
  const send=(m,sender={id:'qa-extension'})=>{let reply;chromeMessages[0](m,sender,v=>{reply=v;});return reply;};
  const packet=(m,source=context.window,host=origin)=>listeners.filter(l=>l.type==='message').forEach(l=>l.fn({source,origin:host,data:{channel,id:'qa-isolated',...m}}));
- const tick=ms=>{clock+=ms;for(const fn of [...timers.values()])fn();};
+ const tick=ms=>{clock+=ms;for(const [id,fn]of [...timers]){if(!timers.has(id)||deadlines.has(id)&&clock<deadlines.get(id))continue;if(deadlines.has(id)){deadlines.delete(id);timers.delete(id);}fn();}};
  return {context,send,packet,tick,messages,posts,frames,timers};
 }
 test('the existing-tab broker owns only an invisible inert iframe and removes it on cancel',()=>{
@@ -148,4 +163,10 @@ test('partial Course info cannot finish before the master CT Discount info rende
  f.contentDocument={...full,querySelectorAll:s=>queries(s).filter(e=>offersReady||!['Giftcode No.','Discount apply'].includes(e.textContent)).map(e=>({...e,getClientRects:()=>[{}],...(e.nextElementSibling?{nextElementSibling:{...e.nextElementSibling,textContent:e.textContent==='Discount apply'?names:e.nextElementSibling.textContent,getClientRects:()=>[{}]}}:{})}))};
  f.load();r.tick(1000);await drain();assert.equal(r.messages.length,0);assert.ok(!f.removed);
  offersReady=true;r.tick(1000);await drain();assert.equal(r.messages.length,1);assert.equal(r.messages[0].payload.discount,names);assert.equal(r.messages[0].payload.giftcode,'0');assert.equal(f.removed,true);assert.equal(r.context.location.href,origin+'/home');
+});
+test('a responding direct API gets time to finish without booting a hidden page, and a slow CT has a bounded deadline',()=>{
+ const r=isolatedRuntime();r.send({type:'hub-agent-run',id:'qa-isolated',agentKey:'qa-agent',kind:'course',course});r.packet({type:'course-fetch'});r.tick(2000);assert.equal(r.frames.length,0);assert.equal(r.messages.length,0);
+ const p={source:origin+'/qa/GetContractDetail?contractId=12345&userRoleId=23',contractId:'12345',ct:course.ct,student:course.student,fields:{giftcode:'0',discount:'2026 October - Promotion Discount - 18 months'},courses:[{courseFee:'ATLS',hoursPerWeek:'3 hrs/week',package:'18 months'}]};r.packet({type:'course',projection:p});assert.equal(r.messages.length,1);assert.equal(r.frames.length,0);assert.equal(r.timers.size,0);
+ const slow=isolatedRuntime();slow.send({type:'hub-agent-run',id:'qa-isolated',agentKey:'qa-agent',kind:'course',course});slow.packet({type:'course-fetch'});slow.tick(8001);assert.equal(slow.frames.length,1);slow.frames[0].contentWindow.location.href=course.url;slow.tick(6000);assert.equal(slow.messages.length,1);assert.ok(slow.messages[0].code);assert.equal(slow.frames[0].removed,true);assert.equal(slow.timers.size,0);
+ const hung=isolatedRuntime();let signal;hung.context.AbortController=AbortController;hung.context.DOMParser=class{};hung.context.fetch=(url,options)=>{signal=options.signal;return new Promise(()=>{});};hung.send({type:'hub-agent-run',id:'qa-isolated',agentKey:'qa-agent',kind:'course',course});hung.packet({type:'course-fetch'});hung.tick(8001);hung.tick(6000);assert.equal(hung.messages[0].code,'course_unavailable');assert.equal(signal.aborted,true);assert.equal(hung.timers.size,0);
 });

@@ -9,8 +9,11 @@ export function courseDetailEndpoint(value,detailURL,method='GET'){
   const detail=new URL(detailURL),match=/^\/contract\/detail\/([1-9]\d{0,14})\/?$/i.exec(detail.pathname),u=new URL(value,HUB);
   if(detail.origin!==HUB||detail.search||detail.hash||!match||String(method).toUpperCase()!=='GET'||u.origin!==HUB||u.username||u.password||u.hash||!/\/GetContractDetail\/?$/i.test(u.pathname)||u.searchParams.getAll('contractId').length!==1||u.searchParams.get('contractId')!==match[1])return null;
   if([...u.searchParams.keys()].some(k=>/token|session|password|secret|credential|authorization|api.?key/i.test(k)))return null;
-  // Preserve the observed route, discard incidental cache/filter parameters.
-  u.search='';u.searchParams.set('contractId',match[1]);return u.href;
+  const roles=u.searchParams.getAll('userRoleId');
+  if(roles.length>1||roles.length&&!/^(?:0|[1-9]\d{0,14})$/.test(roles[0]))return null;
+  // Reuse the actual Hub role context, never a guessed/default user ID.
+  // Incidental filters/cache parameters and authentication values are discarded.
+  u.search='';u.searchParams.set('contractId',match[1]);if(roles.length)u.searchParams.set('userRoleId',roles[0]);return u.href;
  }catch{return null;}
 }
 const pick=(obj,names)=>{
@@ -23,11 +26,15 @@ function listValue(value,limit){
  if(typeof value==='string'&&value.length<=128000&&/^\s*\[/.test(value)){try{value=JSON.parse(value);}catch{return null;}}
  return Array.isArray(value)&&value.length<=limit?value:null;
 }
-function offer(obj,names,arrays,itemNames){
+function offer(obj,names,arrays,itemNames,withGroup=false){
  const values=[];let absent=false,invalid=false;
  for(const name of names){const direct=scalar(obj,[name],2000);if(!direct||/^\s*[\[{]/.test(direct))continue;if(/^(?:0|none|n\/a|[-—]+)$/i.test(direct))absent=true;else values.push(direct);}
  for(const name of arrays){const raw=pick(obj,[name]);if(raw==null)continue;const list=listValue(raw,100);if(!list){invalid=true;continue;}if(!list.length)absent=true;
-  for(const entry of list){const value=typeof entry==='string'?text(entry):scalar(entry,itemNames,2000);if(!value){invalid=true;continue;}values.push(value);}
+  for(const entry of list){let value=typeof entry==='string'?text(entry):scalar(entry,itemNames,2000);if(!value){invalid=true;continue;}
+   const group=withGroup&&scalar(entry,['GroupDiscountName'],2000);
+   if(group){const name=normalizeHubDiscount(value)??value,fold=v=>text(v).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();value=fold(name).startsWith(fold(group))?name:group+' - '+name;}
+   values.push(value);
+  }
  }
  const result=[...new Set(values)].join(';');return invalid?null:result.length>2000?null:result|| (absent?'0':null);
 }
@@ -41,7 +48,7 @@ function giftcodeValue(obj){
  return result;
 }
 function fields(obj){
- const namedDiscount=normalizeHubDiscount(offer(obj,['DiscountApply','DiscountApplyName','PromotionApply','PromotionApplyName'],['ListDiscountApply','ListDiscount','Discounts','ListPromotion','ListPromotionApply','PromotionApply'],['DiscountName','PromotionName','Name']));
+ const namedDiscount=normalizeHubDiscount(offer(obj,['DiscountApply','DiscountApplyName','PromotionApply','PromotionApplyName'],['ListDiscountApply','ListDiscount','Discounts','ListPromotion','ListPromotionApply','PromotionApply'],['DiscountName','PromotionName','Name'],true));
  const displayedDiscount=normalizeHubDiscount(scalar(obj,['Discount'],2000),{wrappedOnly:true});
  let hours=pick(obj,['HourWeekName','HowweekName','HowWeekName','HoursPerWeek','HourPerWeek','HourWeek','HoursWeek']);
  if(typeof hours==='number'&&hours>0&&hours<=168)hours=hours+' hrs/week';

@@ -4,10 +4,15 @@ import {courseRequest,coursePayload,parseCoursePage,contractInputPlan,fillContra
 import {AuditEngine} from '../src/local/calculation.mjs';
 import {buildModel} from '../src/local/model.mjs';
 import {policyData} from '../scripts/policy-data.mjs';
-import {parseDate} from '../src/core/source-parser.mjs';
+import {parseDate,parseCsv,autoMap,normalizeSheet} from '../src/core/source-parser.mjs';
 const expected={ct:'QA2610-CT-000004',student:'QA-INPUTS',url:'https://hub24.apollo.vn:7777/contract/detail/12345'};
 const payload={...expected,courseFee:'ATLS - New Price 2026 - Layer 1',hoursPerWeek:'3 hrs/week',package:'2 months',giftcode:'0',discount:'0',groupKoc:'ATLS',contractType:'New'};
 const row=(id=expected.ct,student=expected.student)=>({id:'CT::'+id,ct:id,kind:'contract',cells:{F:student,contractTotal:id,H:null,I:null,J:null,K:null,L:null,U:0,V:0}});
+test('PaymentList imports actual Giftcode No and Discount apply names, while monetary discount fields cannot supply them',()=>{
+ const csv='Payment code,Contract code,Student ID,Invoice date,Final payment invoice amount,Giftcode No,Discount apply,Discount amount,Giftcode amount\nQA2610-PAY-000004,'+expected.ct+','+expected.student+',10/10/2026,6000000,QA-EXACT-CODE,2026 October - Promotion Discount - 12 months,1000000,200000';
+ const grid=parseCsv(csv),source=normalizeSheet(grid,'payment',autoMap(grid,'payment'));assert.deepEqual(source.errors,[]);assert.equal(source.records[0].cells.AO,'QA-EXACT-CODE');assert.equal(source.records[0].cells.AQ,'2026 October - Promotion Discount - 12 months');assert.equal(source.records[0].cells.AD,1000000);assert.equal(source.records[0].cells.AE,200000);
+ const empty=parseCsv(csv.replace('QA-EXACT-CODE,2026 October - Promotion Discount - 12 months',',')),missing=normalizeSheet(empty,'payment',autoMap(empty,'payment'));assert.ok(!missing.records[0].cells.AO);assert.ok(!missing.records[0].cells.AQ);assert.equal(missing.records[0].cells.AD,1000000);
+});
 function fixture({pkg='2 months',gross=7200000,discount=0,totalHours=25,offer='0',giftcode='0'}={}){
  const day=parseDate('2026-10-10'),c={B:'CENTER GIẢ KIỂM THỬ',C:'QA1',D:'QA2610-PAY-004',E:expected.ct,R:expected.student,S:'DỮ LIỆU GIẢ KIỂM THỬ',O:day,P:'QA004',I:'Paid',F:'Payment',G:'New',X:'ATLS',Z:'',AA:'',AB:'',AQ:'',AO:'',AH:'Online Payments',AJ:'',AC:gross,AD:discount,AE:0,AF:gross-discount,AG:totalHours},r={sourceKey:'p',sourceRow:2,cells:c};
  const bundle={kind:'source-bundle-v1',scope:{from:'2026-10-01',to:'2026-10-31',center:''},cutoff:parseDate('2026-10-31'),records:[r],cash:[r],transfers:[],exports:[{sourceKey:'e',sourceRow:2,ct:expected.ct,student:expected.student,target:c.AF,paid:c.AF,totalHours,contractType:'New',center:'QA1'}],sources:['payment','export','transfer'].map((role,fileIndex)=>({key:['p','e','t'][fileIndex],role,fileIndex,fileName:'QA-'+role+'.csv',sheetName:'CSV',headerRow:1,rowCount:1}))};

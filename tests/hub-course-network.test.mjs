@@ -13,6 +13,16 @@ test('only an observed GET GetContractDetail for the detail URL contractId is ac
  for(const value of [api.replace('12345','99999'),api+'&contractId=12345',api+'&token=secret',api.replace('hub24.apollo.vn:7777','example.com'),api.replace('GetContractDetail','UpdateContractDetail')])assert.equal(courseDetailEndpoint(value,expected.url),null);
  assert.equal(courseDetailEndpoint(api,expected.url,'POST'),null);
 });
+test('the observed Hub userRoleId is retained without inventing a role or copying incidental query data',()=>{
+ assert.equal(courseDetailEndpoint(api+'&userRoleId=23&_=cache',expected.url),api+'&userRoleId=23');
+ for(const suffix of ['&userRoleId=23&userRoleId=24','&userRoleId=administrator','&userRoleId=-1','&userRoleId=','&userRoleId=23&token=secret'])assert.equal(courseDetailEndpoint(api+suffix,expected.url),null);
+});
+test('the actual Hub GroupDiscountName plus DiscountName shape preserves cash and gift-month program names',()=>{
+ const raw=record();delete raw.StudentCode;raw.KidId=100;raw.ListDiscount=[{GroupDiscountName:'2026 October - Promotion Discount',DiscountName:'18 months',PercentDiscount:15,GiftMonths:0},{GroupDiscountName:'2026 October - Promotion Month',DiscountName:'18 months',PercentDiscount:0,GiftMonths:2}];
+ const result=parseContractDetailProjection(projectContractDetail(raw,api,expected.url),expected);assert.equal(result.payload.discount,'2026 October - Promotion Discount - 18 months;2026 October - Promotion Month - 18 months');assert.equal(result.payload.giftcode,'0');
+ raw.ListDiscount[0].DiscountName='15.00% (2026 October - Promotion Discount - 18 months)';assert.equal(parseContractDetailProjection(projectContractDetail(raw,api,expected.url),expected).payload.discount,result.payload.discount);
+ raw.ListDiscount=[{DiscountName:'18 months',PercentDiscount:15}];assert.equal(parseContractDetailProjection(projectContractDetail(raw,api,expected.url),expected).payload.discount,null);
+});
 test('ListCourseInfo projection keeps only explicit course names and excludes numeric lookup IDs and personal fields',()=>{
  const p=projectContractDetail({Data:record()},api,expected.url),result=parseContractDetailProjection(p,expected);assert.equal(result.payload.courseFee,record().ListCourseInfo[0].PriceName);assert.equal(result.payload.hoursPerWeek,'3 hrs/week');assert.equal(result.payload.package,'2 months');assert.equal(result.payload.giftcode,'0');assert.equal(result.payload.discount,'0');assert.equal(result.payload.groupKoc,'ATLS');assert.equal(result.payload.contractType,'Renew');assert.ok(!JSON.stringify(p).includes('DO NOT COPY'));assert.ok(!JSON.stringify(p).includes('7200000'));
  const raw=record();delete raw.ListCourseInfo[0].PriceName;delete raw.ListCourseInfo[0].HowWeekName;delete raw.ListCourseInfo[0].ProductPackageName;

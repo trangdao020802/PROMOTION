@@ -203,3 +203,10 @@ Xem [luồng và phạm vi kiểm chứng](docs/unified-hub-completion.md) và [
 
 
 Bản 28 dùng cầu nối 1.6.10: hỗ trợ đúng hai địa chỉ đã xác minh của cùng Site (`promotion-hub-2026.quanghuym24.chatgpt.site` và địa chỉ cũ `promotion-hub-2026.roundskunk11.chatgpt.site`), giữ kiểm tra origin của từng yêu cầu. GiftCode/GiftCodeId được Hub trả rõ là rỗng xác nhận không có voucher; trường bị thiếu hoặc có ID/tiền giảm đối nghịch vẫn chờ đọc. 233 kiểm thử đạt; cập nhật cầu nối rồi tải lại Promotion và Hub.
+
+
+## Bản 29 · Lấy Input nhanh, cầu nối 1.6.11
+
+PaymentList nạp Giftcode No/Discount apply; cột số tiền giảm không thay cho mã/tên. Khi thiếu, ưu tiên client GET contractService của Hub để mang đúng role và header hiện tại, không sửa model hay gọi $apply. ListDiscount ghép GroupDiscountName + DiscountName; bỏ qua CT đã đủ khi chạy tự động, trừ khi bật Đọc lại. Giới hạn Course info 14 giây và Voucher hàng loạt 15 giây tuyệt đối; CT thiếu giữ CHECK và thử lại sau. Không tạo tab mới.
+
+241 kiểm thử đạt. Mẫu HAR người dùng gửi có một GET 200 trong khoảng 1,878 giây; bộ đọc mới chiếu đủ năm trường từ mẫu, chưa đo trực tiếp mọi CT hoặc CT LD được báo chậm. HAR không được đưa lên repo hay gửi ra model ngoài. Empire chưa chạy model ngoài do secure keyring không khả dụng. Xem [cách đọc và kiểm chứng](docs/fast-hub-input.md). Cập nhật cầu nối 1.6.11 rồi tải lại Hub và Promotion; tắt Đọc lại cả CT đã đủ Input nếu chỉ cần điền phần còn thiếu.

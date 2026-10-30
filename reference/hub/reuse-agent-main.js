@@ -6,20 +6,33 @@
  const channel='promotion-hub/existing-tab/v1',managed=window.top!==window&&/^promotion-hub-read:[\w-]{1,80}$/.test(window.name);
  if(window.top!==window&&!managed)return;
  const frameId=managed?window.name.slice('promotion-hub-read:'.length):null;
- let route=null,active=null,buffer=null,controller=null;
+ let route=null,active=null,buffer=null,controller=null,serviceCapture=null;
  const originalFetch=window.fetch,proto=window.XMLHttpRequest?.prototype,originalOpen=proto?.open;
  const publish=data=>(managed?window.parent:window).postMessage({channel,...data},P.HUB);
  function endpoint(value,method='GET'){
   try{const u=new URL(value,location.href),id=u.searchParams.get('contractId'),detail=P.HUB+'/contract/detail/'+id;
-   return N.courseDetailEndpoint(u.href,detail,method)?{url:u.href,detail}:null;
+   const normalized=N.courseDetailEndpoint(u.href,detail,method);return normalized?{url:normalized,detail}:null;
+  }catch{return null;}
+ }
+ function remember(e){
+  route=e.url;
+  if(serviceCapture&&e.detail===serviceCapture.detail&&new URL(e.url).searchParams.get('userRoleId')===serviceCapture.role)serviceCapture.url=e.url;
+ }
+ function angularReader(){
+  try{
+   const root=document.querySelector('[ng-app],[data-ng-app]')||document.body||document.documentElement;
+   const injector=window.angular?.element(root).injector?.(),role=injector?.get('$rootScope')?.sessionInfo?.UserRoleId;
+   if(!/^(?:0|[1-9]\d{0,14})$/.test(String(role??'')))return null;
+   const service=injector.get('contractService');if(typeof service?.getContractDetail!=='function')return null;
+   return {role:String(role),read:id=>service.getContractDetail({contractId:id,userRoleId:role})};
   }catch{return null;}
  }
  const indexEndpoint=(value,method)=>{try{const u=new URL(value,location.href);return String(method||'GET').toUpperCase()==='GET'&&u.origin===P.HUB&&!u.username&&!u.password&&!u.hash&&/\/GetAllContracts\/?$/i.test(u.pathname);}catch{return false;}};
  function accept(value,url,method){
   const e=endpoint(url,method);
-  if(e){route=new URL(e.url).pathname;
+  if(e){remember(e);
    if(managed&&e.detail===location.origin+location.pathname.replace(/\/$/,'')){
-    const projection=N.projectContractDetail(value,url,e.detail);if(projection){buffer={type:'course',projection,route};if(active)publish({id:active.id,...buffer});}
+    const projection=N.projectContractDetail(value,url,e.detail);if(projection){buffer={type:'course',projection,route:new URL(route).pathname};if(active)publish({id:active.id,...buffer});}
    }
   }else if(managed&&location.pathname.toLowerCase()==='/contract/list'&&indexEndpoint(url,method)){
    const projection=I.projectContractPairs(value);if(projection){
@@ -38,14 +51,14 @@
  const wrappedFetch=typeof originalFetch==='function'?function(...args){
   const result=originalFetch.apply(this,args);
   try{const req=args[0],url=typeof req==='string'?req:req?.url??req?.href,method=args[1]?.method??req?.method??'GET';
-   const e=endpoint(url,method);if(e)route=new URL(e.url).pathname;
+   const e=endpoint(url,method);if(e)remember(e);
    if(managed&&(e||indexEndpoint(url,method)))void result.then(r=>readResponse(r.clone(),new URL(url,location.href).href,method)).catch(()=>{});
   }catch{}return result;
  }:null;
  if(wrappedFetch)window.fetch=wrappedFetch;
  const wrappedOpen=originalOpen?function(method,url,...rest){
   const result=originalOpen.call(this,method,url,...rest);
-  const e=endpoint(url,method);if(e)route=new URL(e.url).pathname;
+  const e=endpoint(url,method);if(e)remember(e);
   if(managed&&(e||indexEndpoint(url,method)))this.addEventListener('load',()=>{
    try{if(this.status<200||this.status>=300)return;const responseURL=this.responseURL||new URL(url,location.href).href;
     if(!endpoint(responseURL,method)&&!indexEndpoint(responseURL,method))return;
@@ -64,17 +77,31 @@
   if(m.type==='stop'&&active?.id===m.id){controller?.abort();active=null;return;}
   if(m.type==='learn-route'){
    const request=globalThis.PromotionHubCourse?.courseRequest(m.course);
-   if(request&&N.courseDetailEndpoint(P.HUB+m.route+'?contractId='+request.url.split('/').pop(),request.url))route=m.route;
+   const observed=request&&N.courseDetailEndpoint(m.source,request.url);if(observed)route=observed;
    return;
   }
   if(m.type!=='read-course')return;
   const request=globalThis.PromotionHubCourse?.courseRequest(m.course);if(!request)return;
   controller?.abort();controller=new AbortController();const signal=controller.signal;active={id:m.id};
-  const url=route&&N.courseDetailEndpoint(P.HUB+route+'?contractId='+request.url.split('/').pop(),request.url);
+  const client=angularReader();
+  if(client){
+   // Call Hub's existing GET service so its own role/authentication headers are
+   // used. Never assign a controller field or run an Angular digest/model save.
+   const capture={detail:request.url.replace(/\/$/,''),role:client.role,url:null};serviceCapture=capture;publish({type:'course-fetch',id:m.id});
+   void (async()=>{let pending;try{
+    pending=client.read(request.url.replace(/\/$/,'').split('/').pop());
+    signal.addEventListener('abort',()=>{try{pending?.abort?.();}catch{}},{once:true});
+    const value=await pending,projection=capture.url&&N.projectContractDetail(value,capture.url,request.url);
+    if(active?.id===m.id&&!signal.aborted)publish(projection?{type:'course',id:m.id,projection}:{type:'route-missing',id:m.id});
+   }catch{if(active?.id===m.id&&!signal.aborted)publish({type:'route-missing',id:m.id});}finally{if(serviceCapture===capture)serviceCapture=null;}})();
+   return;
+  }
+  let url=null;if(route){const target=new URL(route);target.searchParams.set('contractId',request.url.replace(/\/$/,'').split('/').pop());url=N.courseDetailEndpoint(target.href,request.url);}
   if(!url){publish({type:'route-missing',id:m.id});return;}
+  publish({type:'course-fetch',id:m.id});
   void (async()=>{
    try{
-    const response=await originalFetch.call(window,url,{method:'GET',credentials:'same-origin',signal,redirect:'error'});
+    const response=await originalFetch.call(window,url,{method:'GET',credentials:'same-origin',cache:'no-store',headers:{'X-Requested-With':'XMLHttpRequest'},signal,redirect:'error'});
     if(!response.ok)throw Error('response');
     const reader=response.body?.getReader();if(!reader)throw Error('body');let body='',bytes=0;const decoder=new TextDecoder();
     try{for(;;){const c=await reader.read();if(c.done)break;bytes+=c.value.byteLength;if(bytes>2*1024*1024||signal.aborted){await reader.cancel();throw Error('limit');}body+=decoder.decode(c.value,{stream:true});}}catch(e){try{await reader.cancel();}catch{}throw e;}
