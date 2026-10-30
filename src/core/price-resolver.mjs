@@ -7,6 +7,7 @@ import {dateSerial} from './verification.mjs';
 import {pricingIdentity,canonicalCourseName,priceText,isWeeklyCourse} from './pricing-key.mjs';
 import {matchTypedPrice} from './policy-pack.mjs';
 import {PRICE_PHASES,roadmapSchedule} from './price-schedule.mjs';
+import {policyMatchesInputs} from './hub-policy.mjs';
 const number=x=>typeof x==='number'&&Number.isFinite(x);
 const text=x=>String(x??'').trim();
 const unique=a=>[...new Set(a.filter(x=>x!==null&&x!==undefined&&x!==''))];
@@ -19,6 +20,15 @@ export function priceFor(data,cells,context={}){
  result.unit=identity.unit;result.weeks=identity.weeks;
  if(identity.variant==='weekly'){result.months=null;result.monthly=null;result.unitPrice=number(result.gross)&&identity.weeks>0?result.gross/identity.weeks:null;}
  result.net=number(result.gross)&&number(result.discount)?result.gross-result.discount:null;
+ if(!result.override&&policyMatchesInputs(context.hubPolicy,cells,context)){
+  const snapshot=context.hubPolicy,p=snapshot.product;
+  const conflict=number(result.gross)&&Math.abs(result.gross-p.unitPrice*p.units)>1;
+  const replaceable=/^CHECK - (?:CHƯA CÓ|GÓI ĐẶC THÙ GIÁ|COMBO SUMMER|VTDH:|ƯU ĐÃI GÓI LẺ CẦN RULE)/.test(result.issue??'');
+  const guard=result.issue&&!replaceable?result.issue:null;
+  return {...result,hub:true,short:false,unit:p.typeId===2?'weeks':'months',months:p.typeId===1?p.units:null,weeks:p.typeId===2?p.units:null,monthly:p.typeId===1?p.unitPrice:null,unitPrice:p.unitPrice,gross:p.unitPrice*p.units,
+   issue:conflict?'CHECK - GIÁ HUB KHÁC CHÍNH SÁCH ĐANG ÁP DỤNG':guard,
+   refs:[{file:'Hub · '+snapshot.ct,sheet:'GetCoursePrice',row:p.priceId,url:'https://hub24.apollo.vn:7777/contract/detail/'+snapshot.contractId},...(result.refs??[])],hubSnapshot:snapshot};
+ }
  if(!result.refs?.length){
   const prices=data.policy.prices??[],exact=prices.filter(r=>r.C===cells.H&&r.D===cells.I&&r.E===cells.J);
   result.refs=(exact.length?exact:prices.filter(r=>pricingIdentity(r.C,r.D,r.E).key===identity.key)).map(r=>({file:'Bang_gia_chung_doi_chieu_Report.xlsx',sheet:'Bảng giá chung',row:r.row}));

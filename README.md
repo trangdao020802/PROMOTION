@@ -210,3 +210,9 @@ Bản 28 dùng cầu nối 1.6.10: hỗ trợ đúng hai địa chỉ đã xác 
 PaymentList nạp Giftcode No/Discount apply; cột số tiền giảm không thay cho mã/tên. Khi thiếu, ưu tiên client GET contractService của Hub để mang đúng role và header hiện tại, không sửa model hay gọi $apply. ListDiscount ghép GroupDiscountName + DiscountName; bỏ qua CT đã đủ khi chạy tự động, trừ khi bật Đọc lại. Giới hạn Course info 14 giây và Voucher hàng loạt 15 giây tuyệt đối; CT thiếu giữ CHECK và thử lại sau. Không tạo tab mới.
 
 241 kiểm thử đạt. Mẫu HAR người dùng gửi có một GET 200 trong khoảng 1,878 giây; bộ đọc mới chiếu đủ năm trường từ mẫu, chưa đo trực tiếp mọi CT hoặc CT LD được báo chậm. HAR không được đưa lên repo hay gửi ra model ngoài. Empire chưa chạy model ngoài do secure keyring không khả dụng. Xem [cách đọc và kiểm chứng](docs/fast-hub-input.md). Cập nhật cầu nối 1.6.11 rồi tải lại Hub và Promotion; tắt Đọc lại cả CT đã đủ Input nếu chỉ cần điền phần còn thiếu.
+
+## Bản 30 · Tự lấy API bảng giá và quy tắc Hub
+
+Cầu nối 1.6.12 gọi các dịch vụ đọc của phiên Hub hiện tại để lấy thông tin chọn giá, đơn giá và nhóm khuyến mãi theo đúng CT. Bộ tính kiểm tra thứ tự, quyền cộng nhóm, mức trả góp và trần gốc của voucher; giữ chỉnh sửa tay và tiếp tục CT khác khi quá hạn. Dòng giá/rule Hub giữ phạm vi từng CT. Không cần người dùng F12, không tạo tab mới và không ghi hợp đồng Hub. Giá mâu thuẫn hoặc điều kiện hồ sơ chưa đủ vẫn CHECK.
+
+257 kiểm thử đạt và build thành công. Phiên của tác vụ chưa có Hub đăng nhập nên chưa xác minh dữ liệu live hoặc tốc độ mọi CT. Xem [luồng API, phép tính và phạm vi hỗ trợ](docs/hub-policy-api.md). Cập nhật cầu nối rồi tải lại Promotion và Hub.

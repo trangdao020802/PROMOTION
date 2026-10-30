@@ -5,6 +5,7 @@ import {dateSerial} from './verification.mjs';
 import {PRICE_PHASES} from './price-schedule.mjs';
 export {PRICE_PHASES,roadmapSchedule} from './price-schedule.mjs';
 import {pricingIdentity} from './pricing-key.mjs';
+import {calculateHubPolicy,validateHubPolicy} from './hub-policy.mjs';
 const num=x=>typeof x==='number'&&Number.isFinite(x);
 const text=x=>String(x??'').trim();
 const key=x=>text(x).toUpperCase().replace(/\s+/g,' ');
@@ -72,5 +73,15 @@ export function buildPriceCatalogue(policy){
 }
 export function policyRuleCatalogue(policy,prices=buildPriceCatalogue(policy)){
  const months=n=>num(n)?'+'+n+' tháng':'chưa xác định';
- return [...prices.map(r=>({...r,id:'rule-'+r.id,ruleKey:[r.regime,r.pricingKey??[r.layer,r.hours,r.packageKey].join('|')].join('|'),benefit:`Giảm ${num(r.discount)?r.discount.toLocaleString('vi-VN')+' VND':'chưa xác định'}; trả thẳng ${months(r.straight)}; loyalty tối đa ${months(r.loyalty)}; referral ${months(r.referral)} theo điều kiện.`,conditions:r.conditions??r.issue??'Cần chính sách đúng khóa/gói và kỳ hiệu lực.',stacking:policy.policyRegister?.stacking?.[r.regime]??'Theo chính sách của từng kỳ.'})),...(policy.policyRegister?.rules??[])];
+  return [...prices.map(r=>({...r,id:'rule-'+r.id,ruleKey:[r.regime,r.pricingKey??[r.layer,r.hours,r.packageKey].join('|')].join('|'),benefit:`Giảm ${num(r.discount)?r.discount.toLocaleString('vi-VN')+' VND':'chưa xác định'}; trả thẳng ${months(r.straight)}; loyalty tối đa ${months(r.loyalty)}; referral ${months(r.referral)} theo điều kiện.`,conditions:r.conditions??r.issue??'Cần chính sách đúng khóa/gói và kỳ hiệu lực.',stacking:r.stacking??policy.policyRegister?.stacking?.[r.regime]??'Theo chính sách của từng kỳ.'})),...(policy.policyRegister?.rules??[])];
+}
+export function hubPriceCatalogue(policy,sources=[]){
+ return sources.filter(s=>validateHubPolicy(s.hubPolicy)).flatMap(source=>{
+  const v=source.hubPolicy,p=v.product,cells={H:source.courseFee,I:source.hoursPerWeek,J:source.package,L:source.discount,K:'0',B:v.centerCode,D:dateSerial(v.createdDate)},context={hubPolicy:v,method:v.context.installment?'Installment':'Direct',contractType:source.contractType,group:source.groupKoc};
+  // Voucher remains separate from a price/rule row. A fixed voucher that
+  // changes progressive arithmetic is calculated only at its own CT.
+  const result=priceFor({policy},cells,context),amount=calculateHubPolicy(v,cells,context);
+  if(!result.hub)return [];
+  return [{...result,id:'hub-'+v.ct,group:result.identity.group,year:result.identity.year,course:p.priceName,package:p.packageName,packageKey:result.pkg,regime:'hub',regimeLabel:'Hub · theo CT '+v.ct,from:v.createdDate,to:v.createdDate,center:v.centerCode,discount:amount&&!amount.error?amount.discount:null,net:amount&&!amount.error?result.gross-amount.discount:null,straight:null,loyalty:null,referral:null,status:result.issue||amount?.error?'conflict':'ready',note:'Phạm vi CT '+v.ct+'; lấy '+v.capturedAt+'. Voucher và phê duyệt điều kiện xét riêng.',conditions:'Nhóm/gói/giờ/trung tâm/ngày theo CT; EPP, quan hệ, ngày full và phê duyệt vẫn cần căn cứ.',stacking:v.groups.map(g=>g.name+': Priority '+g.priority+', SortOrder '+g.sort+', trần '+g.max+'%, cộng nhóm '+(g.with===null?'theo cấu hình không giới hạn':g.with.join(', '))).join('; ')}];
+ });
 }

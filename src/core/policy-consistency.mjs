@@ -7,9 +7,9 @@ const center=value=>/^(?:[A-Z0-9]+[._-])?(RGI|TPU|LNQ|LBB)$/i.exec(text(value))?
 
 export function offerConsistencyChecks(cells,context,pricing){
  const offers=discountOffers(cells.L),matches=offers.map(s=>discountPolicyMatch(s,cells.D)),checks=[];
- if(offers.length>4)checks.push('CHECK - QUÁ 4 ƯU ĐÃI');
+ if(!context.hubRules&&offers.length>4)checks.push('CHECK - QUÁ 4 ƯU ĐÃI');
  const cash=matches.filter(m=>m.kind==='cash'&&m.ruleKey);
- if(cash.length>1)checks.push('CHECK - NHIỀU ƯU ĐÃI GIẢM NỀN: chỉ một mức giảm theo gói; cần điều chỉnh các nhãn trùng/xung đột.');
+ if(!context.hubRules&&cash.length>1)checks.push('CHECK - NHIỀU ƯU ĐÃI GIẢM NỀN: chỉ một mức giảm theo gói; cần điều chỉnh các nhãn trùng/xung đột.');
  for(const [i,m]of matches.entries()){
   const label=discountLabelKey(offers[i]);if(!context.customPolicy)checks.push(...m.issues);
   if(m.siblingAddon&&pricing?.pkg==='36 SPLIT')checks.push('XÁC MINH - REFERRAL/SIBLING: gói 36 chia đôi có câu hỏi Sibling New tặng thêm chưa được trả lời tại Q4 dòng 112; cần căn cứ riêng.');

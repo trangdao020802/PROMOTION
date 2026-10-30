@@ -1,5 +1,6 @@
 // Read-only broker in an existing Hub tab. Never opens/navigates a browser tab.
-// Only observed API routes are reused; raw responses never leave this world.
+// Observed detail routes and source-known read services use Hub's own client;
+// only scoped, validated input and policy projections leave this world.
 (() => {
  const P=globalThis.PromotionHub,I=globalThis.PromotionHubIndex,N=globalThis.PromotionHubCourseNetwork;
  if(!P||!I||!N||location.origin!==P.HUB)return;
@@ -24,7 +25,8 @@
    const injector=window.angular?.element(root).injector?.(),role=injector?.get('$rootScope')?.sessionInfo?.UserRoleId;
    if(!/^(?:0|[1-9]\d{0,14})$/.test(String(role??'')))return null;
    const service=injector.get('contractService');if(typeof service?.getContractDetail!=='function')return null;
-   return {role:String(role),read:id=>service.getContractDetail({contractId:id,userRoleId:role})};
+   const invoke=name=>typeof service[name]==='function'?params=>service[name](params):undefined;
+   return {role:String(role),read:id=>service.getContractDetail({contractId:id,userRoleId:role}),policy:{info:invoke('getContractInfoForUpdate'),prices:invoke('getCoursePrice'),groups:invoke('getApplicableGroupDiscount'),voucher:invoke('checkContractGiftCode')}};
   }catch{return null;}
  }
  const indexEndpoint=(value,method)=>{try{const u=new URL(value,location.href);return String(method||'GET').toUpperCase()==='GET'&&u.origin===P.HUB&&!u.username&&!u.password&&!u.hash&&/\/GetAllContracts\/?$/i.test(u.pathname);}catch{return false;}};
@@ -92,6 +94,10 @@
     pending=client.read(request.url.replace(/\/$/,'').split('/').pop());
     signal.addEventListener('abort',()=>{try{pending?.abort?.();}catch{}},{once:true});
     const value=await pending,projection=capture.url&&N.projectContractDetail(value,capture.url,request.url);
+    if(projection&&client.policy.prices&&client.policy.groups&&!signal.aborted){
+     const rules=await N.readHubPolicy(value,client.policy,{signal,budgetMs:5000});
+     if(rules.policy)projection.hubPolicy=rules.policy;else projection.hubPolicyError=rules.policyError;
+    }
     if(active?.id===m.id&&!signal.aborted)publish(projection?{type:'course',id:m.id,projection}:{type:'route-missing',id:m.id});
    }catch{if(active?.id===m.id&&!signal.aborted)publish({type:'route-missing',id:m.id});}finally{if(serviceCapture===capture)serviceCapture=null;}})();
    return;

@@ -1,5 +1,6 @@
 import {normalizeHubDiscount} from './hub-discount.mjs';
 import {weeklyHours,pricingIdentity} from './pricing-key.mjs';
+import {validateHubPolicy,HUB_POLICY_ERRORS} from './hub-policy.mjs';
 const HUB='https://hub24.apollo.vn:7777';
 const text=v=>String(v??'').trim().replace(/\s+/g,' ');
 const label=v=>text(v).replace(/[\s:*]+$/,'').replace(/\s*\/\s*/g,'/').toLowerCase();
@@ -63,7 +64,7 @@ export function courseRequest(v){
 }
 export function coursePayload(v,expected){
  const request=courseRequest(expected);
- if(!request||!v||typeof v!=='object'||Object.keys(v).some(k=>!['ct','student','url',...COURSE_FIELDS].includes(k))||v.ct!==request.ct||v.student!==request.student||v.url!==request.url)return null;
+ if(!request||!v||typeof v!=='object'||Object.keys(v).some(k=>!['ct','student','url','hubPolicy','hubPolicyError',...COURSE_FIELDS].includes(k))||v.ct!==request.ct||v.student!==request.student||v.url!==request.url)return null;
  const result={...request};
  for(const key of COURSE_FIELDS){
   if(v[key]!=null&&(typeof v[key]!=='string'||!text(v[key])||text(v[key]).length>(key==='discount'?2000:200)))return null;
@@ -75,6 +76,8 @@ export function coursePayload(v,expected){
  if(result.hoursPerWeek&&!(parseFloat(result.hoursPerWeek)>0&&parseFloat(result.hoursPerWeek)<=168))return null;
  const identity=pricingIdentity(result.courseFee,result.hoursPerWeek,result.package);if(identity.unit==='weeks'&&identity.weeks)result.package=identity.weeks+' weeks';
  if(!result.package&&identity.paymentMode==='once'&&identity.courseMonths&&identity.variant==='standard')result.package=identity.courseMonths+' months';
+ if(v.hubPolicy!=null){if(!validateHubPolicy(v.hubPolicy)||v.hubPolicy.ct!==request.ct||String(v.hubPolicy.contractId)!==request.url.replace(/\/$/,'').split('/').pop())return null;result.hubPolicy=v.hubPolicy;}
+ if(v.hubPolicyError!=null){if(!HUB_POLICY_ERRORS.includes(v.hubPolicyError))return null;result.hubPolicyError=v.hubPolicyError;}
  return result;
 }
 export function parseCoursePage(page,expected){
@@ -103,11 +106,11 @@ export function missingContractInputs(row){
  if(!text(c.L)||text(c.L)==='0'&&Number(c.U)>0)missing.push('L');
  return missing;
 }
-export function contractInputPlan(rows,{refresh=false,completed=[],needsVoucher=()=>false}={}){
+export function contractInputPlan(rows,{refresh=false,completed=[],needsVoucher=()=>false,needsPolicy=()=>false}={}){
  const unique=new Map(),students=new Map();
  for(const row of rows??[]){const ct=text(row.ct||row.cells?.contractTotal),student=text(row.cells?.F);if(row.kind!=='contract'||!/^[A-Z0-9]+-CT-\d{4,20}$/.test(ct)||!/^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,149}$/.test(student)||Object.hasOwn(Object.prototype,student))continue;(students.get(ct)??(students.set(ct,new Set()),students.get(ct))).add(student);unique.set(ct+'|'+student,row);}
  const done=new Set(completed);
- return [...unique.values()].filter(r=>(refresh||missingContractInputs(r).length>0||needsVoucher(r))&&students.get(text(r.ct||r.cells.contractTotal)).size===1&&!done.has(text(r.ct||r.cells.contractTotal)+'|'+text(r.cells.F)));
+ return [...unique.values()].filter(r=>(refresh||missingContractInputs(r).length>0||needsVoucher(r)||needsPolicy(r))&&students.get(text(r.ct||r.cells.contractTotal)).size===1&&!done.has(text(r.ct||r.cells.contractTotal)+'|'+text(r.cells.F)));
 }
 export async function fillContractInputs(rows,io){
  const results=[];
@@ -132,7 +135,7 @@ export async function fillContractInputs(rows,io){
    const completion=await io.afterSave?.(row,payload,saved);
    stage='checkpoint';
    const checkpoint=await io.checkpoint?.(row,payload,saved);
-   results.push({ct,status:checkpoint?.complete===false?'partial':'saved',fields:COURSE_FIELDS.filter(k=>payload[k]!==null),missing:checkpoint?.missing??[],...(completion?{voucher:completion}:{})});io.saved?.(row,payload);
+   results.push({ct,status:checkpoint?.complete===false?'partial':'saved',fields:[...COURSE_FIELDS.filter(k=>payload[k]!==null),...(payload.hubPolicy?['hubPolicy']:[])],missing:checkpoint?.missing??[],hubPolicyError:payload.hubPolicyError??null,...(completion?{voucher:completion}:{})});io.saved?.(row,payload);
   }catch(e){
    if(io.signal?.aborted)break;
    const skippedVoucher=stage==='voucher'&&(['timeout','hub_timeout'].includes(e.code)||/^voucher_/.test(e.code??''));

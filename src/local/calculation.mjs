@@ -12,6 +12,7 @@ import {offerConsistencyChecks,voucherPolicyChecks} from '../core/policy-consist
 import {priceText} from '../core/pricing-key.mjs';
 import {voucherDetailURL} from '../core/hub-voucher.mjs';
 import {legacyDiscountFor} from '../core/legacy-discount.mjs';
+import {calculateHubPolicy,hubPolicyRevision,roundHubMoney,policyVoucher} from '../core/hub-policy.mjs';
 const own=(o,k)=>Object.hasOwn(o,k),number=x=>typeof x==='number'&&Number.isFinite(x);
 const between=(d,a,b)=>number(d)&&d>=dateSerial(a)&&d<dateSerial(b)+1;
 const difference=(a,b)=>number(a)&&number(b)?a-b:null;
@@ -29,13 +30,16 @@ class IndependentCalculator{
   const context={method:options.raw?.AH??raw['AH'+rawRow],term:options.raw?.AJ??group.raw.AJ??null,bank:raw['AI'+rawRow],contractType:group.raw?.G??raw['G'+rawRow],source:raw['T'+rawRow],fullStatus:raw['J'+rawRow],group:group.raw?.X??raw['X'+rawRow],voucherDescription:raw['AP'+rawRow]};
   const code=voucherCode(cells.K),hasDescription=!!text(context.voucherDescription)&&text(context.voucherDescription)!=='0',voucher=data.extensions.customVouchers?.find(v=>voucherCode(v.code)===code);
   if(voucher){context.voucherType=voucher.type==='percent'?'PHẦN TRĂM':'SỐ TIỀN';context.voucherBasis=voucher.percentBasis??'policy-default';if(voucher.policyId&&voucher.policyId!=='case-specific'||voucher.percentBasis&&voucher.percentBasis!=='policy-default')context.voucherPolicyScope=JSON.stringify([voucher.policyId,voucher.percentBasis,voucher.type,voucher.amount,voucher.rate,voucher.startDate,voucher.endDate,voucher.center,voucher.approvalNote]);}
+  context.hubPolicy=group.hubPolicy??null;
   const account=options.account||group.account;const pricing=priceFor(data,cells,context),label=text(cells.L);
+  const hub=pricing?.hub?calculateHubPolicy(group.hubPolicy,cells,context,voucher):null,hubActive=hub&&!hub.error;
+  context.hubRules=!!hubActive;
   const customOffer=pricing?.override&&discountOffers(label).length===1&&pricing.discountLabels?.some(s=>priceText(s)===priceText(label));
   const match=customOffer?{ruleKey:'UPDATED_POLICY',kind:'cash',issues:[],programIds:[],keys:[],period:null}:discountPolicyMatch(label,cells.D),checks=[];
   context.priceGroup=pricing?.identity&&['ATLS','AGLS','AHP'].includes(pricing.identity.group)?'ATLS':context.group;
   context.priceYear=pricing?.identity?.year;
   context.customPolicy=!!customOffer;
-  context.policyRevision=data.policy.policyRevision??'published';
+  context.policyRevision=(data.policy.policyRevision??'published')+(hubActive?'|'+hubPolicyRevision(group.hubPolicy):'');
   if(pricing?.issue?.startsWith('XÁC MINH'))checks.push(pricing.issue);
   if(pricing?.override&&pricing.conditions)checks.push('XÁC MINH - CHÍNH SÁCH CẬP NHẬT: '+pricing.conditions);
   if(pricing?.identity?.year===2024&&cells.D>=dateSerial('2026-03-01'))checks.push('XÁC MINH - GIÁ LỊCH SỬ 2024: xác minh đăng ký/chốt phí theo bản cũ trước khi giá 2026 có hiệu lực; không tự chuyển ưu đãi 2026 vào gói cũ.');
@@ -45,9 +49,11 @@ class IndependentCalculator{
   cells.AL=label&&label!=='0'?match.ruleKey||'OTHER':'NONE';cells.BO=match.issues[0]||'OK';cells.CH='OK';
   let loyaltyMissing=false,straightMissing=false;const discountComponents=[],monthComponents=[];
   const awardMonths=(kind,months)=>{if(number(months)&&months>0)monthComponents.push({kind,months});};
-  const legacy=label&&label!=='0'?legacyDiscountFor(pricing,discountOffers(label),context):null;
+  const legacy=!hubActive&&label&&label!=='0'?legacyDiscountFor(pricing,discountOffers(label),context):null;
+  if(hub?.error){cells.BO=hub.error;checks.push(hub.error);}
+  if(hubActive){cells.N=hub.discount;cells.AL='HUB_POLICY';cells.BO='OK';discountComponents.push(...hub.components);checks.push(...hub.checks);}
   if(legacy){cells.N=legacy.amount;cells.AL=pricing.policyKey;checks.push(...legacy.checks);discountComponents.push(...legacy.components);}
-  if(!legacy&&label&&label!=='0'&&pricing&&!pricing.short){
+  if(!hubActive&&!legacy&&label&&label!=='0'&&pricing&&!pricing.short){
    const terms=discountOffers(label),matches=terms.map(s=>customOffer?match:discountPolicyMatch(s,cells.D));
    const typedOffer=pricing.discountLabels?.length&&discountOffers(label).every(offer=>pricing.discountLabels.some(known=>priceText(offer)===priceText(known)));
    const base=/học bổng (đồng hành|ghi danh)|new price 2026.*(đồng hành|ghi danh)/i.test(label)&&pricing.phase==='base'||typedOffer;
@@ -120,8 +126,9 @@ class IndependentCalculator{
    if(!issue&&!voucherCenterApplies(voucher.center,cells.B))issue=`CHECK - GIFTCODE SAI CENTER (voucher: ${voucher.center}; hồ sơ: ${cells.B??'chưa có'})`;
    if(!issue&&(voucher.type==='amount'||number(cells.M)&&number(cells.N))){
     const basis=voucher.percentBasis&&voucher.percentBasis!=='policy-default'?voucher.percentBasis:voucherBasisFor(data,cells.D);
-    const base=basis==='gross'?cells.M:cells.M-cells.N;let amount=voucher.type==='percent'?Math.round(base*voucher.rate):voucher.amount;
-    if(voucher.type==='percent'){if(number(voucher.minimum))amount=Math.max(amount,voucher.minimum);if(voucher.maximum>0)amount=Math.min(amount,voucher.maximum);}
+    const base=basis==='gross'?cells.M:cells.M-cells.N,viaHub=hubActive&&number(hub.giftcode)&&(!voucher.percentBasis||voucher.percentBasis==='policy-default');let amount=viaHub?hub.giftcode:voucher.type==='percent'?Math.round(base*voucher.rate):voucher.amount;
+    if(voucher.type==='percent'&&!viaHub){if(!hubActive&&number(voucher.minimum))amount=Math.max(amount,voucher.minimum);const maximum=voucher.maximum??policyVoucher(group.hubPolicy,code)?.maximum;if(maximum>0)amount=Math.min(amount,maximum);if(hubActive)amount=roundHubMoney(Math.floor(amount));}
+    if(hubActive&&voucher.minimum>0)checks.push('XÁC MINH - HUB MINIMUM VOUCHER: xác nhận điều kiện số tiền tối thiểu của mã; không tự coi là sàn tiền giảm.');
     if(!number(amount)||amount<0)issue='CHECK - GIFTCODE SAI GIÁ TRỊ';else {cells.O=amount;cells.CI='OK'}
    }else if(!issue)issue='CHECK - CHƯA CÓ CƠ SỞ TÍNH GIFTCODE';
    if(issue)cells.CI=issue;else if(approvalIssue)cells.CI=approvalIssue;
@@ -132,11 +139,11 @@ class IndependentCalculator{
   cells.Q=number(cells.M)&&number(cells.N)&&number(cells.O)?Math.max(0,cells.M-cells.N-cells.O):null;
   const hoursPending=[];
   if(discountPending)hoursPending.push('Chưa đọc đủ chương trình Discount apply và tháng tặng của CT tổng.');
-  if(!legacy&&!customOffer&&discountOffers(label).some(offer=>{const item=discountPolicyMatch(offer,cells.D);return ['straight','months','referral'].includes(item.kind)&&(!item.ruleKey||item.issues.length);}))hoursPending.push('Nhãn tháng tặng chưa khớp quy tắc được xác minh.');
+  if(!hubActive&&!legacy&&!customOffer&&discountOffers(label).some(offer=>{const item=discountPolicyMatch(offer,cells.D);return ['straight','months','referral'].includes(item.kind)&&(!item.ruleKey||item.issues.length);}))hoursPending.push('Nhãn tháng tặng chưa khớp quy tắc được xác minh.');
   if(loyaltyMissing)hoursPending.push('Chưa chốt điều kiện tháng loyalty.');
   if(straightMissing)hoursPending.push('Chưa xác minh trả thẳng và ngày đóng đủ.');
   if(/SPLIT$/.test(String(pricing?.pkg))&&options.cells?.AT!=='YES'&&!reviewed('sibling')){hoursPending.push('Chưa đủ điều kiện gói sibling chia đôi.');checks.push('XÁC MINH - SIBLING: đối chiếu hai CT, hai học viên, quan hệ và ngày full cùng ngày.');}
-  const courseHours=courseHourTotals(pricing,monthComponents,data.policy.hourFactor,hoursPending);
+  const courseHours=hubActive?{unit:pricing.unit,baseWeeks:pricing.weeks,weeklyHours:pricing.hours,baseMonths:pricing.months,factor:null,baseHours:hub.baseHours,bonusMonths:hub.giftMonths,extraHours:hoursPending.length?null:hub.extraHours,totalHours:hoursPending.length?null:hub.totalHours,components:hub.components.filter(c=>c.kind==='months'),pending:hoursPending}:courseHourTotals(pricing,monthComponents,data.policy.hourFactor,hoursPending);
   cells.extraHours=courseHours.extraHours;cells.R=courseHours.totalHours;
   cells.W=number(account.net)?account.net:null;cells.Y=group.raw.AJ??null;
   const actualTerm=typeof cells.Y==='number'?cells.Y:/^\d+(?:\.\d+)?/.test(text(cells.Y))?parseFloat(cells.Y):null;
@@ -157,7 +164,7 @@ class IndependentCalculator{
   cells.ctCheck=reconciliation.status;cells.promoCheck=promotion.status;cells.contractTotal=account.ct||'';cells.ctNet=account.ct?account.net:null;
   const complete=['Z','AA','AB','AC','AD'].every(k=>number(cells[k])&&Math.abs(cells[k])<=1);
   cells.AF=complete&&cells.AE==='OK'&&cells.BD==='OK'&&cells.BO==='OK'&&['OK','NO GIFTCODE'].includes(cells.CI)&&!promotion.blocking&&!reconciliation.blocking?'OK':'CHECK';
-  cells.AN=unique([pricing?.key?'Khóa giá: '+pricing.key:'',pricing?pricing.refs.map(r=>r.file+' · '+r.sheet+' · dòng '+r.row+(r.cell?' · ô '+r.cell:'')).join('; '):'Chưa có quy tắc giá đúng Course fee / giờ / gói / ngày.',pricing?.short&&number(pricing.monthly)?'Giá gốc gói lẻ = '+pricing.monthly.toLocaleString('vi-VN')+' VND/tháng chưa giảm × '+pricing.months+' tháng. Discount và Giftcode tính riêng.':'',number(cells.Q)?'Phải đóng = giá niêm yết − discount − giftcode. Transfer là phân bổ tiền, không trừ học phí lần hai.':'Chưa đủ dữ liệu để tính; ô trống không được coi là 0.',code?((context.voucherBasis&&context.voucherBasis!=='policy-default'?context.voucherBasis:voucherBasisFor(data,cells.D))==='gross'?'Giftcode % trên giá gốc trước Discount; kiểm tra căn cứ phê duyệt của mã.':'Giftcode % trên giá gốc trừ Discount; theo căn cứ phê duyệt của mã.'):'',number(cells.extraHours)?'Giờ tặng = '+courseHours.bonusMonths+' tháng × '+courseHours.weeklyHours+' giờ/tuần × '+(courseHours.factor===25/6?'25/6':courseHours.factor)+'; tổng giờ làm tròn sau khi cộng, không cộng lại giờ tặng lần hai.':'',loyaltyMissing?'Cần lịch sử học phí và ngày dừng học để xét loyalty.':'',...promotion.checks]).join(' | ');
+  cells.AN=unique([pricing?.key?'Khóa giá: '+pricing.key:'',pricing?pricing.refs.map(r=>r.file+' · '+r.sheet+' · dòng '+r.row+(r.cell?' · ô '+r.cell:'')).join('; '):'Chưa có quy tắc giá đúng Course fee / giờ / gói / ngày.',pricing?.short&&number(pricing.monthly)?'Giá gốc gói lẻ = '+pricing.monthly.toLocaleString('vi-VN')+' VND/tháng chưa giảm × '+pricing.months+' tháng. Discount và Giftcode tính riêng.':'',number(cells.Q)?'Phải đóng = giá niêm yết − discount − giftcode. Transfer là phân bổ tiền, không trừ học phí lần hai.':'Chưa đủ dữ liệu để tính; ô trống không được coi là 0.',code&&hubActive?'Giftcode tính theo thứ tự và trần gốc của mã; đối chiếu cấu hình Hub và căn cứ duyệt.':code?((context.voucherBasis&&context.voucherBasis!=='policy-default'?context.voucherBasis:voucherBasisFor(data,cells.D))==='gross'?'Giftcode % trên giá gốc trước Discount; kiểm tra căn cứ phê duyệt của mã.':'Giftcode % trên giá gốc trừ Discount; theo căn cứ phê duyệt của mã.'):'',number(cells.extraHours)?hubActive?'Giờ tặng và tổng giờ tính theo thời lượng của PriceId '+group.hubPolicy.product.priceId+' trên Hub; tổng giờ làm tròn sau khi cộng.':'Giờ tặng = '+courseHours.bonusMonths+' tháng × '+courseHours.weeklyHours+' giờ/tuần × '+(courseHours.factor===25/6?'25/6':courseHours.factor)+'; tổng giờ làm tròn sau khi cộng, không cộng lại giờ tặng lần hai.':'',loyaltyMissing?'Cần lịch sử học phí và ngày dừng học để xét loyalty.':'',...promotion.checks]).join(' | ');
   return {...record,cells,context,errors:[],reconciliation,promotion,pricing,tolerance,discountComponents,courseHours};
  }
 }

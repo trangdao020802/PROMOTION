@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import {backgroundRuntime} from './helpers/existing-hub-runtime.mjs';
+import {hubFixture} from './helpers/hub-policy-fixture.mjs';
 const origin='https://hub24.apollo.vn:7777',channel='promotion-hub/existing-tab/v1';
 const course={ct:'QA2610-CT-000004',student:'QA-NETWORK',url:origin+'/contract/detail/12345'};
 const load=(context,names)=>{for(const name of names)vm.runInContext(fs.readFileSync(new URL('../reference/hub/'+name,import.meta.url),'utf8'),context);};
@@ -84,6 +85,16 @@ test('the existing Angular GET client can read immediately with its real role, w
 test('a managed inner frame projects its own request and sends only requested fields to its parent',async()=>{
  const r=mainRuntime({managed:true});await r.context.window.fetch(origin+'/qa/GetContractDetail?contractId=12345');await drain();assert.equal(r.messages.length,0);
  r.send({type:'activate',course},r.context.window.parent);assert.equal(r.messages.at(-1).type,'course');assert.equal(r.messages.at(-1).id,'qa-main');assert.ok(!JSON.stringify(r.messages).includes('PRIVATE-DO-NOT-COPY'));assert.equal(r.calls.length,1);
+});
+test('one requested CT invokes the authenticated lookup services and publishes only scoped rule metadata',async()=>{
+ const r=mainRuntime(),f=hubFixture(),calls=[],root={};r.context.setTimeout=setTimeout;r.context.clearTimeout=clearTimeout;r.context.document={querySelector:()=>root};
+ const service={
+  getContractDetail:p=>{calls.push('detail');new r.XHR().open('GET',origin+'/api/Contract/GetContractDetail?contractId='+p.contractId+'&userRoleId='+p.userRoleId);return Promise.resolve(f.detail);},
+  getContractInfoForUpdate:p=>(calls.push('info'),Promise.resolve(f.info)),getCoursePrice:p=>(calls.push('price'),Promise.resolve([f.price])),getApplicableGroupDiscount:p=>(calls.push('groups'),Promise.resolve(f.groups)),
+  update:()=>{throw Error('Contract writes forbidden');},create:()=>{throw Error('Contract writes forbidden');}
+ };
+ r.context.window.angular={element:()=>({injector:()=>({get:name=>name==='$rootScope'?{sessionInfo:{UserRoleId:41}}:service})})};
+ r.send({type:'read-course',course});await drain();const result=r.messages.find(m=>m.type==='course');assert.ok(result?.projection.hubPolicy);assert.deepEqual(calls,['detail','info','price','groups']);assert.equal(result.projection.hubPolicy.product.unitPrice,3225000);assert.ok(!JSON.stringify(result).includes('PRIVATE-NEVER-COPY'));assert.equal(r.calls.length,0);
 });
 function isolatedRuntime({blocked=false}={}){
  let clock=0,next=1;const listeners=[],timers=new Map(),deadlines=new Map(),messages=[],posts=[],frames=[];

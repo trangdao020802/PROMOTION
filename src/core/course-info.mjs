@@ -2,6 +2,7 @@
 // total hours, nor copy the package of a retired/intermediate CT.
 import {pricingIdentity,weeklyHours,priceText,packageIdentity,isWeeklyCourse} from './pricing-key.mjs';
 import {normalizeHubDiscount} from './hub-discount.mjs';
+import {validateHubPolicy} from './hub-policy.mjs';
 const columns={H:'courseFee',I:'hoursPerWeek',J:'package',K:'giftcode',L:'discount'};
 const text=v=>String(v??'').trim();
 const present=v=>v!==null&&v!==undefined&&!['','0','-','—','N/A'].includes(text(v).toUpperCase());
@@ -46,6 +47,9 @@ export function applyCourseInfo(book,group,hubSources=[]){
  if(group.noCTInvoice&&!course.complete)group.warnings.push(NO_CT+'; bổ sung các trường khóa học còn thiếu từ CT nhận / Export');
  if(exact.length===1){const e=exact[0];if(e.center)group.cells.B=e.center;if(e.centerName)group.cells.A=e.centerName;if(e.contractType)group.raw.G=e.contractType;}
  const hub=hubSources.filter(e=>e.ct===group.ct&&e.student===String(group.cells.F));
+ const policies=hub.filter(e=>validateHubPolicy(e.hubPolicy)&&e.hubPolicy.ct===group.ct);
+ group.hubPolicy=policies.length===1?policies[0].hubPolicy:null;
+ group.hubPolicyError=hub.find(e=>e.hubPolicyError)?.hubPolicyError??null;
  for(const [field,col]of [['groupKoc','X'],['contractType','G']]){const known=[...new Set(hub.map(e=>text(e[field])).filter(Boolean))];if(known.length===1&&!text(group.raw[col]))group.raw[col]=known[0];else if(known.length>1||known.length===1&&text(group.raw[col])&&text(group.raw[col])!==known[0])group.warnings.push(field+': thông tin trên Hub khác nguồn CT; cần đối chiếu.');}
 }
 export function withCourseSources(book,sources){

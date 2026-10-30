@@ -1,5 +1,6 @@
 import {courseRequest,coursePayload,COURSE_FIELDS} from './hub-course.mjs';
 import {normalizeHubDiscount} from './hub-discount.mjs';
+export {readHubPolicy} from './hub-policy.mjs';
 export const COURSE_NETWORK_CHANNEL='promotion-hub/course-network/v1';
 const HUB='https://hub24.apollo.vn:7777';
 const text=v=>typeof v==='string'?v.trim().replace(/\s+/g,' '):'';
@@ -95,5 +96,5 @@ export function parseContractDetailProjection(projection,expected,domPayload=nul
    values[key]=codes[0]??([course[key],root[key],domPayload?.[key]].includes('0')?'0':null);
   }else values[key]=course[key]??root[key]??domPayload?.[key]??null;
  }
- const payload=coursePayload({...request,...values},request);return payload?{payload,via:domPayload?'network+dom':'network'}:{error:'format'};
+ const payload=coursePayload({...request,...values,...(projection.hubPolicy?{hubPolicy:projection.hubPolicy}:{}),...(projection.hubPolicyError?{hubPolicyError:projection.hubPolicyError}:{})},request);return payload?{payload,via:domPayload?'network+dom':'network'}:{error:'format'};
 }
