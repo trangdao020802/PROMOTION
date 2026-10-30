@@ -114,6 +114,7 @@ export async function fillContractInputs(rows,io){
  for(const row of rows){
   if(io.signal?.aborted)break;
   const ct=text(row.ct||row.cells.contractTotal),student=text(row.cells.F);
+  let stage='input';
   try{
    io.progress?.('Đang lấy Input theo '+ct+'…');
    let link=await io.loadLink(ct);
@@ -126,12 +127,17 @@ export async function fillContractInputs(rows,io){
    const expected={ct,student,url:link.url},payload=coursePayload(await io.read(expected),expected);
    if(!payload)throw Error('Thông tin trả về không khớp CT / Student ID.');
    if(io.signal?.aborted)break;
-   const saved=await io.save(row,payload),completion=await io.afterSave?.(row,payload,saved),checkpoint=await io.checkpoint?.(row,payload,saved);
+   const saved=await io.save(row,payload);
+   stage='voucher';
+   const completion=await io.afterSave?.(row,payload,saved);
+   stage='checkpoint';
+   const checkpoint=await io.checkpoint?.(row,payload,saved);
    results.push({ct,status:checkpoint?.complete===false?'partial':'saved',fields:COURSE_FIELDS.filter(k=>payload[k]!==null),missing:checkpoint?.missing??[],...(completion?{voucher:completion}:{})});io.saved?.(row,payload);
   }catch(e){
    if(io.signal?.aborted)break;
-   results.push({ct,status:'check',message:String(e.message??e)});
-   if(!['index_unresolved','not_found','course_invalid','course_empty','course_unavailable'].includes(e.code))break;
+   const skippedVoucher=stage==='voucher'&&(['timeout','hub_timeout'].includes(e.code)||/^voucher_/.test(e.code??''));
+   results.push({ct,status:'check',message:String(e.message??e)+(skippedVoucher?' Bỏ qua Voucher của CT này trong lượt hiện tại; tiếp tục CT khác. CT còn thiếu sẽ được thử lại khi lấy tiếp.':''),...(skippedVoucher?{voucher:{state:'unavailable'}}:{})});
+   if(!skippedVoucher&&!['index_unresolved','not_found','course_invalid','course_empty','course_unavailable'].includes(e.code))break;
   }
   io.update?.([...results]);
  }

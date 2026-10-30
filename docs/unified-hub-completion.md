@@ -14,7 +14,7 @@ Khi nhập chính sách tuần mới, dùng `variant=weekly`, `weeks`, `packageK
 2. Web tự tiếp tục tìm link còn thiếu và đọc Input của các CT tổng. Lượt gắn link hàng loạt cũng chuyển sang hoàn thiện các CT đang lọc sau khi lưu link.
 3. Course info được đọc đúng CT / Student ID từ GetContractDetail, ListCourseInfo hoặc trang chi tiết có nhãn. Discount apply lấy tên chương trình trong ngoặc ngoài, giữ ngoặc bên trong.
 4. Sau khi lưu Course info, Giftcode No còn thiếu thông tin được tra đúng mã đầy đủ; đọc đơn vị %/VND, center, ngày và học viên từ Voucher/List gift code. Lưu voucher và tính lại ngay các CT dùng mã đó.
-5. Chỉ ghi hoàn tất CT sau khi nguồn Input và bước voucher đã lưu. Hết giờ hoặc dừng, CT đọc dở còn trong hàng chờ. Lần lấy tiếp bỏ qua CT đã hoàn tất trong cùng lượt. Một lượt mới sau khi lượt trước đã xong sẽ đọc lại dữ liệu mới.
+5. Chỉ ghi hoàn tất CT sau khi nguồn Input và bước voucher đã đủ và đã lưu. Voucher hết thời gian chờ, thiếu trường hoặc không khớp hồ sơ chỉ giữ CT đó ở CHECK và chuyển sang CT tiếp theo. Input đã lưu và ô nhập tay được giữ; phần Voucher đọc được có thể lưu nháp, không đánh dấu CT hoàn tất. Lần lấy tiếp thử lại CT còn thiếu và bỏ qua CT đã hoàn tất trong cùng lượt. Lỗi cầu nối, phiên đăng nhập, lưu dữ liệu hoặc thao tác Dừng vẫn dừng lượt và giữ tiến độ. Một lượt mới sau khi lượt trước đã xong sẽ đọc lại dữ liệu mới.
 
 Thay đổi trang Check installment/Quy tắc trong ứng dụng không hủy bộ điều khiển đang chạy. Chỉnh sửa tay vẫn được ưu tiên; nguồn khác giá trị đang giữ cần đối chiếu. Việc đọc đúng CT không suy ra rằng hai CT cùng Student ID là một CT tổng: gom tiền tiếp tục theo chứng từ và Transfer đã xác minh. CT chưa được nối duy nhất vẫn chờ kiểm tra.
 

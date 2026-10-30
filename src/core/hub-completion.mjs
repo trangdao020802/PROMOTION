@@ -19,7 +19,9 @@ export async function completeContractVoucher(row,payload,saved,io){
  if(!voucherNeedsRead(previous))return {state:'known',code};
  io.progress?.('Đang đọc Voucher '+code+' trong nền…');
  const source=await io.readVoucher(code);if(io.signal?.aborted)throw Object.assign(Error('Đã dừng tra Voucher.'),{code:'cancelled'});
- const initial=voucherInput({...previous,code}),merged=mergeHubVoucher(initial,source,voucherRecordProfile(current));
+ const initial=voucherInput({...previous,code});let merged;
+ try{merged=mergeHubVoucher(initial,source,voucherRecordProfile(current));}
+ catch(e){throw Object.assign(Error(String(e.message??e)),{code:'voucher_invalid'});}
  // Automatic completion fills gaps. Explicit values remain visible for review.
  const conflicts=[];
  for(const key of ['label','studentId','studentName','center','startDate','endDate','type','amount','rate','minimum','maximum']){
@@ -27,5 +29,7 @@ export async function completeContractVoucher(row,payload,saved,io){
  }
  if(conflicts.length){merged.status='PENDING';merged.approvalNote=(merged.approvalNote+'\nHub khác giá trị đang giữ: '+conflicts.join(', ')+'. Cần đối chiếu trước khi duyệt.').slice(-2000);}
  const result=await io.saveVoucher(merged,previous?.version??0);
+ const missing=voucherMissing(voucherInput({...merged,...result}));
+ if(missing)throw Object.assign(Error('Đã lưu phần Voucher đọc được; '+missing),{code:'voucher_incomplete'});
  return {state:conflicts.length?'review':'saved',code,status:result.status??merged.status};
 }

@@ -308,6 +308,7 @@ var PromotionHubCourse = (() => {
     for (const row of rows) {
       if (io.signal?.aborted) break;
       const ct = text(row.ct || row.cells.contractTotal), student = text(row.cells.F);
+      let stage = "input";
       try {
         io.progress?.("\u0110ang l\u1EA5y Input theo " + ct + "\u2026");
         let link = await io.loadLink(ct);
@@ -321,13 +322,18 @@ var PromotionHubCourse = (() => {
         const expected = { ct, student, url: link.url }, payload = coursePayload(await io.read(expected), expected);
         if (!payload) throw Error("Th\xF4ng tin tr\u1EA3 v\u1EC1 kh\xF4ng kh\u1EDBp CT / Student ID.");
         if (io.signal?.aborted) break;
-        const saved = await io.save(row, payload), completion = await io.afterSave?.(row, payload, saved), checkpoint = await io.checkpoint?.(row, payload, saved);
+        const saved = await io.save(row, payload);
+        stage = "voucher";
+        const completion = await io.afterSave?.(row, payload, saved);
+        stage = "checkpoint";
+        const checkpoint = await io.checkpoint?.(row, payload, saved);
         results.push({ ct, status: checkpoint?.complete === false ? "partial" : "saved", fields: COURSE_FIELDS.filter((k) => payload[k] !== null), missing: checkpoint?.missing ?? [], ...completion ? { voucher: completion } : {} });
         io.saved?.(row, payload);
       } catch (e) {
         if (io.signal?.aborted) break;
-        results.push({ ct, status: "check", message: String(e.message ?? e) });
-        if (!["index_unresolved", "not_found", "course_invalid", "course_empty", "course_unavailable"].includes(e.code)) break;
+        const skippedVoucher = stage === "voucher" && (["timeout", "hub_timeout"].includes(e.code) || /^voucher_/.test(e.code ?? ""));
+        results.push({ ct, status: "check", message: String(e.message ?? e) + (skippedVoucher ? " B\u1ECF qua Voucher c\u1EE7a CT n\xE0y trong l\u01B0\u1EE3t hi\u1EC7n t\u1EA1i; ti\u1EBFp t\u1EE5c CT kh\xE1c. CT c\xF2n thi\u1EBFu s\u1EBD \u0111\u01B0\u1EE3c th\u1EED l\u1EA1i khi l\u1EA5y ti\u1EBFp." : ""), ...skippedVoucher ? { voucher: { state: "unavailable" } } : {} });
+        if (!skippedVoucher && !["index_unresolved", "not_found", "course_invalid", "course_empty", "course_unavailable"].includes(e.code)) break;
       }
       io.update?.([...results]);
     }
