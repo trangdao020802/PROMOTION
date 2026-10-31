@@ -21,9 +21,12 @@ var PromotionHubCourseNetwork = (() => {
   var hub_course_network_exports = {};
   __export(hub_course_network_exports, {
     COURSE_NETWORK_CHANNEL: () => COURSE_NETWORK_CHANNEL,
+    contractRoot: () => contractRoot,
     courseDetailEndpoint: () => courseDetailEndpoint,
     parseContractDetailProjection: () => parseContractDetailProjection,
     projectContractDetail: () => projectContractDetail,
+    projectContractPayments: () => projectContractPayments,
+    projectHubContract: () => projectHubContract,
     readHubPolicy: () => readHubPolicy
   });
 
@@ -314,9 +317,88 @@ var PromotionHubCourseNetwork = (() => {
     }
   }
 
+  // src/core/hub-contract.mjs
+  var HUB_CONTRACT_SCHEMA = "apollo-hub-contract/v1";
+  var plain2 = (v) => !!v && typeof v === "object" && !Array.isArray(v);
+  var text2 = (v) => typeof v === "string" ? v.trim().replace(/\s+/g, " ") : "";
+  var id2 = (v) => /^[1-9]\d{0,14}$/.test(String(v ?? "")) ? String(v) : null;
+  var number = (v) => typeof v === "number" && Number.isFinite(v) && Math.abs(v) <= 1e13 ? v : null;
+  var date = (v) => typeof v === "string" && v.length <= 50 && /^\d{4}-\d\d-\d\d(?:$|T| )/.test(v) && Number.isFinite(Date.parse(v)) ? v.slice(0, 10) : null;
+  var exact = (v, names) => plain2(v) && Object.keys(v).every((k) => names.includes(k));
+  function hubList(v, max = 500) {
+    if (typeof v === "string" && v.length <= 1e6) {
+      try {
+        v = JSON.parse(v);
+      } catch {
+        return null;
+      }
+    }
+    return Array.isArray(v) && v.length <= max ? v : null;
+  }
+  function contractRoot(value) {
+    let level = [value];
+    const seen = /* @__PURE__ */ new Set();
+    for (let depth = 0; depth < 6 && level.length <= 40; depth++) {
+      const matches = level.filter((v) => plain2(v) && !seen.has(v) && (hubList(v.ListCourseInfo, 20) || hubList(v.CourseInfos, 20)));
+      if (matches.length) return matches.length === 1 ? matches[0] : null;
+      const next = [];
+      for (const v of level) {
+        if (!plain2(v) || seen.has(v)) continue;
+        seen.add(v);
+        for (const key of ["Data", "data", "Result", "result", "Model", "model", "Contract", "contractInfo", "item", "$vm", "vm"]) if (plain2(v[key])) next.push(v[key]);
+      }
+      level = next;
+    }
+    return null;
+  }
+  function contractDiscountFacts(root) {
+    const values = ["ListDiscount", "Discounts"].map((k) => hubList(root?.[k], 100)).filter(Boolean);
+    if (!values.length) return null;
+    const rows = values.find((v) => v.length) ?? values[0], result = [];
+    for (const r of rows) {
+      if (!plain2(r)) return null;
+      const group = text2(r.GroupDiscountName), name2 = normalizeHubDiscount(text2(r.DiscountName ?? r.Name)) ?? text2(r.DiscountName ?? r.Name);
+      const full = normalizeHubDiscount(group && name2 && !name2.toLowerCase().startsWith(group.toLowerCase()) ? group + " - " + name2 : name2);
+      if (!full || full === "0" || full.length > 2e3) return null;
+      const type = [1, 2, 3].includes(r.GroupDiscountTypeId) ? r.GroupDiscountTypeId : null;
+      result.push({ label: full, groupId: id2(r.GroupDiscountId), discountId: id2(r.DiscountId ?? r.ContractDiscountId), type, percent: number(r.PercentDiscount), amount: number(r.AmountDiscount), months: number(r.GiftMonths) });
+    }
+    return result;
+  }
+  function projectContractPayments(value, contractId) {
+    let list2 = hubList(value, 500);
+    if (!list2 && plain2(value)) {
+      if (value.ContractId != null && id2(value.ContractId) !== String(contractId)) return null;
+      for (const key of ["ListPayment", "Data", "data", "Result", "result"]) {
+        list2 = hubList(value[key], 500);
+        if (list2) break;
+      }
+    }
+    if (!list2) return null;
+    const rows = [];
+    for (const r of list2) {
+      if (!plain2(r) || r.ContractId != null && id2(r.ContractId) !== String(contractId) || !id2(r.PaymentId) || number(r.Amount) === null) return null;
+      const code = text2(r.PaymentCode);
+      if (code.length > 150 || code && !/^[A-Za-z0-9][A-Za-z0-9_.:/-]*$/.test(code)) return null;
+      rows.push({ id: id2(r.PaymentId), code, amount: number(r.Amount), totalAmount: number(r.TotalAmount), remaining: number(r.RemainAmount), typeId: id2(r.PaymentTypeId), type: text2(r.PaymentTypeName).slice(0, 200), method: text2(r.PaymentMethodTypeName ?? r.PaymentMethodName).slice(0, 200), scheduledDate: date(r.ScheduledDate), completeDate: date(r.CompleteDate), complete: typeof r.IsComplete === "boolean" ? r.IsComplete : null });
+    }
+    return new Set(rows.map((r) => r.id)).size === rows.length ? rows : null;
+  }
+  function projectHubContract(root, { payments = null, paymentState = "pending", capturedAt = (/* @__PURE__ */ new Date()).toISOString() } = {}) {
+    const result = { schema: HUB_CONTRACT_SCHEMA, ct: text2(root?.ContractNo ?? root?.ContractCode).toUpperCase(), contractId: id2(root?.ContractId ?? root?.Id), capturedAt, discounts: contractDiscountFacts(root), payments: { state: paymentState, rows: payments ?? [] } };
+    return validateHubContract(result) ? result : null;
+  }
+  function validateHubContract(v) {
+    if (!exact(v, ["schema", "ct", "contractId", "capturedAt", "discounts", "payments"]) || v.schema !== HUB_CONTRACT_SCHEMA || !/^\w+-CT-\d{4,20}$/.test(v.ct) || id2(v.contractId) !== v.contractId || typeof v.capturedAt !== "string" || !Number.isFinite(Date.parse(v.capturedAt))) return false;
+    if (v.discounts !== null && (!hubList(v.discounts, 100) || !v.discounts.every((d) => exact(d, ["label", "groupId", "discountId", "type", "percent", "amount", "months"]) && !!text2(d.label) && d.label.length <= 2e3 && ["groupId", "discountId"].every((k) => d[k] === null || id2(d[k]) === d[k]) && (d.type === null || [1, 2, 3].includes(d.type)) && ["percent", "amount", "months"].every((k) => d[k] === null || number(d[k]) === d[k] && d[k] >= 0 && d[k] <= (k === "percent" ? 100 : k === "months" ? 120 : 1e13))))) return false;
+    const p = v.payments;
+    if (!exact(p, ["state", "rows"]) || !["read", "pending", "unavailable"].includes(p.state) || !hubList(p.rows, 500) || p.state !== "read" && p.rows.length || new Set(p.rows.map((r) => r.id)).size !== p.rows.length) return false;
+    return p.rows.every((r) => exact(r, ["id", "code", "amount", "totalAmount", "remaining", "typeId", "type", "method", "scheduledDate", "completeDate", "complete"]) && id2(r.id) === r.id && typeof r.code === "string" && r.code.length <= 150 && (!r.code || /^[A-Za-z0-9][A-Za-z0-9_.:/-]*$/.test(r.code)) && number(r.amount) === r.amount && ["totalAmount", "remaining"].every((k) => r[k] === null || number(r[k]) === r[k]) && (r.typeId === null || id2(r.typeId) === r.typeId) && ["type", "method"].every((k) => typeof r[k] === "string" && r[k].length <= 200) && ["scheduledDate", "completeDate"].every((k) => r[k] === null || date(r[k]) === r[k]) && (r.complete === null || typeof r.complete === "boolean")) && JSON.stringify(v).length <= 3e5;
+  }
+
   // src/core/hub-course.mjs
   var HUB = "https://hub24.apollo.vn:7777";
-  var text2 = (v) => String(v ?? "").trim().replace(/\s+/g, " ");
+  var text3 = (v) => String(v ?? "").trim().replace(/\s+/g, " ");
   var COURSE_FIELDS = ["courseFee", "hoursPerWeek", "package", "giftcode", "discount", "groupKoc", "contractType"];
   function courseRequest(v) {
     if (!v || typeof v !== "object" || typeof v.ct !== "string" || typeof v.student !== "string" || typeof v.url !== "string") return null;
@@ -324,19 +406,19 @@ var PromotionHubCourseNetwork = (() => {
     if (!/^[A-Z0-9]+-CT-\d{4,20}$/.test(ct) || !/^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,149}$/.test(student) || Object.hasOwn(Object.prototype, student)) return null;
     try {
       const u = new URL(v.url);
-      if (u.origin !== HUB || u.username || u.password || u.hash || u.search || !/^\/contract\/detail\/[1-9]\d{0,14}\/?$/i.test(u.pathname)) return null;
-      return { ct, student, url: u.href };
+      if (u.origin !== HUB || u.username || u.password || u.hash || u.search || !/^\/contract\/detail\/[1-9]\d{0,14}\/?$/i.test(u.pathname) || v.readPolicy !== void 0 && typeof v.readPolicy !== "boolean") return null;
+      return { ct, student, url: u.href, ...v.readPolicy !== void 0 ? { readPolicy: v.readPolicy } : {} };
     } catch {
       return null;
     }
   }
   function coursePayload(v, expected) {
     const request = courseRequest(expected);
-    if (!request || !v || typeof v !== "object" || Object.keys(v).some((k) => !["ct", "student", "url", "hubPolicy", "hubPolicyError", ...COURSE_FIELDS].includes(k)) || v.ct !== request.ct || v.student !== request.student || v.url !== request.url) return null;
-    const result = { ...request };
+    if (!request || !v || typeof v !== "object" || Object.keys(v).some((k) => !["ct", "student", "url", "readPolicy", "hubContract", "hubPolicy", "hubPolicyError", ...COURSE_FIELDS].includes(k)) || v.ct !== request.ct || v.student !== request.student || v.url !== request.url) return null;
+    const result = { ct: request.ct, student: request.student, url: request.url };
     for (const key of COURSE_FIELDS) {
-      if (v[key] != null && (typeof v[key] !== "string" || !text2(v[key]) || text2(v[key]).length > (key === "discount" ? 2e3 : 200))) return null;
-      result[key] = v[key] == null ? null : key === "discount" ? normalizeHubDiscount(v[key]) : text2(v[key]);
+      if (v[key] != null && (typeof v[key] !== "string" || !text3(v[key]) || text3(v[key]).length > (key === "discount" ? 2e3 : 200))) return null;
+      result[key] = v[key] == null ? null : key === "discount" ? normalizeHubDiscount(v[key]) : text3(v[key]);
     }
     if (!COURSE_FIELDS.some((k) => result[k] !== null)) return null;
     if (result.giftcode && /^\d[\d.,\s]*\s*(?:vnd|vnđ|đ|₫|%)$/i.test(result.giftcode)) result.giftcode = null;
@@ -357,13 +439,17 @@ var PromotionHubCourseNetwork = (() => {
       if (!HUB_POLICY_ERRORS.includes(v.hubPolicyError)) return null;
       result.hubPolicyError = v.hubPolicyError;
     }
+    if (v.hubContract != null) {
+      if (!validateHubContract(v.hubContract) || v.hubContract.ct !== request.ct || v.hubContract.contractId !== request.url.replace(/\/$/, "").split("/").pop()) return null;
+      result.hubContract = v.hubContract;
+    }
     return result;
   }
 
   // src/core/hub-course-network.mjs
   var COURSE_NETWORK_CHANNEL = "promotion-hub/course-network/v1";
   var HUB2 = "https://hub24.apollo.vn:7777";
-  var text3 = (v) => typeof v === "string" ? v.trim().replace(/\s+/g, " ") : "";
+  var text4 = (v) => typeof v === "string" ? v.trim().replace(/\s+/g, " ") : "";
   var numberId = (v) => /^[1-9]\d{0,14}$/.test(String(v ?? "")) ? String(v) : null;
   function courseDetailEndpoint(value, detailURL, method = "GET") {
     try {
@@ -390,7 +476,7 @@ var PromotionHubCourseNetwork = (() => {
   };
   var scalar = (obj, names, max = 200) => {
     const value = pick(obj, names);
-    return typeof value === "string" && text3(value).length <= max ? text3(value) || null : null;
+    return typeof value === "string" && text4(value).length <= max ? text4(value) || null : null;
   };
   function listValue(value, limit) {
     if (typeof value === "string" && value.length <= 128e3 && /^\s*\[/.test(value)) {
@@ -421,14 +507,14 @@ var PromotionHubCourseNetwork = (() => {
       }
       if (!list2.length) absent = true;
       for (const entry of list2) {
-        let value = typeof entry === "string" ? text3(entry) : scalar(entry, itemNames, 2e3);
+        let value = typeof entry === "string" ? text4(entry) : scalar(entry, itemNames, 2e3);
         if (!value) {
           invalid = true;
           continue;
         }
         const group = withGroup && scalar(entry, ["GroupDiscountName"], 2e3);
         if (group) {
-          const name3 = normalizeHubDiscount(value) ?? value, fold2 = (v) => text3(v).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+          const name3 = normalizeHubDiscount(value) ?? value, fold2 = (v) => text4(v).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
           value = fold2(name3).startsWith(fold2(group)) ? name3 : group + " - " + name3;
         }
         values.push(value);
@@ -439,11 +525,11 @@ var PromotionHubCourseNetwork = (() => {
   }
   function giftcodeValue(obj) {
     let result = offer(obj, ["GiftcodeNo", "GiftCodeNumber", "Giftcode"], ["ListGiftCode", "ListGiftcodes", "GiftCodes"], ["GiftcodeNo", "GiftCodeNumber", "GiftCode", "Code"]);
-    const keys2 = Object.keys(obj ?? {}), key = (name2) => keys2.find((k) => k.toLowerCase() === name2.toLowerCase()), id2 = key("GiftCodeId"), code = key("GiftCode");
+    const keys2 = Object.keys(obj ?? {}), key = (name2) => keys2.find((k) => k.toLowerCase() === name2.toLowerCase()), id3 = key("GiftCodeId"), code = key("GiftCode");
     const amounts = ["GiftCodeDiscount", "GiftCodeDiscountAmount", "GiftCodeDiscountAmountMax"].map(key).filter(Boolean);
     const hasAmount = amounts.some((k) => obj[k] != null && obj[k] !== "" && Number(obj[k]) !== 0);
-    if (result === "0" && (id2 && obj[id2] != null && Number(obj[id2]) > 0 || hasAmount)) result = null;
-    if (result == null && id2 && code && [null, 0, "0"].includes(obj[id2]) && [null, ""].includes(obj[code]) && !hasAmount && ["ListGiftCode", "ListGiftcodes", "GiftCodes"].every((name2) => {
+    if (result === "0" && (id3 && obj[id3] != null && Number(obj[id3]) > 0 || hasAmount)) result = null;
+    if (result == null && id3 && code && [null, 0, "0"].includes(obj[id3]) && [null, ""].includes(obj[code]) && !hasAmount && ["ListGiftCode", "ListGiftcodes", "GiftCodes"].every((name2) => {
       const raw = pick(obj, [name2]);
       return raw == null || listValue(raw, 100)?.length === 0;
     })) result = "0";
@@ -455,7 +541,7 @@ var PromotionHubCourseNetwork = (() => {
     let hours = pick(obj, ["HourWeekName", "HowweekName", "HowWeekName", "HoursPerWeek", "HourPerWeek", "HourWeek", "HoursWeek"]);
     if (typeof hours === "number" && hours > 0 && hours <= 168) hours = hours + " hrs/week";
     if (typeof hours === "string") {
-      hours = text3(hours).replace(/^(\d+(?:[.,]\d+)?)\s*(?:giờ\s*\/\s*tuần|hours?\s*per\s*week)$/i, (_, n) => n.replace(",", ".") + " hrs/week");
+      hours = text4(hours).replace(/^(\d+(?:[.,]\d+)?)\s*(?:giờ\s*\/\s*tuần|hours?\s*per\s*week)$/i, (_, n) => n.replace(",", ".") + " hrs/week");
       if (/^\d+(?:\.\d+)?$/.test(hours)) hours += " hrs/week";
     }
     if (typeof hours !== "string" || !/^\d+(?:\.\d+)?\s*(?:hrs?|hours?)\s*\/\s*week$/i.test(hours) || !(parseFloat(hours) > 0 && parseFloat(hours) <= 168)) hours = null;
@@ -472,18 +558,13 @@ var PromotionHubCourseNetwork = (() => {
   function projectContractDetail(value, sourceURL, detailURL) {
     const source = courseDetailEndpoint(sourceURL, detailURL);
     if (!source) return null;
-    let objects = [value];
-    for (let depth = 0; depth < 4; depth++) {
-      const matches = objects.filter((v) => v && typeof v === "object" && !Array.isArray(v) && listValue(pick(v, ["ListCourseInfo", "CourseInfos"]), 20));
-      if (matches.length) {
-        if (matches.length !== 1) return null;
-        const root = matches[0], list2 = listValue(pick(root, ["ListCourseInfo", "CourseInfos"]), 20);
-        const id2 = pick(root, ["ContractId", "Id"]), ct = scalar(root, ["ContractNo", "ContractCode", "ContractNumber"]), student = scalar(root, ["StudentCode", "StudentNo", "StudentNumber", "KidCode"]);
-        if (id2 != null && !numberId(id2)) return null;
-        return { source, contractId: id2 == null ? null : numberId(id2), ct: ct?.toUpperCase() ?? null, student, fields: fields(root), courses: list2.map((row) => fields(row)) };
-      }
-      objects = objects.flatMap((v) => v && typeof v === "object" && !Array.isArray(v) ? ["Data", "data", "Result", "result", "Model", "model", "Contract", "contractInfo"].filter((k) => Object.hasOwn(v, k)).map((k) => v[k]) : []);
-      if (!objects.length) return null;
+    const root = contractRoot(value);
+    if (root) {
+      const lists = ["ListCourseInfo", "CourseInfos"].map((k) => listValue(pick(root, [k]), 20)).filter(Boolean), list2 = lists.find((l) => l.length) ?? lists[0];
+      const id3 = pick(root, ["ContractId", "Id"]), ct = scalar(root, ["ContractNo", "ContractCode", "ContractNumber"]), student = scalar(root, ["StudentCode", "StudentNo", "StudentNumber", "KidCode"]);
+      if (id3 != null && !numberId(id3)) return null;
+      const facts = projectHubContract(root), rootFields = fields(root), discountPending = ["ListDiscount", "Discounts"].some((k) => root[k] != null) && rootFields.discount == null;
+      return { source, contractId: id3 == null ? null : numberId(id3), ct: ct?.toUpperCase() ?? null, student, fields: rootFields, courses: list2.map((row) => fields(row)), ...discountPending ? { discountPending: true } : {}, ...facts ? { hubContract: facts } : {} };
     }
     return null;
   }
@@ -499,14 +580,14 @@ var PromotionHubCourseNetwork = (() => {
     for (const key of COURSE_FIELDS) {
       if (key === "discount") {
         const offers = [course[key], root[key], domPayload?.[key]].filter((v) => v && v !== "0");
-        values[key] = offers.length ? normalizeHubDiscount(offers.join(";")) : [course[key], root[key], domPayload?.[key]].includes("0") ? "0" : null;
+        values[key] = offers.length ? normalizeHubDiscount(offers.join(";")) : projection.discountPending ? null : [course[key], root[key], domPayload?.[key]].includes("0") ? "0" : null;
       } else if (key === "giftcode") {
         const codes = [...new Set([course[key], root[key], domPayload?.[key]].filter((v) => v && v !== "0"))];
         if (codes.length > 1) return { error: "conflict", fields: ["giftcode"] };
         values[key] = codes[0] ?? ([course[key], root[key], domPayload?.[key]].includes("0") ? "0" : null);
       } else values[key] = course[key] ?? root[key] ?? domPayload?.[key] ?? null;
     }
-    const payload = coursePayload({ ...request, ...values, ...projection.hubPolicy ? { hubPolicy: projection.hubPolicy } : {}, ...projection.hubPolicyError ? { hubPolicyError: projection.hubPolicyError } : {} }, request);
+    const payload = coursePayload({ ...request, ...values, ...projection.hubContract ? { hubContract: projection.hubContract } : {}, ...projection.hubPolicy ? { hubPolicy: projection.hubPolicy } : {}, ...projection.hubPolicyError ? { hubPolicyError: projection.hubPolicyError } : {} }, request);
     return payload ? { payload, via: domPayload ? "network+dom" : "network" } : { error: "format" };
   }
   return __toCommonJS(hub_course_network_exports);

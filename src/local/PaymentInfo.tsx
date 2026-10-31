@@ -1,5 +1,6 @@
 import React,{useId,useState} from 'react';
 import {paymentAllocations} from '../core/payment-allocations.mjs';
+import HubContractEvidence from './HubContractEvidence';
 
 function FlowIcon({kind='in'}:{kind?:string}){
  const paths:Record<string,React.ReactNode>={
@@ -32,6 +33,7 @@ export default function PaymentInfo({row,doc,SourceRefs,date,money}:any){
   </div>;
  };
  return <section className="payment-info" aria-label="Payment info"><h3>Payment info</h3>
+  <HubContractEvidence facts={row.hubContract}/>
   {data.originals.length>0&&<div className="payment-invoices"><h4>Hóa đơn gốc · PaymentList</h4><div className="ledger-scroll"><table className="payment-table"><thead><tr><th>Ngày hóa đơn gốc</th><th>VAT Invoice No.</th><th>Payment code / Thanh toán</th><th>Nguồn tiền · CT / DEP</th><th>Số tiền hóa đơn</th><th>Truy vết / căn cứ</th></tr></thead><tbody>{data.originals.map((r:any)=><tr className="payment-original" key={r.id} data-invoice={r.id}>{originalCells(r)}<td><SourceRefs refs={r.refs??[]}/></td></tr>)}</tbody></table></div></div>}
   {!row.receipts?.length&&<p className="evidence-caption">Chưa tìm thấy hóa đơn thu gốc trong bộ nguồn.</p>}
   {row.kind==='contract'?<>

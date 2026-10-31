@@ -1,5 +1,7 @@
 import {courseRequest,coursePayload,COURSE_FIELDS} from './hub-course.mjs';
 import {normalizeHubDiscount} from './hub-discount.mjs';
+import {contractRoot,projectHubContract} from './hub-contract.mjs';
+export {contractRoot,projectContractPayments,projectHubContract} from './hub-contract.mjs';
 export {readHubPolicy} from './hub-policy.mjs';
 export const COURSE_NETWORK_CHANNEL='promotion-hub/course-network/v1';
 const HUB='https://hub24.apollo.vn:7777';
@@ -64,17 +66,13 @@ function fields(obj){
 // cookie, or full JSON response crosses from the page into Promotion.
 export function projectContractDetail(value,sourceURL,detailURL){
  const source=courseDetailEndpoint(sourceURL,detailURL);if(!source)return null;
- let objects=[value];
- for(let depth=0;depth<4;depth++){
-  const matches=objects.filter(v=>v&&typeof v==='object'&&!Array.isArray(v)&&listValue(pick(v,['ListCourseInfo','CourseInfos']),20));
-  if(matches.length){
-   if(matches.length!==1)return null;const root=matches[0],list=listValue(pick(root,['ListCourseInfo','CourseInfos']),20);
+ const root=contractRoot(value);
+ if(root){
+   const lists=['ListCourseInfo','CourseInfos'].map(k=>listValue(pick(root,[k]),20)).filter(Boolean),list=lists.find(l=>l.length)??lists[0];
    const id=pick(root,['ContractId','Id']),ct=scalar(root,['ContractNo','ContractCode','ContractNumber']),student=scalar(root,['StudentCode','StudentNo','StudentNumber','KidCode']);
    if(id!=null&&!numberId(id))return null;
-   return {source,contractId:id==null?null:numberId(id),ct:ct?.toUpperCase()??null,student,fields:fields(root),courses:list.map(row=>fields(row))};
-  }
-  objects=objects.flatMap(v=>v&&typeof v==='object'&&!Array.isArray(v)?['Data','data','Result','result','Model','model','Contract','contractInfo'].filter(k=>Object.hasOwn(v,k)).map(k=>v[k]):[]);
-  if(!objects.length)return null;
+   const facts=projectHubContract(root),rootFields=fields(root),discountPending=['ListDiscount','Discounts'].some(k=>root[k]!=null)&&rootFields.discount==null;
+   return {source,contractId:id==null?null:numberId(id),ct:ct?.toUpperCase()??null,student,fields:rootFields,courses:list.map(row=>fields(row)),...(discountPending?{discountPending:true}:{}),...(facts?{hubContract:facts}:{})};
  }
  return null;
 }
@@ -89,12 +87,12 @@ export function parseContractDetailProjection(projection,expected,domPayload=nul
  for(const key of COURSE_FIELDS){
   if(key==='discount'){
    const offers=[course[key],root[key],domPayload?.[key]].filter(v=>v&&v!=='0');
-   values[key]=offers.length?normalizeHubDiscount(offers.join(';')):[course[key],root[key],domPayload?.[key]].includes('0')?'0':null;
+   values[key]=offers.length?normalizeHubDiscount(offers.join(';')):projection.discountPending?null:[course[key],root[key],domPayload?.[key]].includes('0')?'0':null;
   }else if(key==='giftcode'){
    const codes=[...new Set([course[key],root[key],domPayload?.[key]].filter(v=>v&&v!=='0'))];
    if(codes.length>1)return {error:'conflict',fields:['giftcode']};
    values[key]=codes[0]??([course[key],root[key],domPayload?.[key]].includes('0')?'0':null);
   }else values[key]=course[key]??root[key]??domPayload?.[key]??null;
  }
- const payload=coursePayload({...request,...values,...(projection.hubPolicy?{hubPolicy:projection.hubPolicy}:{}),...(projection.hubPolicyError?{hubPolicyError:projection.hubPolicyError}:{})},request);return payload?{payload,via:domPayload?'network+dom':'network'}:{error:'format'};
+ const payload=coursePayload({...request,...values,...(projection.hubContract?{hubContract:projection.hubContract}:{}),...(projection.hubPolicy?{hubPolicy:projection.hubPolicy}:{}),...(projection.hubPolicyError?{hubPolicyError:projection.hubPolicyError}:{})},request);return payload?{payload,via:domPayload?'network+dom':'network'}:{error:'format'};
 }

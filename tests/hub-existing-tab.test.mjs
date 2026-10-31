@@ -52,7 +52,7 @@ function mainRuntime({managed=false}={}){
  class XHR{open(method,url){this.method=method;this.url=url;}addEventListener(type,fn){xhrLoads.push({xhr:this,fn});}}
  const response=(url,value)=>{const bytes=new TextEncoder().encode(JSON.stringify(value));return {ok:true,url,body:{getReader:()=>{let read=false;return {read:async()=>read?{done:true}:(read=true,{done:false,value:bytes}),cancel:async()=>{}};}},clone(){return response(url,value);}};};
  const originalFetch=async(url,options)=>{calls.push({url,options});return response(url,raw());};
- const context=vm.createContext({URL,Date,Promise,WeakMap,TextDecoder,AbortController,console,location:{origin,pathname,href:origin+pathname}});
+ const context=vm.createContext({URL,Date,Promise,WeakMap,TextDecoder,AbortController,console,setTimeout,clearTimeout,location:{origin,pathname,href:origin+pathname}});
  context.window={name:managed?'promotion-hub-read:qa-main':'',fetch:originalFetch,XMLHttpRequest:XHR,addEventListener:(type,fn)=>{if(type==='message')listeners.push(fn);},postMessage:m=>messages.push(m)};
  context.window.parent=managed?{postMessage:m=>messages.push(m)}:context.window;context.window.top=managed?{}:context.window;
  load(context,['core.js','index-core.js','course-core.js','course-network-core.js','reuse-agent-main.js']);
@@ -95,6 +95,27 @@ test('one requested CT invokes the authenticated lookup services and publishes o
  };
  r.context.window.angular={element:()=>({injector:()=>({get:name=>name==='$rootScope'?{sessionInfo:{UserRoleId:41}}:service})})};
  r.send({type:'read-course',course});await drain();const result=r.messages.find(m=>m.type==='course');assert.ok(result?.projection.hubPolicy);assert.deepEqual(calls,['detail','info','price','groups']);assert.equal(result.projection.hubPolicy.product.unitPrice,3225000);assert.ok(!JSON.stringify(result).includes('PRIVATE-NEVER-COPY'));assert.equal(r.calls.length,0);
+});
+test('an existing application frame supplies its authenticated client and both contract lists without booting another page',async()=>{
+ const r=mainRuntime(),calls=[],scope={sessionInfo:{UserRoleId:51}},doc={querySelector:()=>({})};
+ r.context.document=doc;
+ const service={getContractDetail:p=>{calls.push(['detail',p]);return Promise.resolve({...raw(),ListDiscount:[{GroupDiscountName:'2026 October - Promotion Discount',DiscountName:'18 months',PercentDiscount:15}]});},getContractPayment:p=>{calls.push(['payments',p]);return Promise.resolve([{PaymentId:17,PaymentCode:'QA2610-PAY-000004',Amount:64260000,RemainAmount:0,IsComplete:true,Token:'PRIVATE-DO-NOT-COPY'}]);},getCoursePrice:()=>{throw Error('Local policies are used; no extra price call');},getApplicableGroupDiscount:()=>{throw Error('No group call');}};
+ const frame={location:{origin},document:doc,angular:{element:()=>({injector:()=>({get:name=>name==='$rootScope'?scope:service})})},frames:[]};
+ const denied={get location(){throw Error('cross origin');}};r.context.window.frames={0:denied,1:frame,length:2};
+ r.send({type:'read-course',course:{...course,readPolicy:false}});await drain();
+ const result=r.messages.find(m=>m.type==='course');assert.ok(result);assert.equal(result.projection.fields.discount,'2026 October - Promotion Discount - 18 months');
+ assert.equal(result.projection.hubContract.payments.rows[0].amount,64260000);assert.equal(result.projection.hubContract.payments.state,'read');
+ assert.equal(calls.find(c=>c[0]==='detail')[1].userRoleId,51);assert.equal(calls.find(c=>c[0]==='payments')[1].contractId,'12345');
+ assert.equal(r.calls.length,0);assert.ok(!JSON.stringify(result).includes('PRIVATE-DO-NOT-COPY'));assert.equal(r.context.location.href,origin+'/home');
+});
+test('a payment lookup timeout preserves course/discount input and ignores a late payment response',async()=>{
+ const r=mainRuntime(),timers=[],doc={querySelector:()=>({})};let resolvePayment;
+ r.context.setTimeout=fn=>(timers.push(fn),timers.length);r.context.clearTimeout=()=>{};r.context.document=doc;
+ const service={getContractDetail:()=>Promise.resolve(raw()),getContractPayment:()=>new Promise(resolve=>{resolvePayment=resolve;})};
+ r.context.window.angular={element:()=>({injector:()=>({get:name=>name==='$rootScope'?{sessionInfo:{UserRoleId:51}}:service})})};
+ r.send({type:'read-course',course:{...course,readPolicy:false}});await drain();assert.ok(!r.messages.some(m=>m.type==='course'));
+ timers[0]();await drain();const result=r.messages.find(m=>m.type==='course');assert.ok(result);assert.equal(result.projection.hubContract.payments.state,'unavailable');assert.equal(result.projection.fields.discount,'0');
+ resolvePayment([{PaymentId:17,Amount:100}]);await drain();assert.equal(r.messages.filter(m=>m.type==='course').length,1);
 });
 function isolatedRuntime({blocked=false}={}){
  let clock=0,next=1;const listeners=[],timers=new Map(),deadlines=new Map(),messages=[],posts=[],frames=[];

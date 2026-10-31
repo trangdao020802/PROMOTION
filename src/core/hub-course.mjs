@@ -1,6 +1,7 @@
 import {normalizeHubDiscount} from './hub-discount.mjs';
 import {weeklyHours,pricingIdentity} from './pricing-key.mjs';
 import {validateHubPolicy,HUB_POLICY_ERRORS} from './hub-policy.mjs';
+import {validateHubContract} from './hub-contract.mjs';
 const HUB='https://hub24.apollo.vn:7777';
 const text=v=>String(v??'').trim().replace(/\s+/g,' ');
 const label=v=>text(v).replace(/[\s:*]+$/,'').replace(/\s*\/\s*/g,'/').toLowerCase();
@@ -60,12 +61,12 @@ export function courseRequest(v){
  if(!v||typeof v!=='object'||typeof v.ct!=='string'||typeof v.student!=='string'||typeof v.url!=='string')return null;
  const ct=v.ct.trim().toUpperCase(),student=v.student.trim();
  if(!/^[A-Z0-9]+-CT-\d{4,20}$/.test(ct)||!/^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,149}$/.test(student)||Object.hasOwn(Object.prototype,student))return null;
- try{const u=new URL(v.url);if(u.origin!==HUB||u.username||u.password||u.hash||u.search||!/^\/contract\/detail\/[1-9]\d{0,14}\/?$/i.test(u.pathname))return null;return {ct,student,url:u.href};}catch{return null;}
+ try{const u=new URL(v.url);if(u.origin!==HUB||u.username||u.password||u.hash||u.search||!/^\/contract\/detail\/[1-9]\d{0,14}\/?$/i.test(u.pathname)||v.readPolicy!==undefined&&typeof v.readPolicy!=='boolean')return null;return {ct,student,url:u.href,...(v.readPolicy!==undefined?{readPolicy:v.readPolicy}:{})};}catch{return null;}
 }
 export function coursePayload(v,expected){
  const request=courseRequest(expected);
- if(!request||!v||typeof v!=='object'||Object.keys(v).some(k=>!['ct','student','url','hubPolicy','hubPolicyError',...COURSE_FIELDS].includes(k))||v.ct!==request.ct||v.student!==request.student||v.url!==request.url)return null;
- const result={...request};
+ if(!request||!v||typeof v!=='object'||Object.keys(v).some(k=>!['ct','student','url','readPolicy','hubContract','hubPolicy','hubPolicyError',...COURSE_FIELDS].includes(k))||v.ct!==request.ct||v.student!==request.student||v.url!==request.url)return null;
+ const result={ct:request.ct,student:request.student,url:request.url};
  for(const key of COURSE_FIELDS){
   if(v[key]!=null&&(typeof v[key]!=='string'||!text(v[key])||text(v[key]).length>(key==='discount'?2000:200)))return null;
   result[key]=v[key]==null?null:key==='discount'?normalizeHubDiscount(v[key]):text(v[key]);
@@ -78,6 +79,7 @@ export function coursePayload(v,expected){
  if(!result.package&&identity.paymentMode==='once'&&identity.courseMonths&&identity.variant==='standard')result.package=identity.courseMonths+' months';
  if(v.hubPolicy!=null){if(!validateHubPolicy(v.hubPolicy)||v.hubPolicy.ct!==request.ct||String(v.hubPolicy.contractId)!==request.url.replace(/\/$/,'').split('/').pop())return null;result.hubPolicy=v.hubPolicy;}
  if(v.hubPolicyError!=null){if(!HUB_POLICY_ERRORS.includes(v.hubPolicyError))return null;result.hubPolicyError=v.hubPolicyError;}
+ if(v.hubContract!=null){if(!validateHubContract(v.hubContract)||v.hubContract.ct!==request.ct||v.hubContract.contractId!==request.url.replace(/\/$/,'').split('/').pop())return null;result.hubContract=v.hubContract;}
  return result;
 }
 export function parseCoursePage(page,expected){
@@ -102,8 +104,8 @@ export function parseCoursePage(page,expected){
 export function missingContractInputs(row){
  if(row?.kind!=='contract'||!String(row.ct||row.cells?.contractTotal||'').includes('-CT-'))return [];
  const c=row.cells??{},missing=['H','I','J'].filter(k=>!text(c[k]));
- if(!text(c.K)||text(c.K)==='0'&&(Number(c.V)>0||text(row.context?.voucherDescription)&&text(row.context.voucherDescription)!=='0'))missing.push('K');
- if(!text(c.L)||text(c.L)==='0'&&Number(c.U)>0)missing.push('L');
+ if(row.hubReadMissing?.includes('giftcode')||!text(c.K)||text(c.K)==='0'&&(Number(c.V)>0||text(row.context?.voucherDescription)&&text(row.context.voucherDescription)!=='0'))missing.push('K');
+ if(row.hubReadMissing?.includes('discount')||!text(c.L)||text(c.L)==='0'&&Number(c.U)>0)missing.push('L');
  return missing;
 }
 export function contractInputPlan(rows,{refresh=false,completed=[],needsVoucher=()=>false,needsPolicy=()=>false}={}){
@@ -135,12 +137,12 @@ export async function fillContractInputs(rows,io){
    const completion=await io.afterSave?.(row,payload,saved);
    stage='checkpoint';
    const checkpoint=await io.checkpoint?.(row,payload,saved);
-   results.push({ct,status:checkpoint?.complete===false?'partial':'saved',fields:[...COURSE_FIELDS.filter(k=>payload[k]!==null),...(payload.hubPolicy?['hubPolicy']:[])],missing:checkpoint?.missing??[],hubPolicyError:payload.hubPolicyError??null,...(completion?{voucher:completion}:{})});io.saved?.(row,payload);
+   results.push({ct,status:checkpoint?.complete===false?'partial':'saved',fields:[...COURSE_FIELDS.filter(k=>payload[k]!==null),...(payload.hubContract?['hubContract']:[]),...(payload.hubPolicy?['hubPolicy']:[])],missing:checkpoint?.missing??[],hubPolicyError:payload.hubPolicyError??null,...(completion?{voucher:completion}:{})});io.saved?.(row,payload);
   }catch(e){
    if(io.signal?.aborted)break;
    const skippedVoucher=stage==='voucher'&&(['timeout','hub_timeout'].includes(e.code)||/^voucher_/.test(e.code??''));
    results.push({ct,status:'check',message:String(e.message??e)+(skippedVoucher?' Bỏ qua Voucher của CT này trong lượt hiện tại; tiếp tục CT khác. CT còn thiếu sẽ được thử lại khi lấy tiếp.':''),...(skippedVoucher?{voucher:{state:'unavailable'}}:{})});
-   if(!skippedVoucher&&!['index_unresolved','not_found','course_invalid','course_empty','course_unavailable'].includes(e.code))break;
+   if(!skippedVoucher&&!['index_unresolved','not_found','course_invalid','course_empty','course_unavailable','timeout','hub_timeout','hub_frame_unavailable'].includes(e.code))break;
   }
   io.update?.([...results]);
  }

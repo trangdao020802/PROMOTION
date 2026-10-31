@@ -185,7 +185,7 @@ export class ContractEngine{
   row.cells.verificationCheck=verification.pending.length?`CẦN BỔ SUNG (${verification.pending.length})`:verification.hasInput?'ĐÃ GHI NHẬN':'THEO DỮ LIỆU NGUỒN';
   row.cells.calcNote=issues.map(i=>i.message+' '+i.action).join(' | ');
   row.cells.verificationNote=verification.pending.join(' | ');
-  return {...row,id:group.id,paymentCode:group.paymentCode,kind,memberIds:group.memberIds,...(group.sourceContracts?{sourceContracts:group.sourceContracts}:{}),receipts,courseInfo:group.courseInfo,hubPolicy:group.hubPolicy??null,hubPolicyError:group.hubPolicyError??null,groupWarnings:warnings,verification:verificationState,calculationIssues:issues,courseSuggestions:suggestions};
+  return {...row,id:group.id,paymentCode:group.paymentCode,kind,memberIds:group.memberIds,...(group.sourceContracts?{sourceContracts:group.sourceContracts}:{}),receipts,courseInfo:group.courseInfo,hubContract:group.hubContract??null,hubReadMissing:group.hubReadMissing??[],hubPolicy:group.hubPolicy??null,hubPolicyError:group.hubPolicyError??null,groupWarnings:warnings,verification:verificationState,calculationIssues:issues,courseSuggestions:suggestions};
  }
 }
 

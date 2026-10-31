@@ -187,10 +187,36 @@ var PromotionHubCourse = (() => {
     return v.groups.every((g) => keys(g, ["id", "name", "type", "priority", "sort", "max", "with", "discounts"]) && id(g.id) === g.id && !!name(g.name) && [1, 2, 3].includes(g.type) && num(g.priority) && Math.abs(g.priority) < 1e6 && num(g.sort) && Math.abs(g.sort) < 1e6 && num(g.max) && g.max >= 0 && g.max <= 100 && (g.with === null || !!list(g.with, 100) && g.with.every((n) => id(n) === n)) && !!list(g.discounts, 200) && new Set(g.discounts.map((d) => d?.id)).size === g.discounts.length && g.discounts.every((d) => keys(d, ["id", "name", "detail"]) && id(d.id) === d.id && !!name(d.name) && keys(d.detail, ["groupId", "rule", "installment", "percent", "amount", "months", "installmentPercent", "installmentAmount", "installmentMonths"]) && d.detail.groupId === p.groupId && (d.detail.rule === null || ["default", "last"].includes(d.detail.rule)) && (d.detail.installment === null || typeof d.detail.installment === "boolean") && ["percent", "amount", "months", "installmentPercent", "installmentAmount", "installmentMonths"].every((k) => d.detail[k] === null || num(d.detail[k]) && d.detail[k] >= 0 && d.detail[k] <= (k.toLowerCase().includes("percent") ? 100 : k.toLowerCase().includes("months") ? 120 : 1e13))));
   }
 
+  // src/core/hub-contract.mjs
+  var HUB_CONTRACT_SCHEMA = "apollo-hub-contract/v1";
+  var plain2 = (v) => !!v && typeof v === "object" && !Array.isArray(v);
+  var text2 = (v) => typeof v === "string" ? v.trim().replace(/\s+/g, " ") : "";
+  var id2 = (v) => /^[1-9]\d{0,14}$/.test(String(v ?? "")) ? String(v) : null;
+  var number = (v) => typeof v === "number" && Number.isFinite(v) && Math.abs(v) <= 1e13 ? v : null;
+  var date = (v) => typeof v === "string" && v.length <= 50 && /^\d{4}-\d\d-\d\d(?:$|T| )/.test(v) && Number.isFinite(Date.parse(v)) ? v.slice(0, 10) : null;
+  var exact = (v, names) => plain2(v) && Object.keys(v).every((k) => names.includes(k));
+  function hubList(v, max = 500) {
+    if (typeof v === "string" && v.length <= 1e6) {
+      try {
+        v = JSON.parse(v);
+      } catch {
+        return null;
+      }
+    }
+    return Array.isArray(v) && v.length <= max ? v : null;
+  }
+  function validateHubContract(v) {
+    if (!exact(v, ["schema", "ct", "contractId", "capturedAt", "discounts", "payments"]) || v.schema !== HUB_CONTRACT_SCHEMA || !/^\w+-CT-\d{4,20}$/.test(v.ct) || id2(v.contractId) !== v.contractId || typeof v.capturedAt !== "string" || !Number.isFinite(Date.parse(v.capturedAt))) return false;
+    if (v.discounts !== null && (!hubList(v.discounts, 100) || !v.discounts.every((d) => exact(d, ["label", "groupId", "discountId", "type", "percent", "amount", "months"]) && !!text2(d.label) && d.label.length <= 2e3 && ["groupId", "discountId"].every((k) => d[k] === null || id2(d[k]) === d[k]) && (d.type === null || [1, 2, 3].includes(d.type)) && ["percent", "amount", "months"].every((k) => d[k] === null || number(d[k]) === d[k] && d[k] >= 0 && d[k] <= (k === "percent" ? 100 : k === "months" ? 120 : 1e13))))) return false;
+    const p = v.payments;
+    if (!exact(p, ["state", "rows"]) || !["read", "pending", "unavailable"].includes(p.state) || !hubList(p.rows, 500) || p.state !== "read" && p.rows.length || new Set(p.rows.map((r) => r.id)).size !== p.rows.length) return false;
+    return p.rows.every((r) => exact(r, ["id", "code", "amount", "totalAmount", "remaining", "typeId", "type", "method", "scheduledDate", "completeDate", "complete"]) && id2(r.id) === r.id && typeof r.code === "string" && r.code.length <= 150 && (!r.code || /^[A-Za-z0-9][A-Za-z0-9_.:/-]*$/.test(r.code)) && number(r.amount) === r.amount && ["totalAmount", "remaining"].every((k) => r[k] === null || number(r[k]) === r[k]) && (r.typeId === null || id2(r.typeId) === r.typeId) && ["type", "method"].every((k) => typeof r[k] === "string" && r[k].length <= 200) && ["scheduledDate", "completeDate"].every((k) => r[k] === null || date(r[k]) === r[k]) && (r.complete === null || typeof r.complete === "boolean")) && JSON.stringify(v).length <= 3e5;
+  }
+
   // src/core/hub-course.mjs
   var HUB = "https://hub24.apollo.vn:7777";
-  var text2 = (v) => String(v ?? "").trim().replace(/\s+/g, " ");
-  var label = (v) => text2(v).replace(/[\s:*]+$/, "").replace(/\s*\/\s*/g, "/").toLowerCase();
+  var text3 = (v) => String(v ?? "").trim().replace(/\s+/g, " ");
+  var label = (v) => text3(v).replace(/[\s:*]+$/, "").replace(/\s*\/\s*/g, "/").toLowerCase();
   var courseLabel = (v) => COURSE_LABELS[label(v)] ?? null;
   var COURSE_FIELDS = ["courseFee", "hoursPerWeek", "package", "giftcode", "discount", "groupKoc", "contractType"];
   var COURSE_LABELS = {
@@ -239,7 +265,7 @@ var PromotionHubCourse = (() => {
     for (const node of query(root, 'label,dt,th,td,.control-label,.form-label,[class*="col-"]')) {
       const key = courseLabel(node.textContent);
       if (!key || !visible(node)) continue;
-      const id2 = node.getAttribute?.("for"), control = node.control || (id2 ? root.getElementById?.(id2) : null);
+      const id3 = node.getAttribute?.("for"), control = node.control || (id3 ? root.getElementById?.(id3) : null);
       let value = control ? valueOf(control, key) : null;
       if (value == null) {
         let current = node;
@@ -248,14 +274,14 @@ var PromotionHubCourse = (() => {
           const sibling = current.nextElementSibling;
           if (sibling) {
             value = valueOf(sibling, key);
-            if (text2(value)) break;
+            if (text3(value)) break;
           }
           const parent = current.parentElement;
           if (!parent || query(parent, "label,dt,th,.control-label,.form-label").filter((e) => visible(e) && courseLabel(e.textContent)).length > 1) break;
         }
       }
       if (key === "discount" && !normalizeHubDiscount(value, { wrappedOnly: label(node.textContent) === "discount" })) continue;
-      if (text2(value)) pairs.push({ label: node.textContent, value: key === "discount" ? String(value).trim() : text2(value) });
+      if (text3(value)) pairs.push({ label: node.textContent, value: key === "discount" ? String(value).trim() : text3(value) });
     }
     return { titles: query(root, 'h1,h2,h3,h4,h5,h6,[role="heading"],.page-title,.content-header,.breadcrumb').filter(visible).map((e) => e.textContent), pairs };
   }
@@ -270,19 +296,19 @@ var PromotionHubCourse = (() => {
     if (!/^[A-Z0-9]+-CT-\d{4,20}$/.test(ct) || !/^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,149}$/.test(student) || Object.hasOwn(Object.prototype, student)) return null;
     try {
       const u = new URL(v.url);
-      if (u.origin !== HUB || u.username || u.password || u.hash || u.search || !/^\/contract\/detail\/[1-9]\d{0,14}\/?$/i.test(u.pathname)) return null;
-      return { ct, student, url: u.href };
+      if (u.origin !== HUB || u.username || u.password || u.hash || u.search || !/^\/contract\/detail\/[1-9]\d{0,14}\/?$/i.test(u.pathname) || v.readPolicy !== void 0 && typeof v.readPolicy !== "boolean") return null;
+      return { ct, student, url: u.href, ...v.readPolicy !== void 0 ? { readPolicy: v.readPolicy } : {} };
     } catch {
       return null;
     }
   }
   function coursePayload(v, expected) {
     const request = courseRequest(expected);
-    if (!request || !v || typeof v !== "object" || Object.keys(v).some((k) => !["ct", "student", "url", "hubPolicy", "hubPolicyError", ...COURSE_FIELDS].includes(k)) || v.ct !== request.ct || v.student !== request.student || v.url !== request.url) return null;
-    const result = { ...request };
+    if (!request || !v || typeof v !== "object" || Object.keys(v).some((k) => !["ct", "student", "url", "readPolicy", "hubContract", "hubPolicy", "hubPolicyError", ...COURSE_FIELDS].includes(k)) || v.ct !== request.ct || v.student !== request.student || v.url !== request.url) return null;
+    const result = { ct: request.ct, student: request.student, url: request.url };
     for (const key of COURSE_FIELDS) {
-      if (v[key] != null && (typeof v[key] !== "string" || !text2(v[key]) || text2(v[key]).length > (key === "discount" ? 2e3 : 200))) return null;
-      result[key] = v[key] == null ? null : key === "discount" ? normalizeHubDiscount(v[key]) : text2(v[key]);
+      if (v[key] != null && (typeof v[key] !== "string" || !text3(v[key]) || text3(v[key]).length > (key === "discount" ? 2e3 : 200))) return null;
+      result[key] = v[key] == null ? null : key === "discount" ? normalizeHubDiscount(v[key]) : text3(v[key]);
     }
     if (!COURSE_FIELDS.some((k) => result[k] !== null)) return null;
     if (result.giftcode && /^\d[\d.,\s]*\s*(?:vnd|vnđ|đ|₫|%)$/i.test(result.giftcode)) result.giftcode = null;
@@ -303,19 +329,23 @@ var PromotionHubCourse = (() => {
       if (!HUB_POLICY_ERRORS.includes(v.hubPolicyError)) return null;
       result.hubPolicyError = v.hubPolicyError;
     }
+    if (v.hubContract != null) {
+      if (!validateHubContract(v.hubContract) || v.hubContract.ct !== request.ct || v.hubContract.contractId !== request.url.replace(/\/$/, "").split("/").pop()) return null;
+      result.hubContract = v.hubContract;
+    }
     return result;
   }
   function parseCoursePage(page, expected) {
     const request = courseRequest(expected);
     if (!request || page.url !== request.url) return { error: "identity" };
     const identity = [...page.titles ?? [], ...(page.pairs ?? []).filter((p) => courseLabel(p.label) === "contract").map((p) => p.value)];
-    const codes = [...new Set(identity.flatMap((t) => text2(t).match(/[A-Z0-9]+-CT-\d{4,20}\b/gi) ?? []).map((v) => v.toUpperCase()))];
+    const codes = [...new Set(identity.flatMap((t) => text3(t).match(/[A-Z0-9]+-CT-\d{4,20}\b/gi) ?? []).map((v) => v.toUpperCase()))];
     if (codes.length !== 1 || codes[0] !== request.ct) return { error: "identity" };
     const pairs = page.pairs ?? [], hasBefore = pairs.some((p) => /before discount/i.test(p.label) && COURSE_LABELS[label(p.label)] === "package"), values = {};
     for (const pair of pairs) {
       const key = COURSE_LABELS[label(pair.label)];
       if (!key || key === "contract" || hasBefore && key === "package" && !/before discount/i.test(pair.label)) continue;
-      let value = key === "discount" ? normalizeHubDiscount(pair.value, { wrappedOnly: label(pair.label) === "discount" }) : text2(pair.value);
+      let value = key === "discount" ? normalizeHubDiscount(pair.value, { wrappedOnly: label(pair.label) === "discount" }) : text3(pair.value);
       if (!value) continue;
       if (["giftcode", "discount"].includes(key) && /^(?:0|[-—]+|none|no (?:giftcode|discount)|n\/a)$/i.test(value)) value = "0";
       else if (/^[-—]+$/.test(value) || value === "0") continue;
@@ -329,27 +359,27 @@ var PromotionHubCourse = (() => {
   }
   function missingContractInputs(row) {
     if (row?.kind !== "contract" || !String(row.ct || row.cells?.contractTotal || "").includes("-CT-")) return [];
-    const c = row.cells ?? {}, missing = ["H", "I", "J"].filter((k) => !text2(c[k]));
-    if (!text2(c.K) || text2(c.K) === "0" && (Number(c.V) > 0 || text2(row.context?.voucherDescription) && text2(row.context.voucherDescription) !== "0")) missing.push("K");
-    if (!text2(c.L) || text2(c.L) === "0" && Number(c.U) > 0) missing.push("L");
+    const c = row.cells ?? {}, missing = ["H", "I", "J"].filter((k) => !text3(c[k]));
+    if (row.hubReadMissing?.includes("giftcode") || !text3(c.K) || text3(c.K) === "0" && (Number(c.V) > 0 || text3(row.context?.voucherDescription) && text3(row.context.voucherDescription) !== "0")) missing.push("K");
+    if (row.hubReadMissing?.includes("discount") || !text3(c.L) || text3(c.L) === "0" && Number(c.U) > 0) missing.push("L");
     return missing;
   }
   function contractInputPlan(rows, { refresh = false, completed = [], needsVoucher = () => false, needsPolicy = () => false } = {}) {
     const unique = /* @__PURE__ */ new Map(), students = /* @__PURE__ */ new Map();
     for (const row of rows ?? []) {
-      const ct = text2(row.ct || row.cells?.contractTotal), student = text2(row.cells?.F);
+      const ct = text3(row.ct || row.cells?.contractTotal), student = text3(row.cells?.F);
       if (row.kind !== "contract" || !/^[A-Z0-9]+-CT-\d{4,20}$/.test(ct) || !/^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,149}$/.test(student) || Object.hasOwn(Object.prototype, student)) continue;
       (students.get(ct) ?? (students.set(ct, /* @__PURE__ */ new Set()), students.get(ct))).add(student);
       unique.set(ct + "|" + student, row);
     }
     const done = new Set(completed);
-    return [...unique.values()].filter((r) => (refresh || missingContractInputs(r).length > 0 || needsVoucher(r) || needsPolicy(r)) && students.get(text2(r.ct || r.cells.contractTotal)).size === 1 && !done.has(text2(r.ct || r.cells.contractTotal) + "|" + text2(r.cells.F)));
+    return [...unique.values()].filter((r) => (refresh || missingContractInputs(r).length > 0 || needsVoucher(r) || needsPolicy(r)) && students.get(text3(r.ct || r.cells.contractTotal)).size === 1 && !done.has(text3(r.ct || r.cells.contractTotal) + "|" + text3(r.cells.F)));
   }
   async function fillContractInputs(rows, io) {
     const results = [];
     for (const row of rows) {
       if (io.signal?.aborted) break;
-      const ct = text2(row.ct || row.cells.contractTotal), student = text2(row.cells.F);
+      const ct = text3(row.ct || row.cells.contractTotal), student = text3(row.cells.F);
       let stage = "input";
       try {
         io.progress?.("\u0110ang l\u1EA5y Input theo " + ct + "\u2026");
@@ -369,13 +399,13 @@ var PromotionHubCourse = (() => {
         const completion = await io.afterSave?.(row, payload, saved);
         stage = "checkpoint";
         const checkpoint = await io.checkpoint?.(row, payload, saved);
-        results.push({ ct, status: checkpoint?.complete === false ? "partial" : "saved", fields: [...COURSE_FIELDS.filter((k) => payload[k] !== null), ...payload.hubPolicy ? ["hubPolicy"] : []], missing: checkpoint?.missing ?? [], hubPolicyError: payload.hubPolicyError ?? null, ...completion ? { voucher: completion } : {} });
+        results.push({ ct, status: checkpoint?.complete === false ? "partial" : "saved", fields: [...COURSE_FIELDS.filter((k) => payload[k] !== null), ...payload.hubContract ? ["hubContract"] : [], ...payload.hubPolicy ? ["hubPolicy"] : []], missing: checkpoint?.missing ?? [], hubPolicyError: payload.hubPolicyError ?? null, ...completion ? { voucher: completion } : {} });
         io.saved?.(row, payload);
       } catch (e) {
         if (io.signal?.aborted) break;
         const skippedVoucher = stage === "voucher" && (["timeout", "hub_timeout"].includes(e.code) || /^voucher_/.test(e.code ?? ""));
         results.push({ ct, status: "check", message: String(e.message ?? e) + (skippedVoucher ? " B\u1ECF qua Voucher c\u1EE7a CT n\xE0y trong l\u01B0\u1EE3t hi\u1EC7n t\u1EA1i; ti\u1EBFp t\u1EE5c CT kh\xE1c. CT c\xF2n thi\u1EBFu s\u1EBD \u0111\u01B0\u1EE3c th\u1EED l\u1EA1i khi l\u1EA5y ti\u1EBFp." : ""), ...skippedVoucher ? { voucher: { state: "unavailable" } } : {} });
-        if (!skippedVoucher && !["index_unresolved", "not_found", "course_invalid", "course_empty", "course_unavailable"].includes(e.code)) break;
+        if (!skippedVoucher && !["index_unresolved", "not_found", "course_invalid", "course_empty", "course_unavailable", "timeout", "hub_timeout", "hub_frame_unavailable"].includes(e.code)) break;
       }
       io.update?.([...results]);
     }

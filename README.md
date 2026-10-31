@@ -216,3 +216,12 @@ PaymentList nạp Giftcode No/Discount apply; cột số tiền giảm không th
 Cầu nối 1.6.12 gọi các dịch vụ đọc của phiên Hub hiện tại để lấy thông tin chọn giá, đơn giá và nhóm khuyến mãi theo đúng CT. Bộ tính kiểm tra thứ tự, quyền cộng nhóm, mức trả góp và trần gốc của voucher; giữ chỉnh sửa tay và tiếp tục CT khác khi quá hạn. Dòng giá/rule Hub giữ phạm vi từng CT. Không cần người dùng F12, không tạo tab mới và không ghi hợp đồng Hub. Giá mâu thuẫn hoặc điều kiện hồ sơ chưa đủ vẫn CHECK.
 
 257 kiểm thử đạt và build thành công. Phiên của tác vụ chưa có Hub đăng nhập nên chưa xác minh dữ liệu live hoặc tốc độ mọi CT. Xem [luồng API, phép tính và phạm vi hỗ trợ](docs/hub-policy-api.md). Cập nhật cầu nối rồi tải lại Promotion và Hub.
+
+
+## Bản 31 · Cầu nối 1.6.13
+
+Tạo lượt đọc mới chạy ngay từ CT đầu trong bộ lọc, đọc lại cả Discount apply và Giftcode No. Gọi song song GetContractDetail và GetContractPayment qua phiên Hub đang có; hỗ trợ ứng dụng trong iframe cùng origin, không tạo hoặc chuyển tab. Giữ căn cứ ListDiscount và lịch thanh toán để kiểm tra, không cộng lịch thanh toán vào tiền thu.
+
+Bộ tính dùng bảng giá, quy tắc và ba báo cáo đang có; cấu hình giá Hub là phần bổ sung tùy chọn. Ưu đãi CT tổng được hiển thị kể cả khi khác báo cáo cũ, giữ cảnh báo và mọi giá trị nhập tay. Quá hạn CT tiếp tục hồ sơ khác; dữ liệu mới thiếu không được đánh dấu hoàn tất nhờ giá trị cũ còn lưu.
+
+267 kiểm thử đạt; build và kiểm tra giao diện với bộ nguồn giả lập xác nhận giảm 3.870.000, phải đóng 34.830.000 và 163 giờ cho gói 12 tháng/3 giờ mỗi tuần. Chưa có phiên Hub đăng nhập trong trình duyệt tác vụ để xác minh CT thật. Xem [luồng đọc và giới hạn](docs/hub-policy-api.md).

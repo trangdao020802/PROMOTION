@@ -69,13 +69,13 @@ test('a wrong-student Voucher is skipped without changing its saved manual value
  const results=await fillContractInputs(b.rows(),b.io);assert.deepEqual(results.map(r=>r.status),['check','saved','saved']);assert.match(results[0].message,/Student ID/);assert.deepEqual(first.vouchers.get(manual.code),manual);assert.ok(!first.calls.includes('checkpoint'));
 });
 test('connection, login, save and cancellation failures still stop the batch instead of being treated as a missing Voucher',async()=>{
- for(const code of ['bridge','hub_login','hub_tab_missing','hub_frame_unavailable','cancelled']){
+ for(const code of ['bridge','hub_login','hub_tab_missing','cancelled']){
   const b=batch();b.fixtures[0].voucherIO.readVoucher=async()=>{throw Object.assign(Error('Global failure'),{code});};
   const result=await fillContractInputs(b.rows(),b.io);assert.equal(result.length,1,code);assert.ok(!b.fixtures[1].calls.includes('course-read'));assert.equal(b.completed.length,0);
  }
  const b=batch();b.fixtures[0].voucherIO.saveVoucher=async()=>{throw Object.assign(Error('Tab khác vừa sửa Voucher.'),{conflict:true});};
  assert.equal((await fillContractInputs(b.rows(),b.io)).length,1);assert.equal(b.completed.length,0);
- const course=batch();course.fixtures[0].io.read=async()=>{throw Object.assign(Error('Course timeout'),{code:'timeout'});};assert.equal((await fillContractInputs(course.rows(),course.io)).length,1);
+ const course=batch();course.fixtures[0].io.read=async()=>{throw Object.assign(Error('Course timeout'),{code:'timeout'});};assert.equal((await fillContractInputs(course.rows(),course.io)).length,3);
  const stopped=batch(),controller=new AbortController();stopped.fixtures[0].voucherIO.readVoucher=async()=>{controller.abort();throw Object.assign(Error('Đã dừng.'),{code:'timeout'});};assert.equal((await fillContractInputs(stopped.rows(),{...stopped.io,signal:controller.signal})).length,0);assert.equal(stopped.completed.length,0);
 });
 test('manual voucher values are preserved and a different Hub value requires review',async()=>{

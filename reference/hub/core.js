@@ -4,7 +4,7 @@
   const SITE = 'https://promotion-installment.trangdao2802.chatgpt.site';
   const SITES = [SITE];
   const CHANNEL = 'promotion-hub/v1';
-  const VERSION = '1.6.12';
+  const VERSION = '1.6.13';
   function ct(value) {
     const code = typeof value === 'string' ? value.trim().toUpperCase() : '';
     return /^[A-Z0-9]+-CT-\d{4,20}$/.test(code) ? code : null;

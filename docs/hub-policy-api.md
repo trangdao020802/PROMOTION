@@ -1,17 +1,29 @@
-# Tự lấy bảng giá và quy tắc Hub theo Contract
+# Đọc CT tổng và bổ sung quy tắc Hub
 
-Từ bản 30, cầu nối 1.6.12 đọc các dịch vụ truy vấn được xác định trong source Hub do người dùng cung cấp. Người dùng mở Hub đã đăng nhập, cập nhật cầu nối rồi bấm **Tự lấy Input theo Contract**, hoặc dùng luồng lấy nguồn / tự gắn link đang có. Không cần F12, sao chép response, nhập API key hay mở tab hợp đồng mới.
+Từ bản 31, cầu nối 1.6.13 đọc các dịch vụ truy vấn được xác định trong source Hub do người dùng cung cấp. Người dùng mở Hub đã đăng nhập, cập nhật cầu nối rồi bấm **Tự lấy Input theo Contract**, hoặc dùng luồng lấy nguồn / tự gắn link đang có. Không cần F12, sao chép response, nhập API key hay mở tab hợp đồng mới.
 
-## Luồng đọc
+## Luồng đọc CT tổng
 
-1. Dùng Angular injector hiện có, lấy đúng UserRoleId của phiên và gọi `contractService.getContractDetail`. Xác minh CT và ID theo link đã gắn.
-2. Khi detail thiếu ID nhóm người học, ngày tạo hoặc ngữ cảnh chọn giá, đọc GET `getContractInfoForUpdate({contractId})`. Không điều hướng vào trang Update, không gọi lock, không sửa model hay lưu hợp đồng.
-3. Gọi song song `getCoursePrice` và `getApplicableGroupDiscount` bằng center, ProductGroup, GroupPeople, loại hợp đồng, package, HourWeek và CreatedDate thực tế. Dịch vụ thứ hai là POST truy vấn theo định nghĩa client Hub.
-4. Nếu CT có Giftcode, gọi thêm GET `checkContractGiftCode` bằng đúng code, center và KidId của CT. Chỉ chiếu loại giảm, mức giảm, trần gốc và loại mã; không coi trường Max trên CT đã lưu là trần gốc.
-5. Chiếu dữ liệu qua schema `apollo-hub-policy/v1`: ID, tên lựa chọn, đơn giá, thời lượng, nhóm/chi tiết khuyến mãi, Priority, SortOrder, ApplyRule, trần và quyền cộng nhóm. Không chuyển nguyên response, thông tin liên lạc, cookie, token hay role sang Promotion.
-6. Lưu theo CT/học viên trong IndexedDB, giữ overlay nhập tay, tính lại CT và chênh lệch. API quá hạn 5 giây hoặc dữ liệu không đủ thì lưu phần Input đã đọc và tiếp tục CT khác. Lần lấy tiếp thử lại CT thiếu quy tắc. Giới hạn chung Course info vẫn là 14 giây; Voucher trong lượt hàng loạt vẫn là 15 giây.
+1. Duyệt lần lượt CT/học viên trong bộ lọc theo thứ tự bảng, dùng link chi tiết CT nhận tiền đã lưu; chỉ tra danh sách theo tháng nếu thiếu link.
+2. Tìm Angular injector của Hub trong trang hiện tại hoặc các iframe cùng origin đã có. Dùng `contractService` và UserRoleId thật của phiên, không lấy scope bất kỳ hay gán vào model. Nếu không có injector, chỉ dùng GET đã quan sát; không đoán quyền/role.
+3. Gọi `getContractDetail` và `getContractPayment({contractId})` song song. Lịch thanh toán có ngân sách 2 giây, nằm trong giới hạn đọc CT 14 giây. Mảng ListPayment rỗng trong detail là placeholder, không phải bằng chứng không có thanh toán.
+4. Lấy ListCourseInfo/CourseInfos và tất cả ListDiscount/Discounts của CT, kể cả wrapper `data`, `item`, `$vm.contractInfo`. GroupDiscountName + DiscountName thành tên đầy đủ; số %/tháng/VND được giữ riêng làm căn cứ. Tên ưu đãi có mức giảm bọc ngoài vẫn lấy tên trong ngoặc, giữ ngoặc bên trong tên chương trình.
+5. Chỉ chuyển các trường có danh sách cho phép qua schema `apollo-hub-contract/v1`: danh sách ưu đãi và lịch thanh toán theo CT. Không chuyển thông tin liên lạc, tài khoản ngân hàng, giấy tờ, cookie, token hay nguyên JSON. Mã CT/ID/học viên phải khớp trước khi lưu.
+6. Lưu từng CT rồi tính lại bằng bảng giá, quy tắc và Export/PaymentList/Transfer hiện có. Khác thứ tự/cách viết của cùng tập ưu đãi không làm trống Discount apply. Nếu ưu đãi mới trên Hub khác báo cáo cũ, hiện giá trị CT tổng và giữ cả hai căn cứ cùng cảnh báo. Nhập tay có giá trị vẫn ưu tiên.
+7. `Tạo lượt đọc mới` khởi chạy ngay từ CT đầu của bộ lọc và đọc lại cả năm trường đầu vào. Revision `contract-lists-v2` không dùng lại checkpoint cũ. Bấm lấy tiếp bỏ qua CT đã xong; thiếu ưu đãi/lịch thanh toán vẫn nằm trong danh sách chờ. `lastReadMissing` ngăn giá trị cũ được giữ lại bị nhận nhầm là response mới đã đủ. Lỗi riêng từng CT/quá hạn chuyển sang CT tiếp; lỗi phiên đăng nhập, kết nối cầu nối, lưu xung đột hoặc người dùng dừng thì dừng lượt.
 
-Bridge vẫn dùng tab Hub đang có. Không tạo, chuyển URL, kích hoạt hay đóng tab. GetContractInfoForUpdate là dịch vụ GET lấy dữ liệu; không gọi thao tác Create/Update/Upgrade/AcquireLock của Hub. Quyền đọc phụ thuộc phiên Hub hiện tại, không thay role và không vượt kiểm soát truy cập.
+ListPayment trên Hub là căn cứ lịch thanh toán, không được cộng vào tiền đã thu hay dùng thay hóa đơn trong ba báo cáo. CALC không sao chép Price, DiscountAmount hoặc FinalPrice đã lưu trên CT.
+
+## Cấu hình giá Hub là tùy chọn
+
+Mặc định không gọi lại danh mục giá cho từng CT. Bật **Đọc thêm cấu hình giá và khuyến mãi từ Hub** khi cần bổ sung; việc này không trở thành điều kiện để lưu Input hoặc hoàn thành lượt đọc:
+
+- Khi thiếu ngữ cảnh, GET `getContractInfoForUpdate({contractId})` cung cấp GroupPeople/CreatedDate/ID sản phẩm. Không điều hướng trang Update, không gọi AcquireLock.
+- Truy vấn song song `getCoursePrice` và `getApplicableGroupDiscount` bằng ngữ cảnh thật. Truy vấn thứ hai là POST chỉ đọc theo client Hub.
+- Nếu có Giftcode, `checkContractGiftCode` lấy đơn vị, mức giảm và trần gốc. Giữ luồng tra Voucher hiện có khi cần hồ sơ chi tiết.
+- Schema `apollo-hub-policy/v1` giữ cấu hình có phạm vi CT. Ngân sách cấu hình tối đa 5 giây trong giới hạn CT; thiếu cấu hình vẫn lưu Input và dùng chính sách hiện có. Snapshot cũ có ràng buộc phù hợp được giữ qua lượt chỉ đọc Input.
+
+Không tạo, đổi URL, kích hoạt hay đóng tab Hub. Truy vấn phụ thuộc phiên đăng nhập hiện tại; không thay role hoặc vượt quyền truy cập.
 
 ## Bộ tính
 
@@ -32,4 +44,4 @@ Phiên trình duyệt của tác vụ không có tab Hub đăng nhập; vì vậ
 
 Nhánh nâng gói/Upgrade, đơn vị giờ/gói giờ, response có cấu trúc khác và gói tuần có tháng tặng chưa đủ căn cứ quy đổi không được ép thành quy tắc chuẩn. Giữ kết quả theo nguồn chính sách đã xác minh hoặc trạng thái cần kiểm tra; không tạo số 0 hoặc phê duyệt giả. Việc lấy danh mục hiện tại không thay thế văn bản chính sách lịch sử.
 
-Các trường hợp cần làm mới cấu hình đã đủ: chọn **Đọc lại cả CT đã đủ Input để đối chiếu** rồi tạo lượt đọc mới. Quy tắc chờ còn thiếu vẫn có thể lấy tiếp mà không phải đọc lại CT đã hoàn tất trong lượt.
+Muốn làm mới toàn bộ Input: bấm **Tạo lượt đọc mới**. Muốn làm mới cả cấu hình: bật **Đọc thêm cấu hình giá và khuyến mãi từ Hub** trước khi bắt đầu. Tệp TXT ngày 31/10 là hội thoại DevTools với ví dụ ListDiscount, không cung cấp response đầy đủ của mọi CT; bản sửa kết hợp source Hub, HAR đã cung cấp và các tài nguyên chính sách có trong ứng dụng. Không đưa tệp HAR/nhật ký gốc hoặc dữ liệu cá nhân vào mã nguồn.

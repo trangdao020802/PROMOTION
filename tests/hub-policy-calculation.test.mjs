@@ -20,6 +20,12 @@ test('saving live lookup metadata recomputes independent fees/hours and uses the
  const manual=f.engine.calculate(f.record,{L:'0'});assert.equal(manual.cells.N,0);assert.notEqual(manual.cells.AC,0);
  const changed=f.engine.calculate(f.record,{H:'ATLS - New Price 2026 - Layer 2'});assert.notEqual(changed.pricing.hub,true);assert.equal(changed.cells.H,'ATLS - New Price 2026 - Layer 2');
 });
+test('receiving CT discount input immediately recalculates with the existing documented policy and no Hub price API',()=>{
+ const f=fixture();delete f.source.hubPolicy;f.engine.updateCourseSource(f.source);const row=f.engine.calculate(f.record);
+ assert.equal(row.cells.L,f.cells.L);assert.equal(row.cells.M,38700000);assert.equal(row.cells.N,3870000);assert.equal(row.cells.Q,34830000);assert.equal(row.cells.extraHours,12.5);assert.equal(row.cells.R,163);
+ assert.notEqual(row.pricing.hub,true);assert.equal(row.cells.AF,'CHECK'); // business verification remains independent
+ const manual=f.engine.calculate(f.record,{L:'0',K:'0'});assert.equal(manual.cells.L,'0');assert.equal(manual.cells.N,0);
+});
 test('conflicting configured and documented gross prices remain CHECK with traceable evidence',()=>{
  const f=fixture();f.source.hubPolicy.product.unitPrice*=1.1;f.engine.updateCourseSource(f.source);const r=f.engine.calculate(f.record);assert.match(r.cells.BD,/GIÁ HUB KHÁC/);assert.equal(r.cells.AF,'CHECK');assert.ok(r.pricing.refs.some(ref=>ref.sheet==='GetCoursePrice'));
 });

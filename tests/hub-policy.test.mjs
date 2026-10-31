@@ -67,7 +67,7 @@ test('voucher lookup reads original type and cap by code and never trusts the sa
 });
 test('all five source inputs still require a rule snapshot when the automatic policy lookup was requested',()=>{
  const f=hubFixture(),row={kind:'contract',ct:f.detail.ContractNo,cells:{...f.cells,F:'QA-INPUTS'}};
- const targets=inputTargets([row],false,{policy:true}),run=newInputRun(null,targets,false,'qa-run');const source={ct:row.ct,student:'QA-INPUTS',giftcode:'0'};
+ const targets=inputTargets([row],false,{policy:true}),run=newInputRun(null,targets,false,'qa-run');const source={ct:row.ct,student:'QA-INPUTS',giftcode:'0',discount:f.cells.L};
  assert.deepEqual(completeInputRun(run,row.ct,'QA-INPUTS',source).missing,['hubPolicy']);assert.equal(completeInputRun(run,row.ct,'QA-INPUTS',{...source,hubPolicy:f.policy}).complete,true);
  assert.equal(contractInputPlan([row],{needsPolicy:()=>true}).length,1);
 });
