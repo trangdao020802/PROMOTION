@@ -1,12 +1,12 @@
 import {fullPaymentDay,calculationIssues} from './verification.mjs';
 import {resultReasons} from './result.mjs';
 
-export const REVIEW_LABELS={ceo:'CEO / RCM',registration:'Ghi danh trong ngày',sibling:'Gói sibling',loyalty:'Loyalty',course:'Thông tin khóa học',referral:'Referral / Sibling',flash:'Flash Sale',special:'Học bổng đặc biệt',ontop:'On Top 5%',bigbang:'Big Bang Sep',clc:'CLC','early-renew':'Tái phí sớm',ielts:'IELTS',upgrade:'Upgrade','gift-basis':'Cơ sở % giftcode','source-comparison':'Đối chiếu thông số gốc'};
+export const REVIEW_LABELS={ceo:'CEO / RCM',registration:'Ghi danh trong ngày',sibling:'Gói sibling',loyalty:'Loyalty',course:'Thông tin khóa học',referral:'Referral / Sibling',flash:'Flash Sale',special:'Học bổng đặc biệt',ontop:'On Top 5%',bigbang:'Big Bang Sep',clc:'CLC','early-renew':'Tái phí sớm',ielts:'IELTS',upgrade:'Upgrade','gift-basis':'Cơ sở % giftcode','renewal-week':'Học bổng tái phí · Tặng 2 tuần','source-comparison':'Đối chiếu thông số gốc'};
 const hash=s=>{let n=2166136261;for(const c of s)n=Math.imul(n^c.charCodeAt(0),16777619);return(n>>>0).toString(16)};
 export function reviewMessages(messages=[]){const seen=new Set();return messages.map(m=>String(m??'').replace(/^XÁC MINH\s*-\s*[^:]+:\s*/i,'').replace(/\s+/g,' ').trim()).filter(m=>{const key=m.normalize('NFC').toLocaleLowerCase('vi').replace(/[\s.,;:]+$/,'');if(!key||seen.has(key))return false;seen.add(key);return true;});}
 export function manualCheckKey(message){
  if(!/^XÁC MINH - /.test(message))return null;
- for(const [pattern,id]of [[/LOYALTY:/,'loyalty'],[/GHI DANH 2024:/,'registration'],[/CEO:/,'ceo'],[/FLASH SALE/i,'flash'],[/SPECIAL 30%|HỌC BỔNG ĐẶC BIỆT/,'special'],[/REFERRAL\/SIBLING/,'referral'],[/ON TOP 5%/,'ontop'],[/BIG BANG SEP/,'bigbang'],[/CLC:/,'clc'],[/TÁI PHÍ SỚM/,'early-renew'],[/IELTS:/,'ielts'],[/UPGRADE:/,'upgrade'],[/CƠ SỞ % GIFTCODE/,'gift-basis'],[/(?:18|24|36) tháng chia đôi|^XÁC MINH - SIBLING:/i,'sibling']])if(pattern.test(message))return id;
+ for(const [pattern,id]of [[/LOYALTY:/,'loyalty'],[/GHI DANH 2024:/,'registration'],[/CEO:/,'ceo'],[/FLASH SALE/i,'flash'],[/SPECIAL 30%|HỌC BỔNG ĐẶC BIỆT/,'special'],[/REFERRAL\/SIBLING/,'referral'],[/ON TOP 5%/,'ontop'],[/BIG BANG SEP/,'bigbang'],[/CLC:/,'clc'],[/TÁI PHÍ SỚM/,'early-renew'],[/TẶNG TUẦN TÁI PHÍ/,'renewal-week'],[/IELTS:/,'ielts'],[/UPGRADE:/,'upgrade'],[/CƠ SỞ % GIFTCODE/,'gift-basis'],[/(?:18|24|36) tháng chia đôi|^XÁC MINH - SIBLING:/i,'sibling']])if(pattern.test(message))return id;
  return 'policy-'+hash(message);
 }
 export function reviewScope(row){

@@ -1,4 +1,4 @@
-import {courseHourTotals} from '../core/course-hours.mjs';
+import {courseHourTotals,renewalWeekOffer} from '../core/course-hours.mjs';
 import {ContractEngine,packageKey} from '../core/contracts.mjs';
 import {financialResult} from '../core/reconcile.mjs';
 import {discountPolicyMatch,discountPolicyCheck,discountOffers,promotionResult} from '../core/promotions.mjs';
@@ -32,6 +32,8 @@ class IndependentCalculator{
   if(voucher){context.voucherType=voucher.type==='percent'?'PHẦN TRĂM':'SỐ TIỀN';context.voucherBasis=voucher.percentBasis??'policy-default';if(voucher.policyId&&voucher.policyId!=='case-specific'||voucher.percentBasis&&voucher.percentBasis!=='policy-default')context.voucherPolicyScope=JSON.stringify([voucher.policyId,voucher.percentBasis,voucher.type,voucher.amount,voucher.rate,voucher.startDate,voucher.endDate,voucher.center,voucher.approvalNote]);}
   context.hubPolicy=group.hubPolicy??null;
   const account=options.account||group.account;const pricing=priceFor(data,cells,context),label=text(cells.L);
+   const allOffers=discountOffers(label),weekBonusWeeks=allOffers.some(offer=>renewalWeekOffer(offer)===2)?2:0;
+   const regularOffers=allOffers.filter(offer=>!renewalWeekOffer(offer)),regularLabel=regularOffers.join(';');
   const hub=pricing?.hub?calculateHubPolicy(group.hubPolicy,cells,context,voucher):null,hubActive=hub&&!hub.error;
   context.hubRules=!!hubActive;
   const customOffer=pricing?.override&&discountOffers(label).length===1&&pricing.discountLabels?.some(s=>priceText(s)===priceText(label));
@@ -49,21 +51,21 @@ class IndependentCalculator{
   cells.AL=label&&label!=='0'?match.ruleKey||'OTHER':'NONE';cells.BO=match.issues[0]||'OK';cells.CH='OK';
   let loyaltyMissing=false,straightMissing=false;const discountComponents=[],monthComponents=[];
   const awardMonths=(kind,months)=>{if(number(months)&&months>0)monthComponents.push({kind,months});};
-  const legacy=!hubActive&&label&&label!=='0'?legacyDiscountFor(pricing,discountOffers(label),context):null;
+  const legacy=!hubActive&&regularLabel?legacyDiscountFor(pricing,regularOffers,context):null;
   if(hub?.error){cells.BO=hub.error;checks.push(hub.error);}
   if(hubActive){cells.N=hub.discount;cells.AL='HUB_POLICY';cells.BO='OK';discountComponents.push(...hub.components);checks.push(...hub.checks);}
   if(legacy){cells.N=legacy.amount;cells.AL=pricing.policyKey;checks.push(...legacy.checks);discountComponents.push(...legacy.components);}
   if(!hubActive&&!legacy&&label&&label!=='0'&&pricing&&!pricing.short){
-   const terms=discountOffers(label),matches=terms.map(s=>customOffer?match:discountPolicyMatch(s,cells.D));
+   const terms=regularOffers,matches=terms.map(s=>customOffer?match:discountPolicyMatch(s,cells.D));
    const typedOffer=pricing.discountLabels?.length&&discountOffers(label).every(offer=>pricing.discountLabels.some(known=>priceText(offer)===priceText(known)));
    const base=/học bổng (đồng hành|ghi danh)|new price 2026.*(đồng hành|ghi danh)/i.test(label)&&pricing.phase==='base'||typedOffer;
    const september=pricing.policyKey==='BBSEP26_CASH';
    const special=/Special (?:30%|Support)/i.test(label)&&between(cells.D,'2026-06-24','2026-12-31');
-   const supported=terms.length<=4&&(typedOffer||matches.every((m,i)=>!!m.ruleKey||/học bổng (đồng hành|ghi danh)|Special (?:30%|Support)|Big Bang Sep|Flash Sale/i.test(terms[i])));
-   if(supported&&(base||september||special||matches.some(m=>m.ruleKey))){
+   const supported=terms.length<=4&&((terms.length===0&&weekBonusWeeks===2)||typedOffer||matches.every((m,i)=>!!m.ruleKey||/học bổng (đồng hành|ghi danh)|Special (?:30%|Support)|Big Bang Sep|Flash Sale/i.test(terms[i])));
+   if(supported&&((terms.length===0&&weekBonusWeeks===2)||base||september||special||matches.some(m=>m.ruleKey))){
     const cashOffer=base||september||special||matches.some(m=>m.kind==='cash');
     cells.N=special?Math.round(cells.M*.3):cashOffer?pricing.discount:0;
-    cells.AL=special?'SPECIAL30':typedOffer?pricing.policyKey:base?'BASE2026':september?'BBSEP26_CASH':match.ruleKey||matches.find(m=>m.ruleKey)?.ruleKey||'OTHER';
+    cells.AL=terms.length===0&&weekBonusWeeks?'RENEWAL_WEEK_2':special?'SPECIAL30':typedOffer?pricing.policyKey:base?'BASE2026':september?'BBSEP26_CASH':match.ruleKey||matches.find(m=>m.ruleKey)?.ruleKey||'OTHER';
     if(match.sharedSepOct&&pricing.phase==='base'&&match.kind==='straight')cells.AL='BBSEP26_STRAIGHT';
     if(match.sharedSepOct&&pricing.phase==='october'&&match.kind==='straight')cells.AL='OCT26_BASE';
     for(const [i,m]of matches.entries())if(m.kind!=='sibling-cash')discountComponents.push({label:terms[i],ruleKey:m.ruleKey,kind:m.kind,amount:m.ruleKey==='BBSEP26_STRAIGHT'?cells.N:m.kind==='months'||m.kind==='straight'?0:m.kind==='cash'?cells.N:null});
@@ -139,11 +141,18 @@ class IndependentCalculator{
   cells.Q=number(cells.M)&&number(cells.N)&&number(cells.O)?Math.max(0,cells.M-cells.N-cells.O):null;
   const hoursPending=[];
   if(discountPending)hoursPending.push('Chưa đọc đủ chương trình Discount apply và tháng tặng của CT tổng.');
-  if(!hubActive&&!legacy&&!customOffer&&discountOffers(label).some(offer=>{const item=discountPolicyMatch(offer,cells.D);return ['straight','months','referral'].includes(item.kind)&&(!item.ruleKey||item.issues.length);}))hoursPending.push('Nhãn tháng tặng chưa khớp quy tắc được xác minh.');
+  if(!hubActive&&!legacy&&!customOffer&&regularOffers.some(offer=>{const item=discountPolicyMatch(offer,cells.D);return ['straight','months','referral'].includes(item.kind)&&(!item.ruleKey||item.issues.length);}))hoursPending.push('Nhãn tháng tặng chưa khớp quy tắc được xác minh.');
   if(loyaltyMissing)hoursPending.push('Chưa chốt điều kiện tháng loyalty.');
   if(straightMissing)hoursPending.push('Chưa xác minh trả thẳng và ngày đóng đủ.');
+   const weekAllowed=weekBonusWeeks===2&&reviewed('renewal-week')&&!/^new$/i.test(text(context.contractType));
+   if(weekBonusWeeks&&/^new$/i.test(text(context.contractType))){hoursPending.push('Học bổng tặng tuần tái phí không áp dụng cho học viên New.');checks.push('CHECK - TẶNG TUẦN TÁI PHÍ: học viên New không đủ điều kiện.');}
+   else if(weekBonusWeeks&&!weekAllowed)hoursPending.push('Suất tặng 2 tuần chưa được duyệt đúng hồ sơ.');
+   if(weekAllowed&&!(number(pricing?.hours)&&pricing.hours>0))hoursPending.push('Thiếu Hour/week để quy đổi 2 tuần tặng.');
+   const approvedWeekWeeks=weekAllowed?weekBonusWeeks:0;
   if(/SPLIT$/.test(String(pricing?.pkg))&&options.cells?.AT!=='YES'&&!reviewed('sibling')){hoursPending.push('Chưa đủ điều kiện gói sibling chia đôi.');checks.push('XÁC MINH - SIBLING: đối chiếu hai CT, hai học viên, quan hệ và ngày full cùng ngày.');}
-  const courseHours=hubActive?{unit:pricing.unit,baseWeeks:pricing.weeks,weeklyHours:pricing.hours,baseMonths:pricing.months,factor:null,baseHours:hub.baseHours,bonusMonths:hub.giftMonths,extraHours:hoursPending.length?null:hub.extraHours,totalHours:hoursPending.length?null:hub.totalHours,components:hub.components.filter(c=>c.kind==='months'),pending:hoursPending}:courseHourTotals(pricing,monthComponents,data.policy.hourFactor,hoursPending);
+  const weekHours=approvedWeekWeeks*(number(pricing?.hours)?pricing.hours:0);
+   const hubHoursKnown=number(hub?.baseHours)&&number(hub?.extraHours)&&!hoursPending.length;
+   const courseHours=hubActive?{unit:pricing.unit,baseWeeks:pricing.weeks,weeklyHours:pricing.hours,baseMonths:pricing.months,factor:null,baseHours:hub.baseHours,bonusMonths:hub.giftMonths,bonusWeeks:hubHoursKnown?approvedWeekWeeks:null,extraHours:hubHoursKnown?hub.extraHours+weekHours:null,totalHours:hubHoursKnown?Math.round(hub.baseHours+hub.extraHours+weekHours):null,components:[...hub.components.filter(c=>c.kind==='months'),...(approvedWeekWeeks?[{kind:'renewal-week',weeks:approvedWeekWeeks,hours:weekHours}]:[])],pending:hoursPending}:courseHourTotals(pricing,monthComponents,data.policy.hourFactor,hoursPending,approvedWeekWeeks);
   cells.extraHours=courseHours.extraHours;cells.R=courseHours.totalHours;
   cells.W=number(account.net)?account.net:null;cells.Y=group.raw.AJ??null;
   const actualTerm=typeof cells.Y==='number'?cells.Y:/^\d+(?:\.\d+)?/.test(text(cells.Y))?parseFloat(cells.Y):null;
