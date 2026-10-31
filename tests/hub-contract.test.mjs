@@ -51,3 +51,9 @@ test('offer order/case differences do not blank the field; a different fresh CT 
  assert.equal(changed.values.L,a+';'+b);assert.equal(changed.fields.L.length,2);assert.equal(changed.warnings.length,1);
  const none=resolveCourseInfo([{L:a},{L:'0',hub:true}]);assert.equal(none.values.L,'0');assert.equal(none.warnings.length,1);
 });
+test('current Hub course inputs stay visible when an older report disagrees; conflicts retain both references',()=>{
+ const current={H:'ATLS New Price 2026 Layer 2',I:'4 hrs/week',J:'18 months',hub:true,ref:{file:'Hub'}},previous={H:'ATLS New Price 2026 Layer 1',I:'3 hrs/week',J:'12 months',ref:{file:'PaymentList'}};
+ const result=resolveCourseInfo([previous,current]);
+ for(const key of ['H','I','J']){assert.equal(result.values[key],current[key]);assert.equal(result.fields[key].length,2);assert.ok(result.warnings.some(w=>w.startsWith(key+':')));}
+ assert.equal(result.complete,true);
+});

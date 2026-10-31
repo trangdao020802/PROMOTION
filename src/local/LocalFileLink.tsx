@@ -22,5 +22,6 @@ export default function LocalFileLink({href,children,...props}:any){
  },[href]);
  if(error)return <span role="alert">{error}</span>;
  if(!file)return <span aria-busy="true">{children} · Đang chuẩn bị…</span>;
- return <a {...props} href={file.url} download={file.name} target={undefined}>{children}</a>;
+ const label=(child:any):any=>typeof child==='string'?child.replace(/\.(csv|tsv)$/i,'.xlsx'):Array.isArray(child)?child.map(label):child;
+ return <a {...props} href={file.url} download={file.name} target={undefined} title={file.name}>{label(children)}</a>;
 }

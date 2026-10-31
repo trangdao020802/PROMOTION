@@ -24,6 +24,7 @@ async function hashSource(directory){
 }
 await hashSource('src');
 const version=contentHash.update(basePath).update(await fs.readFile('dist/rules.json')).digest('hex').slice(0,12);
+define.__CALC_REVISION__=JSON.stringify(version);
 await build({entryPoints:['src/main.tsx'],bundle:true,minify:true,format:'esm',target:'es2022',define,outfile:'dist/assets/app-'+version+'.js',jsx:'automatic',plugins:[{name:'version-worker-urls',setup(b){b.onLoad({filter:/supplied\/dashboard\.js$/},async a=>({contents:(await fs.readFile(a.path,'utf8')).replace('/calculator.worker.mjs',basePath+'calculator.worker.mjs?v='+version).replace('/source-parser.worker.mjs',basePath+'source-parser.worker.mjs?v='+version).replaceAll('/downloads/promotion-hub-bridge.zip',basePath+'downloads/promotion-hub-bridge.zip').replace('href: `/`','href: `'+basePath+'`'),loader:'js'}))}}]});
 await build({entryPoints:['src/local/calculator.worker.mjs'],bundle:true,minify:true,format:'esm',target:'es2022',define,outfile:'dist/calculator.worker.mjs'});
 await fs.copyFile('src/supplied/source-parser.worker.mjs','dist/source-parser.worker.mjs');

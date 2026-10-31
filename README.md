@@ -23,7 +23,7 @@ Mở `http://localhost:4173/`. Bản web để triển khai nằm trong `dist/`.
 - Voucher mới giữ chờ duyệt; kiểm tra học viên, trung tâm, hiệu lực, mức giảm và căn cứ.
 - Duyệt riêng CEO/RCM, sibling, loyalty, ghi danh và thông số gốc. Tích hiện **Đã duyệt**. Duyệt ngoại lệ trả góp là cột riêng. KẾT QUẢ được tổng hợp sau duyệt; nếu còn lỗi có cột **Lý do CHECK còn lại**.
 - Moving dùng thẻ xanh bốn cột như ảnh mẫu, mở/đóng lịch sử dọc cho từng hóa đơn. Payment info giữ từng hóa đơn gốc một lần, ngày/phương thức/EPP gốc và luồng DEP → CT trung gian → CT nhận tiền. Chuyển nội bộ không cộng thành tiền thu mới.
-- Lưu/mở lại đợt nguồn, tải file gốc và xuất CSV theo bộ lọc; bộ lọc xuống hàng và căn thẳng khi màn hình hẹp.
+- Lưu/mở lại đợt nguồn, tải bảng nguồn và xuất XLSX theo bộ lọc; bộ lọc xuống hàng và căn thẳng khi màn hình hẹp.
 
 ## Dữ liệu
 
@@ -167,7 +167,7 @@ Cầu nối 1.6.6 đọc nền trong tab Hub hiện có, ưu tiên API/HTML đã
 
 Giá ghép bằng khóa chương trình, năm, layer, giờ và loại gói; không cần Course Fee trùng nguyên văn. Bổ sung 160 dòng chính sách có cấu trúc cho giá lịch sử2024, gói chia đôi, VTDH2026, trải nghiệm, IELTS, Premium và giá tuần. Quy tắc cũ/mới và điều kiện của từng CT được kiểm tra riêng.
 
-Quy tắc & voucher → Bảng giá chung / RULE → Cập nhật chính sách giá trên web: tải mẫu CSV hoặc nhập XLSX/JSON, xem trước, kiểm tra và áp dụng. Có lịch sử phiên bản, khôi phục, xuất JSON; dữ liệu chính sách cập nhật lưu tại trình duyệt. Xem [nguồn, cách cập nhật và giới hạn đã xác minh](docs/policy-updates.md).
+Quy tắc & voucher → Bảng giá chung / RULE → Cập nhật chính sách giá trên web: tải mẫu XLSX hoặc nhập XLSX/JSON, xem trước, kiểm tra và áp dụng. Có lịch sử phiên bản, khôi phục, xuất JSON; dữ liệu chính sách cập nhật lưu tại trình duyệt. Xem [nguồn, cách cập nhật và giới hạn đã xác minh](docs/policy-updates.md).
 
 
 ## Discount apply lấy từ Hub
@@ -225,3 +225,12 @@ Tạo lượt đọc mới chạy ngay từ CT đầu trong bộ lọc, đọc l
 Bộ tính dùng bảng giá, quy tắc và ba báo cáo đang có; cấu hình giá Hub là phần bổ sung tùy chọn. Ưu đãi CT tổng được hiển thị kể cả khi khác báo cáo cũ, giữ cảnh báo và mọi giá trị nhập tay. Quá hạn CT tiếp tục hồ sơ khác; dữ liệu mới thiếu không được đánh dấu hoàn tất nhờ giá trị cũ còn lưu.
 
 267 kiểm thử đạt; build và kiểm tra giao diện với bộ nguồn giả lập xác nhận giảm 3.870.000, phải đóng 34.830.000 và 163 giờ cho gói 12 tháng/3 giờ mỗi tuần. Chưa có phiên Hub đăng nhập trong trình duyệt tác vụ để xác minh CT thật. Xem [luồng đọc và giới hạn](docs/hub-policy-api.md).
+
+
+## Bản 32 · Bộ nhớ hồ sơ và xuất XLSX
+
+Dữ liệu đã lấy và sửa tay được giữ theo Contract tổng + Student ID, kèm tên, center và căn cứ. Bản tính được kiểm tra theo toàn bộ đầu vào: khóa học, giờ/gói, discount, voucher, chính sách, nguồn thu/chuyển tiền và các xác nhận. Bấm Làm mới vẫn giữ dữ liệu đã lưu; màn hình hiện lại CT/học viên cùng nội dung cuối của lượt đọc bị ngắt. Bấm lấy tiếp bỏ qua CT đã hoàn tất. Bộ nhớ nằm trên trình duyệt đang dùng.
+
+Xuất bảng đối chiếu đang lọc, báo cáo Hub và mẫu chính sách bằng XLSX thật, chia cột, có tiêu đề/bộ lọc/cố định dòng đầu. Tiền và giờ là ô số định dạng General; Student ID và số 0 đầu mã vẫn là chữ. File nguồn CSV/TSV đã lưu được đổi sang XLSX khi tải xuống, giữ bản nhập gốc. Đọc Input không ghi hoặc xóa dữ liệu trên Hub; trường Hub thiếu không xóa Input đã lưu, ô sửa tay vẫn ưu tiên, mâu thuẫn giữ cảnh báo.
+
+277 kiểm thử đạt, build thành công và đã kiểm tra sửa/lưu/Làm mới trên giao diện bằng dữ liệu giả. Chưa có phiên Hub riêng đã đăng nhập để kiểm tra CT thật. Chi tiết: [bộ nhớ và XLSX](docs/contract-memory-xlsx.md).

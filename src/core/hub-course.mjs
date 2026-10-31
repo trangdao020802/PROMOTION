@@ -116,12 +116,12 @@ export function contractInputPlan(rows,{refresh=false,completed=[],needsVoucher=
 }
 export async function fillContractInputs(rows,io){
  const results=[];
- for(const row of rows){
+ for(const [index,row] of rows.entries()){
   if(io.signal?.aborted)break;
   const ct=text(row.ct||row.cells.contractTotal),student=text(row.cells.F);
   let stage='input';
   try{
-   io.progress?.('Đang lấy Input theo '+ct+'…');
+   await io.progress?.('Đang lấy Input theo '+ct+'…',{ct,student,studentName:String(row.cells.G??''),index:index+1,total:rows.length});
    let link=await io.loadLink(ct);
    if(!courseRequest({ct,student,url:link?.url??''})){
     const found=await io.lookup(ct);if(io.signal?.aborted)break;

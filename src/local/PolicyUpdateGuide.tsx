@@ -2,7 +2,9 @@ import React,{useEffect,useRef,useState} from 'react';
 import {localFetch} from './api.mjs';
 import {assetPath} from './paths.mjs';
 import {POLICY_SCHEMA,normalizePolicyRow,validatePolicyRows} from '../core/policy-pack.mjs';
-import {policyTableRows,policyTemplateCSV} from '../core/policy-import.mjs';
+import {policyTableRows,policyTemplateRows} from '../core/policy-import.mjs';
+import WorkbookDownload from './WorkbookDownload.tsx';
+const templateSheets=[{name:'Chính sách giá',rows:policyTemplateRows()}];
 const money=(n:any)=>typeof n==='number'&&Number.isFinite(n)?n.toLocaleString('vi-VN'):'Cần bổ sung';
 function download(name:string,value:string,type='application/json'){const url=URL.createObjectURL(new Blob([value],{type})),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 async function request(body?:any,method='GET'){const r=await localFetch('/api/policy-versions',{method,...(body?{headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{})}),value=await r.json();if(!r.ok)throw Error(value.error);return value;}
@@ -37,8 +39,8 @@ export default function PolicyUpdateGuide({policy}:any){
  return <details className="policy-update-guide">
   <summary>Cập nhật chính sách giá trên web</summary>
   <p><strong>Đang dùng: {state?.current?.title||'Bộ chính sách đã phát hành'}</strong>{state?.current&&<> · {state.current.rows.length} dòng cập nhật</>}. Bảng giá, Rule và bộ tính dùng chung phiên bản này.</p>
-  <p>Nhập XLSX bảng giá có cột rõ ràng, CSV theo mẫu hoặc JSON đã xuất. Giá gốc là giá trước giảm; chọn nhãn Discount được phép, tháng tặng, kỳ trả góp và ngày hiệu lực riêng. Voucher cá nhân tiếp tục quản lý tại Voucher.</p>
-  <div className="policy-update-actions"><button type="button" className="secondary-button" onClick={()=>download('apollo-policy-template.csv',policyTemplateCSV(),'text/csv;charset=utf-8')}>Tải mẫu CSV</button><button type="button" className="quiet-button" disabled={!state?.current||busy} onClick={()=>download('apollo-price-policy.json',JSON.stringify(state.current,null,2))}>Xuất bản đang dùng</button></div>
+  <p>Nhập XLSX bảng giá theo mẫu hoặc JSON đã xuất. Giá gốc là giá trước giảm; chọn nhãn Discount được phép, tháng tặng, kỳ trả góp và ngày hiệu lực riêng. Voucher cá nhân tiếp tục quản lý tại Voucher.</p>
+  <div className="policy-update-actions"><WorkbookDownload className="secondary-button" sheets={templateSheets} fileName="apollo-policy-template.xlsx">Tải mẫu XLSX</WorkbookDownload><button type="button" className="quiet-button" disabled={!state?.current||busy} onClick={()=>download('apollo-price-policy.json',JSON.stringify(state.current,null,2))}>Xuất bản đang dùng</button></div>
   <div className="policy-update-fields">
    <label>File chính sách<input type="file" accept=".xlsx,.csv,.tsv,.json" disabled={busy} onChange={e=>void read(e.target.files?.[0])}/></label>
    {tables.length>0&&<label>Sheet giá<select value={sheet} disabled={busy} onChange={e=>{setSheet(Number(e.target.value));invalidate();}}>{tables.map((t,i)=><option key={i} value={i}>{t.name}</option>)}</select></label>}

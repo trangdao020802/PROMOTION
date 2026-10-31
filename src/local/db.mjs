@@ -1,9 +1,9 @@
 const NAME='promotion-installment-local-v2';
-const STORES=['datasets','files','edits','vouchers','links','evidence','settings','courseSources'];
+const STORES=['datasets','files','edits','vouchers','links','evidence','settings','courseSources','recordSnapshots'];
 let pending;
 export function database(){
  if(!pending)pending=new Promise((resolve,reject)=>{
-  const r=indexedDB.open(NAME,1);
+  const r=indexedDB.open(NAME,2);
   r.onupgradeneeded=()=>{for(const s of STORES)if(!r.result.objectStoreNames.contains(s))r.result.createObjectStore(s,{keyPath:'id'})};
   r.onerror=()=>{pending=null;reject(r.error)};
   r.onsuccess=()=>{r.result.onversionchange=()=>r.result.close();resolve(r.result)};

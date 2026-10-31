@@ -377,12 +377,12 @@ var PromotionHubCourse = (() => {
   }
   async function fillContractInputs(rows, io) {
     const results = [];
-    for (const row of rows) {
+    for (const [index, row] of rows.entries()) {
       if (io.signal?.aborted) break;
       const ct = text3(row.ct || row.cells.contractTotal), student = text3(row.cells.F);
       let stage = "input";
       try {
-        io.progress?.("\u0110ang l\u1EA5y Input theo " + ct + "\u2026");
+        await io.progress?.("\u0110ang l\u1EA5y Input theo " + ct + "\u2026", { ct, student, studentName: String(row.cells.G ?? ""), index: index + 1, total: rows.length });
         let link = await io.loadLink(ct);
         if (!courseRequest({ ct, student, url: link?.url ?? "" })) {
           const found = await io.lookup(ct);

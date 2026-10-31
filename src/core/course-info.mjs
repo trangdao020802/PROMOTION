@@ -27,7 +27,7 @@ export function resolveCourseInfo(candidates){
   const distinct=[...new Set(rows.map(r=>valueKey(col,r[col],values.H??r.H)))];
   const named=col==='H'?[...new Set(rows.map(r=>pricingIdentity(r.H,'','').courseMonths).filter(v=>v!=null))]:[];
   const best=col==='H'?[...rows].sort((a,b)=>Number(!!pricingIdentity(b.H,'','').courseMonths)-Number(!!pricingIdentity(a.H,'','').courseMonths))[0]:rows[0];
-  const latestHub=['K','L'].includes(col)?rows.filter(r=>r.hub):[];
+  const latestHub=rows.filter(r=>r.hub);
   // Keep the current receiving CT's offer visible when an older report differs.
   // Retain both references and the blocking conflict for explicit verification.
   values[col]=latestHub.length===1?text(latestHub[0][col]):distinct.length===1&&named.length<2?text(best[col]):null;

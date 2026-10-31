@@ -7,6 +7,9 @@ import {policyData} from '../scripts/policy-data.mjs';
 import {parseDate} from '../src/core/source-parser.mjs';
 import {hubFixture} from './helpers/hub-policy-fixture.mjs';
 import {projectHubContract} from '../src/core/hub-contract.mjs';
+import {makeSnapshot} from '../src/core/contract-memory.mjs';
+import {AuditEngine} from '../src/local/calculation.mjs';
+const getCourse=(qa,ct,student='QA-INPUTS')=>qa.stores.courseSources.get(ct+'|'+student)||qa.stores.courseSources.get(ct);
 const contractFacts=ct=>projectHubContract({ContractId:12345,ContractNo:ct,ListDiscount:[]},{payments:[],paymentState:'read',capturedAt:'2026-10-31T07:00:00Z'});
 
 // Exercise the panel's real click handler and local API routes. A static host
@@ -25,7 +28,7 @@ export const get=async(store,id)=>globalThis.qa.stores[store]?.get(id);
 export const put=async(store,value)=>{(globalThis.qa.stores[store]??=new Map()).set(value.id,value);return value;};
 export const versioned=async(store,id,version,create)=>{const values=globalThis.qa.stores[store]??=new Map(),old=values.get(id);if((old?.version||0)!==version)throw Object.assign(Error('Tab khác đã sửa link.'),{conflict:true});const value={...create(old),id,version:version+1};values.set(id,value);return value;};
 `;
-const bundled=build({stdin:{contents:`export {default} from ${JSON.stringify(new URL('../src/local/HubInputAutofill.tsx',import.meta.url).pathname)};export {localFetch} from ${JSON.stringify(new URL('../src/local/api.mjs',import.meta.url).pathname)};`,resolveDir:new URL('..',import.meta.url).pathname,loader:'js'},bundle:true,write:false,format:'cjs',platform:'node',target:'es2022',jsx:'transform',plugins:[{name:'panel-test-boundaries',setup(b){
+const bundled=build({stdin:{contents:`export {default} from ${JSON.stringify(new URL('../src/local/HubInputAutofill.tsx',import.meta.url).pathname)};export {localFetch,loadWorkbook} from ${JSON.stringify(new URL('../src/local/api.mjs',import.meta.url).pathname)};`,resolveDir:new URL('..',import.meta.url).pathname,loader:'js'},bundle:true,write:false,format:'cjs',platform:'node',target:'es2022',jsx:'transform',plugins:[{name:'panel-test-boundaries',setup(b){
  b.onResolve({filter:/^react$/},()=>({path:'react',namespace:'qa'}));
  b.onResolve({filter:/^\.\/db\.mjs$/},()=>({path:'db',namespace:'qa'}));
  b.onLoad({filter:/local\/model\.mjs$/},a=>({contents:fs.readFileSync(a.path,'utf8').replace('export function buildModel(bundle,p){','export function buildModel(bundle,p){globalThis.qa.modelBuilds=(globalThis.qa.modelBuilds||0)+1;'),loader:'js'}));
@@ -43,15 +46,15 @@ async function runPanel({existing=false,count=1,lookupError=false,version='1.6.1
  const ct='QA2610-CT-000004',student='QA-INPUTS',url='https://hub24.apollo.vn:7777/contract/detail/12345';
  const rows=Array.from({length:count},(_,i)=>{const code='QA2610-CT-'+String(i+4).padStart(6,'0');return {id:'CT::'+code,ct:code,kind:'contract',hubContract:policyRows.includes(i)?contractFacts(code):null,hubPolicy:policyRows.includes(i)?hubFixture({ct:code,months:2,unitPrice:3600000,offers:false}).policy:null,cells:{F:student,B:'QA1',contractTotal:code,...(completeRows.includes(i)?{H:'ATLS - New Price 2026 - Layer 1',I:'3 hrs/week',J:'2 months',K:'0',L:'0'}:{})}};});qa.stores.datasets.set('qa-local',dataset(rows));
  if(existing)qa.stores.links.set(ct,{id:ct,ct,url,version:3});
- const module={exports:{}},context=vm.createContext({qa,module,exports:module.exports,URL,Response,AbortController,DOMException,crypto,console,setTimeout,clearTimeout,fetch:async(input)=>{if(String(input).endsWith('rules.json'))return new Response(policies,{headers:{'Content-Type':'application/json'}});qa.network.push(String(input));return new Response('<!doctype html><title>Promotion Studio</title>',{headers:{'Content-Type':'text/html'}});}});
+ const module={exports:{}},context=vm.createContext({qa,module,exports:module.exports,URL,Response,Blob,TextEncoder,AbortController,DOMException,crypto,console,setTimeout,clearTimeout,fetch:async(input)=>{if(String(input).endsWith('rules.json'))return new Response(policies,{headers:{'Content-Type':'application/json'}});qa.network.push(String(input));return new Response('<!doctype html><title>Promotion Studio</title>',{headers:{'Content-Type':'text/html'}});}});
  vm.runInContext((await bundled).outputFiles[0].text,context);
  let complete;
  const tree=module.exports.default({rows,datasetId:'qa-local',request:automatic?{id:'qa-automatic',scope:'dataset'}:null,checkBridge:async()=>{qa.bridgeChecks++;return {version,capabilities:['contract-inputs','course-network','policy-api','contract-lists','no-new-tabs']};},makeLookup:()=>async code=>{qa.lookups.push(code);if(lookupError)throw Error('Lỗi kiểm thử kết nối');return {ct:code,url};},readInputs:async expected=>{
   qa.reads.push(expected);const attempt=(qa.attempts.get(expected.ct)||0)+1;qa.attempts.set(expected.ct,attempt);
   if(timeoutOnce&&expected.ct==='QA2610-CT-000005'&&attempt===1)throw Object.assign(Error('Hết thời gian Hub.'),{code:'timeout'});
   return {...expected,hubContract:contractFacts(expected.ct),hubPolicy:noPolicy?undefined:hubFixture({ct:expected.ct,months:2,unitPrice:3600000,offers:false}).policy,courseFee:partialOnce&&attempt>1?null:'ATLS - New Price 2026 - Layer 1',hoursPerWeek:partialOnce&&attempt>1?null:'3 hrs/week',package:partialOnce&&attempt===1?null:'2 months',giftcode:'0',discount:partialOfferOnRestart&&attempt>1?null:'0'};
- },onSave:async(row,payload)=>{const res=await module.exports.localFetch('/api/course-sources',{method:'PATCH',body:JSON.stringify({payload,datasetId:'qa-local',hash:'qa-local',version:qa.stores.courseSources.get(payload.ct)?.version??0})}),data=await res.json();if(!res.ok)throw Error(data.error);qa.saved.push({row,payload});return {row,source:data.source};},onLinkSaved:link=>qa.links.push(link),onBusyChange:value=>{qa.busy.push(value);if(!value)complete();}});
- const button=nodes(tree).find(n=>n.type==='button'&&n.props.className==='primary-button');assert.ok(button);let firedAutomatic=false;const restartButton=nodes(tree).find(n=>n.type==='button'&&n.children.includes('Tạo lượt đọc mới'));const start=async(fromStart=false)=>{const done=new Promise(resolve=>{complete=resolve;});if(automatic&&!firedAutomatic){firedAutomatic=true;qa.effects.at(-1)();}else (fromStart?restartButton:button).props.onClick();await done;};await start();return {qa,ct,student,url,retry:start,restart:()=>start(true),api:module.exports.localFetch};
+ },onSave:async(row,payload)=>{const res=await module.exports.localFetch('/api/course-sources',{method:'PATCH',body:JSON.stringify({payload,datasetId:'qa-local',hash:'qa-local',version:getCourse(qa,payload.ct)?.version??0})}),data=await res.json();if(!res.ok)throw Error(data.error);qa.saved.push({row,payload});return {row,source:data.source};},onLinkSaved:link=>qa.links.push(link),onBusyChange:value=>{qa.busy.push(value);if(!value)complete();}});
+ const button=nodes(tree).find(n=>n.type==='button'&&n.props.className==='primary-button');assert.ok(button);let firedAutomatic=false;const restartButton=nodes(tree).find(n=>n.type==='button'&&n.children.includes('Tạo lượt đọc mới'));const start=async(fromStart=false)=>{const done=new Promise(resolve=>{complete=resolve;});if(automatic&&!firedAutomatic){firedAutomatic=true;qa.effects.at(-1)();}else (fromStart?restartButton:button).props.onClick();await done;};await start();return {qa,ct,student,url,retry:start,restart:()=>start(true),api:module.exports.localFetch,model:()=>module.exports.loadWorkbook('qa-local'),restore:()=>qa.effects[0]()};
 }
 test('automatic linking reads only missing CT inputs and skips CTs with complete inputs and their verified rule snapshots',{timeout:5000},async()=>{
  const mixed=await runPanel({automatic:true,count:3,completeRows:[0,2]});assert.equal(mixed.qa.reads.length,1);assert.equal(mixed.qa.reads[0].ct,'QA2610-CT-000005');assert.equal(mixed.qa.saved.length,1);
@@ -79,10 +82,10 @@ test('retry after a timeout skips completed contracts and continues the failed a
  const {qa,retry}=await runPanel({count:3,timeoutOnce:true});assert.equal(qa.saved.length,2);assert.equal(qa.reads.length,3);assert.match(qa.states[2],/3\/3 CT/);await retry();assert.equal(qa.saved.length,3);assert.equal(qa.reads.length,4);assert.equal(qa.attempts.get('QA2610-CT-000004'),1);assert.equal(qa.attempts.get('QA2610-CT-000005'),2);assert.equal(qa.attempts.get('QA2610-CT-000006'),1);await retry();assert.equal(qa.reads.length,4);assert.equal(qa.network.length,0);
 });
 test('a new panel instance resumes from persisted progress after a page reload',{timeout:5000},async()=>{
- const first=await runPanel({count:3,timeoutOnce:true});assert.equal(first.qa.saved.length,2);const reopened=await runPanel({count:3,persisted:first.qa.stores});assert.equal(reopened.qa.reads.length,1);assert.ok(reopened.qa.reads.every(r=>r.ct!==first.ct));assert.equal(reopened.qa.stores.courseSources.get(first.ct).version,1);assert.equal(reopened.qa.network.length,0);
+ const first=await runPanel({count:3,timeoutOnce:true});assert.equal(first.qa.saved.length,2);const reopened=await runPanel({count:3,persisted:first.qa.stores});assert.equal(reopened.qa.reads.length,1);assert.ok(reopened.qa.reads.every(r=>r.ct!==first.ct));assert.equal(getCourse(reopened.qa,first.ct).version,1);assert.equal(reopened.qa.network.length,0);
 });
 test('partial course inputs remain pending and the next saved source retains previously read fields',{timeout:5000},async()=>{
- const {qa,retry,ct}=await runPanel({partialOnce:true});assert.equal(qa.states[3][0].status,'partial');assert.equal(qa.stores.settings.get('hub-input-run:qa-local').completed.length,0);await retry();assert.equal(qa.states[3][0].status,'saved');assert.equal(qa.stores.courseSources.get(ct).courseFee,'ATLS - New Price 2026 - Layer 1');assert.equal(qa.stores.courseSources.get(ct).package,'2 months');assert.equal(qa.stores.settings.get('hub-input-run:qa-local').completed.length,1);
+ const {qa,retry,ct}=await runPanel({partialOnce:true});assert.equal(qa.states[3][0].status,'partial');assert.equal(qa.stores.settings.get('hub-input-run:qa-local').completed.length,0);await retry();assert.equal(qa.states[3][0].status,'saved');assert.equal(getCourse(qa,ct).courseFee,'ATLS - New Price 2026 - Layer 1');assert.equal(getCourse(qa,ct).package,'2 months');assert.equal(qa.stores.settings.get('hub-input-run:qa-local').completed.length,1);
 });
 test('a checkpoint cannot complete another student or an unsaved source version',{timeout:5000},async()=>{
  const {qa,api,ct}=await runPanel();const run=qa.stores.settings.get('hub-input-run:qa-local');
@@ -96,11 +99,26 @@ test('new read starts immediately at the first displayed CT and re-reads discoun
  assert.notEqual(secondRun.runId,firstRun.runId);assert.equal(secondRun.refresh,true);assert.equal(secondRun.completed.length,3);
  assert.deepEqual(r.qa.reads.slice(3).map(r=>r.ct),r.qa.reads.slice(0,3).map(r=>r.ct));
  assert.ok(secondRun.targets.every(t=>t.required.includes('discount')&&t.required.includes('giftcode')));
- assert.equal(r.qa.stores.courseSources.get(r.ct).version,2);
+ assert.equal(getCourse(r.qa,r.ct).version,2);
 });
 
 test('a restarted read retains old display data but cannot checkpoint a discount missing from its latest response',{timeout:5000},async()=>{
  const r=await runPanel({partialOfferOnRestart:true});await r.restart();
- const source=r.qa.stores.courseSources.get(r.ct),run=r.qa.stores.settings.get('hub-input-run:qa-local');
+ const source=getCourse(r.qa,r.ct),run=r.qa.stores.settings.get('hub-input-run:qa-local');
  assert.equal(source.discount,'0');assert.ok(source.lastReadMissing.includes('discount'));assert.equal(run.completed.length,0);assert.equal(r.qa.states[3][0].status,'partial');assert.ok(r.qa.states[3][0].missing.includes('discount'));
+});
+
+test('refresh restores manual inputs and the whole-contract result; a later input change invalidates that cached amount',{timeout:5000},async()=>{
+ const r=await runPanel(),record={id:'CT::'+r.ct},patch={I:'4 hrs/week',L:'0'};
+ const saved=await r.api('/api/edits',{method:'PATCH',body:JSON.stringify({datasetId:'qa-local',id:record.id,version:0,patch})});assert.equal(saved.status,200);
+ const model=await r.model(),engine=new AuditEngine(model),row=engine.calculate(record,patch),snapshot=await makeSnapshot(model,row,{[record.id]:patch});
+ r.qa.stores.recordSnapshots=new Map([[snapshot.id,snapshot]]);
+ const reopened=await (await r.api('/api/bootstrap?dataset=qa-local')).json();assert.equal(reopened.cachedCount,1);assert.equal(reopened.cachedRows[0].cells.I,'4 hrs/week');assert.equal(reopened.cachedRows[0].cells.Q,row.cells.Q);assert.deepEqual(reopened.edits[record.id].patch,patch);
+ const changed=await r.api('/api/edits',{method:'PATCH',body:JSON.stringify({datasetId:'qa-local',id:record.id,version:1,patch:{...patch,J:'12 months'}})});assert.equal(changed.status,200);
+ const fresh=await (await r.api('/api/bootstrap?dataset=qa-local')).json();assert.equal(fresh.cachedCount,0);assert.equal(fresh.edits[record.id].patch.J,'12 months');assert.equal(getCourse(r.qa,r.ct).student,r.student);assert.equal(getCourse(r.qa,r.ct).id,r.ct+'|'+r.student);
+});
+test('reopening the panel retains the last active CT and progress message from the persisted read',{timeout:5000},async()=>{
+ const r=await runPanel(),run=r.qa.stores.settings.get('hub-input-run:qa-local'),message='Đang đọc Course info '+r.ct+' trong nền…';
+ const response=await r.api('/api/hub-input-progress',{method:'PATCH',body:JSON.stringify({operation:'status',datasetId:'qa-local',runId:run.runId,version:run.version,note:{state:'running',ct:r.ct,student:r.student,studentName:'Dữ liệu kiểm thử',message,index:1}})});assert.equal(response.status,200);
+ r.restore();for(let i=0;i<80;i++)await Promise.resolve();assert.ok(r.qa.states[2].includes(message));assert.match(r.qa.states[2],/tạm dừng khi làm mới/);assert.ok(r.qa.states[2].includes(r.ct));
 });

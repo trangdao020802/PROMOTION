@@ -27,4 +27,5 @@ export function policyTableRows(table,defaults={}){
   return normalizePolicyRow(raw,{...defaults,source:defaults.source||table.name||'Chính sách nhập',approval:defaults.approval||'',row:index+i+2});
  });
 }
-export function policyTemplateCSV(){return '\uFEFF'+POLICY_COLUMNS.join(',')+'\r\n'+['ATLS',2027,1,4,'standard',12,12,4300000,51600000,5160000,6,1,0,1,'2027-01-01','2027-03-31','*','*','Ten file chinh sach da duyet','So quyet dinh / nguoi duyet','Ten Discount apply duoc phep','Dieu kien hoc vien can xac minh'].join(',')+'\r\n';}
+export function policyTemplateRows(){return [POLICY_COLUMNS,['ATLS',2027,1,4,'standard',12,null,12,4300000,51600000,5160000,6,1,0,1,'2027-01-01','2027-03-31','*','*','Tên file chính sách đã duyệt','Số quyết định / người duyệt','Tên Discount apply được phép','Điều kiện học viên cần xác minh']];}
+export function policyTemplateCSV(){return '\uFEFF'+policyTemplateRows().map(row=>row.map(value=>'"'+String(value??'').replace(/"/g,'""')+'"').join(',')).join('\r\n')+'\r\n';}
