@@ -2,6 +2,7 @@ import React,{useState} from 'react';
 import {voucherDetailURL} from '../core/hub-voucher.mjs';
 import {VOUCHER_POLICIES} from '../core/vouchers.mjs';
 import {PRICE_PHASES} from '../core/price-catalog.mjs';
+import PriceRowEditor from './PriceRowEditor.tsx';
 
 const value=(v:any)=>v===null||v===undefined||v===''?'Chưa có':typeof v==='number'?v.toLocaleString('vi-VN'):String(v);
 const day=(v:any)=>typeof v==='number'&&Number.isFinite(v)?new Date(Date.UTC(1899,11,30)+v*86400000).toLocaleDateString('vi-VN',{timeZone:'UTC'}):v?String(v).split('-').reverse().join('/'):'Chưa xác định';
@@ -11,7 +12,7 @@ function Sources({row}:any){return <div className="price-source"><details><summa
 function Amount({n}:any){return <span className={typeof n==='number'?'price-number':'price-absent'}>{typeof n==='number'?value(n):'Chưa tính'}</span>}
 
 export default function ReferenceTable({section,rows,disabled,onVoucherEdit}:any){
- const [phase,setPhase]=useState(section==='master'?'q4':'all'),[state,setState]=useState('all');
+ const [phase,setPhase]=useState(section==='master'?'q4':'all'),[state,setState]=useState('all'),[editing,setEditing]=useState<any>(undefined);
  if(section==='vouchers')return <div className="reference-scroll"><table className="reference-table voucher-reference" aria-label="Danh sách voucher">
   <thead><tr>{['Giftcode No','Học viên / Student ID','Center','Hiệu lực','Trạng thái','Chính sách','Loại / mức giảm','Cơ sở %','Căn cứ / chỉnh sửa'].map(s=><th key={s}>{s}</th>)}</tr></thead>
   <tbody>{rows.map((r:any)=><tr key={r.storageId||r.AH}><td>{voucherDetailURL(r.hubUrl)?<a href={voucherDetailURL(r.hubUrl)!} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">{r.AH}</a>:r.AH}</td><td>{r.U}<small>{r.studentId}</small></td><td>{r.O}</td><td>{day(r.P)}<small>đến {day(r.Q)}</small></td><td>{statuses[r.R]??r.R}</td><td>{(VOUCHER_POLICIES as any)[r.policyId??'case-specific']}</td><td>{r.Z==='PHẦN TRĂM'?`${Number(r.V??0)*100}%`:value(r.AA)+' VND'}</td><td>{r.Z!=='PHẦN TRĂM'?'Số tiền cố định':r.percentBasis==='gross'?'Giá gốc':r.percentBasis==='after-discount'?'Giá gốc − Discount':'Theo ca đối chiếu; cần xác minh khi cộng Discount'}</td><td><details><summary>Căn cứ duyệt</summary><p>{r.approvalNote||'Chưa bổ sung'}</p></details><button className="quiet-button" disabled={disabled} onClick={()=>onVoucherEdit(r.storageId||r.AH)}>Chỉnh sửa voucher</button></td></tr>)}</tbody>
@@ -21,11 +22,11 @@ export default function ReferenceTable({section,rows,disabled,onVoucherEdit}:any
  const columns=master?['Khóa học / Layer / giờ','Gói / thời lượng tính','Kỳ chính sách','Đơn giá chưa giảm · tháng / tuần','Giá gốc','Giảm theo gói','Sau giảm · chưa voucher','Tháng tặng có điều kiện','Kỳ trả góp tối đa','Phạm vi tính','Truy vết / căn cứ']
   :['Khóa quy tắc','Khóa / Layer / giờ','Gói / hiệu lực','Cách tính / quyền lợi','Điều kiện áp dụng','Cộng gộp / thứ tự','Minh chứng cần có','Tình trạng','Truy vết / căn cứ'];
  return <>
-  <div className="price-table-tools"><label>Kỳ chính sách<select aria-label="Kỳ chính sách bảng giá" value={phase} onChange={e=>setPhase(e.target.value)}><option value="all">Tất cả kỳ</option>{Object.entries(PRICE_PHASES).map(([id,p]:any)=><option key={id} value={id}>{p.label}</option>)}<option value="reference">Khóa / gói cần chính sách riêng</option></select></label><label>Phạm vi tính<select aria-label="Phạm vi tính bảng giá" value={state} onChange={e=>setState(e.target.value)}><option value="all">Tất cả tình trạng</option>{Object.entries(coverage).map(([id,label])=><option key={id} value={id}>{String(label)}</option>)}</select></label><span>{visible.length} dòng · tiền VND · tháng tặng chưa quy đổi thành tiền</span></div>
+  <div className="price-table-tools"><label>Kỳ chính sách<select aria-label="Kỳ chính sách bảng giá" value={phase} onChange={e=>setPhase(e.target.value)}><option value="all">Tất cả kỳ</option>{Object.entries(PRICE_PHASES).map(([id,p]:any)=><option key={id} value={id}>{p.label}</option>)}<option value="reference">Khóa / gói cần chính sách riêng</option></select></label><label>Phạm vi tính<select aria-label="Phạm vi tính bảng giá" value={state} onChange={e=>setState(e.target.value)}><option value="all">Tất cả tình trạng</option>{Object.entries(coverage).map(([id,label])=><option key={id} value={id}>{String(label)}</option>)}</select></label><span>{visible.length} dòng · tiền VND · tháng tặng chưa quy đổi thành tiền</span>{master&&<button className="secondary-button" type="button" disabled={disabled} onClick={()=>setEditing(null)}>+ Thêm dòng giá</button>}</div>
   <div className="reference-scroll"><table key={section} className={'reference-table canonical-'+section} aria-label={master?'Bảng giá chung thống nhất':'Quy tắc và điều kiện áp dụng'}>
    <thead><tr>{columns.map(s=><th key={s}>{s}</th>)}</tr></thead>
    <tbody>{visible.map((r:any)=>master?<tr key={r.id} className={'price-status-'+r.status}>
-    <td><strong>{r.course}</strong><small>{r.group} · {r.koc??'chưa có KOC'} · {r.year??'chưa có năm'} · {r.layer===0?'Không chia Layer':`Layer ${r.layer??'?'}`} · {r.hours??'?'} giờ/tuần</small></td>
+    <td><strong>{r.course}</strong><small>{r.group} · {r.koc??'chưa có KOC'} · {r.year??'chưa có năm'} · {r.layer===0?'Không chia Layer':`Layer ${r.layer??'?'}`} · {r.hours??'?'} giờ/tuần</small><button type="button" className="price-edit-row-button" disabled={disabled} onClick={()=>setEditing(r)}>Sửa giá / công thức</button></td>
     <td>{r.package}<small>{r.unit==='weeks'?`${r.weeks??'?'} tuần tính học phí`:typeof r.months==='number'?r.months+' tháng tính học phí':'Chưa xác định số tháng'}</small></td>
     <td>{r.regimeLabel}<small>{day(r.from)} – {day(r.to)}</small>{r.renewFrom&&r.renewFrom!==r.from&&<small>Current từ {day(r.renewFrom)}</small>}</td>
     <td className="numeric"><Amount n={r.unit==='weeks'?r.unitPrice:r.monthly}/><small>{r.unit==='weeks'?'VND / tuần':'VND / tháng'}</small></td><td className="numeric"><Amount n={r.gross}/></td><td className="numeric"><Amount n={r.discount}/></td><td className="numeric"><Amount n={r.net}/></td>
@@ -33,8 +34,9 @@ export default function ReferenceTable({section,rows,disabled,onVoucherEdit}:any
     <td className="numeric">{r.maxTerms===0?'Trả thẳng':r.maxTerms===null?'Chưa có':r.maxTerms+' tháng'}</td>
     <td><span className={'price-coverage '+r.status}>{coverage[r.status]}</span>{r.conditions&&<small>{r.conditions}</small>}</td><td><Sources row={r}/></td>
    </tr>:<tr key={r.id} className={'price-status-'+r.status}>
-    <td><strong>{r.ruleKey}</strong><small>{r.regimeLabel}</small></td><td>{r.course??r.group}<small>{r.layer?'Layer '+r.layer+' · '+r.hours+' giờ/tuần':''}</small></td><td>{r.package}<small>{day(r.from)} – {day(r.to)}</small></td><td>{r.benefit}</td><td>{r.conditions}</td><td>{r.stacking}</td><td>{r.requiredEvidence??'Đối tượng, ghi danh / full, lịch sử học phí và hồ sơ đối ứng nếu có.'}</td><td><span className={'price-coverage '+r.status}>{r.status==='ready'?'Có quy tắc nguồn':coverage[r.status]}</span></td><td><Sources row={r}/></td>
+    <td><strong>{r.ruleKey}</strong><small>{r.regimeLabel}</small>{r.course&&r.package&&<button type="button" className="price-edit-row-button" disabled={disabled} onClick={()=>setEditing(r)}>Sửa giá / công thức</button>}</td><td>{r.course??r.group}<small>{r.layer?'Layer '+r.layer+' · '+r.hours+' giờ/tuần':''}</small></td><td>{r.package}<small>{day(r.from)} – {day(r.to)}</small></td><td>{r.benefit}</td><td>{r.conditions}</td><td>{r.stacking}</td><td>{r.requiredEvidence??'Đối tượng, ghi danh / full, lịch sử học phí và hồ sơ đối ứng nếu có.'}</td><td><span className={'price-coverage '+r.status}>{r.status==='ready'?'Có quy tắc nguồn':coverage[r.status]}</span></td><td><Sources row={r}/></td>
    </tr>)}{!visible.length&&<tr><td colSpan={columns.length}>Không có dòng phù hợp. Chọn Tất cả kỳ / tình trạng để xem các giá còn thiếu.</td></tr>}</tbody>
   </table></div>
+  {editing!==undefined&&<PriceRowEditor key={editing?.id??'new-price'} row={editing} onCancel={()=>setEditing(undefined)}/>}
  </>;
 }
