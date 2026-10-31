@@ -414,13 +414,29 @@ var PromotionHubCourseNetwork = (() => {
   }
   function coursePayload(v, expected) {
     const request = courseRequest(expected);
-    if (!request || !v || typeof v !== "object" || Object.keys(v).some((k) => !["ct", "student", "url", "readPolicy", "hubContract", "hubPolicy", "hubPolicyError", ...COURSE_FIELDS].includes(k)) || v.ct !== request.ct || v.student !== request.student || v.url !== request.url) return null;
+    if (!request || !v || typeof v !== "object" || Object.keys(v).some((k) => !["ct", "student", "url", "readPolicy", "courseState", "inheritedCourses", "hubContract", "hubPolicy", "hubPolicyError", ...COURSE_FIELDS].includes(k)) || v.ct !== request.ct || v.student !== request.student || v.url !== request.url) return null;
     const result = { ct: request.ct, student: request.student, url: request.url };
     for (const key of COURSE_FIELDS) {
       if (v[key] != null && (typeof v[key] !== "string" || !text3(v[key]) || text3(v[key]).length > (key === "discount" ? 2e3 : 200))) return null;
       result[key] = v[key] == null ? null : key === "discount" ? normalizeHubDiscount(v[key]) : text3(v[key]);
     }
-    if (!COURSE_FIELDS.some((k) => result[k] !== null)) return null;
+    if (v.courseState !== void 0 && v.courseState !== "empty") return null;
+    if (v.courseState === "empty") {
+      if (!validateHubContract(v.hubContract) || v.hubContract.ct !== request.ct || v.hubContract.contractId !== request.url.replace(/\/$/, "").split("/").pop() || ["courseFee", "hoursPerWeek", "package"].some((k) => result[k] != null)) return null;
+      result.courseState = "empty";
+    }
+    if (!COURSE_FIELDS.some((k) => result[k] !== null) && result.courseState !== "empty") return null;
+    if (v.inheritedCourses !== void 0) {
+      if (!Array.isArray(v.inheritedCourses) || v.inheritedCourses.length > 20 || new Set(v.inheritedCourses.map((s) => s?.ct)).size !== v.inheritedCourses.length) return null;
+      const inherited = [];
+      for (const source of v.inheritedCourses) {
+        if (!source || source.inheritedCourses !== void 0 || source.ct === request.ct || source.student !== request.student) return null;
+        const parsed = coursePayload(source, source);
+        if (!parsed) return null;
+        inherited.push(parsed);
+      }
+      result.inheritedCourses = inherited;
+    }
     if (result.giftcode && /^\d[\d.,\s]*\s*(?:vnd|vnđ|đ|₫|%)$/i.test(result.giftcode)) result.giftcode = null;
     if (result.hoursPerWeek) {
       const hours = weeklyHours(result.hoursPerWeek);
@@ -575,7 +591,7 @@ var PromotionHubCourseNetwork = (() => {
     if (projection.contractId != null && projection.contractId !== detailId || projection.ct && projection.ct !== request.ct) return { error: "identity" };
     if (projection.student && projection.student !== request.student) return { error: "student" };
     if (!projection.ct && !coursePayload(domPayload, request)) return { error: "identity" };
-    if (!Array.isArray(projection.courses) || projection.courses.length !== 1) return { error: projection.courses?.length ? "conflict" : "empty", fields: ["courseFee", "hoursPerWeek", "package"] };
+    if (!Array.isArray(projection.courses) || projection.courses.length > 1) return { error: projection.courses?.length ? "conflict" : "empty", fields: ["courseFee", "hoursPerWeek", "package"] };
     const root = projection.fields ?? {}, course = projection.courses[0] ?? {}, values = {};
     for (const key of COURSE_FIELDS) {
       if (key === "discount") {
@@ -587,7 +603,12 @@ var PromotionHubCourseNetwork = (() => {
         values[key] = codes[0] ?? ([course[key], root[key], domPayload?.[key]].includes("0") ? "0" : null);
       } else values[key] = course[key] ?? root[key] ?? domPayload?.[key] ?? null;
     }
-    const payload = coursePayload({ ...request, ...values, ...projection.hubContract ? { hubContract: projection.hubContract } : {}, ...projection.hubPolicy ? { hubPolicy: projection.hubPolicy } : {}, ...projection.hubPolicyError ? { hubPolicyError: projection.hubPolicyError } : {} }, request);
+    const empty = projection.courses.length === 0;
+    if (empty) {
+      for (const key of ["courseFee", "hoursPerWeek", "package"]) values[key] = null;
+      for (const key of ["giftcode", "discount"]) if (values[key] === "0") values[key] = null;
+    }
+    const payload = coursePayload({ ...request, ...values, ...empty ? { courseState: "empty" } : {}, ...projection.hubContract ? { hubContract: projection.hubContract } : {}, ...projection.hubPolicy ? { hubPolicy: projection.hubPolicy } : {}, ...projection.hubPolicyError ? { hubPolicyError: projection.hubPolicyError } : {} }, request);
     return payload ? { payload, via: domPayload ? "network+dom" : "network" } : { error: "format" };
   }
   return __toCommonJS(hub_course_network_exports);

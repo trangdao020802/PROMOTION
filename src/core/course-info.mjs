@@ -1,5 +1,5 @@
 // Course evidence is independent of receipts. Never infer hours from cash or
-// total hours, nor copy the package of a retired/intermediate CT.
+// total hours. A proved same-student transfer can supply missing course facts.
 import {pricingIdentity,weeklyHours,priceText,packageIdentity,isWeeklyCourse} from './pricing-key.mjs';
 import {normalizeHubDiscount} from './hub-discount.mjs';
 import {validateHubPolicy} from './hub-policy.mjs';
@@ -38,32 +38,53 @@ export function resolveCourseInfo(candidates){
  if(!values.J&&identity.paymentMode==='once'&&identity.courseMonths&&identity.variant==='standard'){values.J=identity.courseMonths+' months';fields.J=fields.H.map(f=>({...f,value:values.J,derivedFrom:'Course fee KOC'}));}
  return {values,fields,warnings,complete:['H','I','J'].every(k=>present(values[k]))};
 }
+export const courseSourceCandidate=e=>({H:e.courseFee,I:e.hoursPerWeek,J:e.package,K:e.giftcode,L:normalizeHubDiscount(e.discount),hub:true,contract:e.ct,ref:{file:'Hub · '+e.ct,sheet:'Contract inputs',url:e.url,contract:e.ct}});
+export function resolveTransferCourseInfo(direct,donors=[]){
+ const course=resolveCourseInfo(direct),inheritedFields={},origins=new Set();
+ if(course.complete)return {...course,inheritedFields,originContracts:[]};
+ const empty=['H','I','J'].every(k=>!present(course.values[k])),groups=new Map();
+ for(const row of donors){const key=row.contract||row.ref?.contract;if(!key)continue;const rows=groups.get(key)??[];rows.push({...row,fallback:false});groups.set(key,rows);}
+ const resolved=[...groups].map(([ct,rows])=>({ct,course:resolveCourseInfo(rows)})).filter(({course:c})=>c.complete&&['H','I','J'].every(k=>!present(course.values[k])||valueKey(k,course.values[k],course.values.H)===valueKey(k,c.values[k],c.values.H)));
+ for(const col of Object.keys(columns)){
+  if(present(course.values[col])||['K','L'].includes(col)&&course.values[col]==='0'&&!empty)continue;
+  const available=resolved.filter(r=>present(r.course.values[col])||['K','L'].includes(col)&&r.course.values[col]==='0'),distinct=new Set(available.map(r=>valueKey(col,r.course.values[col],r.course.values.H)));
+  if(!available.length)continue;
+  course.fields[col]=available.flatMap(r=>r.course.fields[col].map(f=>({...f,inheritedFrom:r.ct,ref:{...f.ref,contract:r.ct}})));
+  if(distinct.size!==1){course.values[col]=null;course.warnings.push(col+': các CT chuyển vào có thông tin khóa học/ưu đãi khác nhau; cần chọn căn cứ trước khi bổ sung.');continue;}
+  course.values[col]=available[0].course.values[col];inheritedFields[col]=available.map(r=>r.ct);available.forEach(r=>origins.add(r.ct));
+  for(const r of available)for(const warning of r.course.warnings)course.warnings.push(warning+' · CT nguồn '+r.ct);
+ }
+ course.warnings=[...new Set(course.warnings)];course.complete=['H','I','J'].every(k=>present(course.values[k]));
+ return {...course,inheritedFields,originContracts:[...origins]};
+}
 export function applyCourseInfo(book,group,hubSources=[]){
  if(!group.ct)return;
  if(!group.hubInputBase)group.hubInputBase={G:group.raw.G,X:group.raw.X};
  Object.assign(group.raw,group.hubInputBase);
  const exact=(book.extensions.courseEvidence??[]).filter(e=>e.ct===group.ct&&e.student===String(group.cells.F));
- const candidates=[...(group.courseCandidates??[]),...exact.map(e=>({...Object.fromEntries(Object.entries(columns).map(([col,key])=>[col,e[key]??null])),ref:e.ref})),
-  ...hubSources.filter(e=>e.ct===group.ct&&e.student===String(group.cells.F)).map(e=>({H:e.courseFee,I:e.hoursPerWeek,J:e.package,K:e.giftcode,L:normalizeHubDiscount(e.discount),hub:true,ref:{file:'Hub · '+e.ct,sheet:'Contract inputs',url:e.url}}))];
- const course=resolveCourseInfo(candidates);
+ const hub=hubSources.filter(e=>e.ct===group.ct&&e.student===String(group.cells.F)),allowed=new Set(group.sourceContracts??[]);
+ const candidates=[...(group.courseCandidates??[]),...exact.map(e=>({...Object.fromEntries(Object.entries(columns).map(([col,key])=>[col,e[key]??null])),ref:e.ref})),...hub.map(courseSourceCandidate)];
+ const inherited=[...hubSources,...hub.flatMap(e=>e.inheritedCourses??[])].filter(e=>allowed.has(e.ct)&&e.student===String(group.cells.F));
+ const donorEvidence=(book.extensions.courseEvidence??[]).filter(e=>allowed.has(e.ct)&&e.student===String(group.cells.F));
+ const donors=[...(group.transferCourseCandidates??[]),...donorEvidence.map(e=>({...Object.fromEntries(Object.entries(columns).map(([col,key])=>[col,e[key]??null])),contract:e.ct,ref:{...e.ref,contract:e.ct}})),...inherited.map(courseSourceCandidate)];
+ const course=resolveTransferCourseInfo(candidates,donors);
  Object.assign(group.cells,course.values);group.courseInfo=course;
  group.warnings=group.warnings.filter(w=>!w.startsWith(NO_CT)&&!Object.keys(columns).some(k=>w.startsWith(k+':'))&&!/^(?:groupKoc|contractType):/.test(w));
  group.warnings.push(...course.warnings);
  group.hubOfferPending=hubSources.some(e=>e.ct===group.ct&&e.student===String(group.cells.F))?{discount:!text(course.values.L),giftcode:!text(course.values.K)}:null;
  if(group.noCTInvoice&&!course.complete)group.warnings.push(NO_CT+'; bổ sung các trường khóa học còn thiếu từ CT nhận / Export');
  if(exact.length===1){const e=exact[0];if(e.center)group.cells.B=e.center;if(e.centerName)group.cells.A=e.centerName;if(e.contractType)group.raw.G=e.contractType;}
- const hub=hubSources.filter(e=>e.ct===group.ct&&e.student===String(group.cells.F));
  const policies=hub.filter(e=>validateHubPolicy(e.hubPolicy)&&e.hubPolicy.ct===group.ct);
  group.hubPolicy=policies.length===1?policies[0].hubPolicy:null;
  group.hubPolicyError=hub.find(e=>e.hubPolicyError)?.hubPolicyError??null;
- group.hubReadMissing=hub.length===1?(hub[0].lastReadMissing??[]):[];
+ group.hubReadMissing=hub.length===1?(hub[0].lastReadMissing??[]).filter(field=>!Object.entries(columns).some(([col,name])=>name===field&&course.inheritedFields[col]?.length&&hub[0].inheritedReadComplete!==false&&!course.warnings.length)):[];
  group.hubContract=hub.length===1&&validateHubContract(hub[0].hubContract)?hub[0].hubContract:null;
  for(const [field,col]of [['groupKoc','X'],['contractType','G']]){const known=[...new Set(hub.map(e=>text(e[field])).filter(Boolean))];if(known.length===1&&!text(group.raw[col]))group.raw[col]=known[0];else if(known.length>1||known.length===1&&text(group.raw[col])&&text(group.raw[col])!==known[0])group.warnings.push(field+': thông tin trên Hub khác nguồn CT; cần đối chiếu.');}
 }
 export function withCourseSources(book,sources){
  // Callers load their own freshly built workbook. Original source grids and
  // stored manual patches remain untouched; sources are scoped before this call.
- const indexed=new Map();for(const source of sources){const key=source.ct+'|'+source.student;const bucket=indexed.get(key)??[];bucket.push(source);indexed.set(key,bucket);}
- for(const group of book.contractGroups)applyCourseInfo(book,group,indexed.get(group.ct+'|'+String(group.cells.F))??[]);
+ book.extensions.hubCourseSources=sources;
+ for(const group of book.contractGroups)applyCourseInfo(book,group,sources);
  return book;
 }

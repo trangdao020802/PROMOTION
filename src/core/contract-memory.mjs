@@ -1,5 +1,6 @@
 // A record is identified by CT/student. Its outcome is bound to every relevant
 // saved input, policy, source ledger, voucher and condition/dependency patch.
+import {voucherForStudent} from './vouchers.mjs';
 export const CALCULATION_REVISION=typeof __CALC_REVISION__==='string'?__CALC_REVISION__:'contract-memory-v1';
 export const sourceKey=(ct,student)=>String(ct)+'|'+String(student);
 export const snapshotKey=(datasetId,row)=>'record:'+String(datasetId||'policy-2026')+':'+sourceKey(row.ct||row.cells?.contractTotal||row.paymentCode,row.cells?.F);
@@ -14,7 +15,7 @@ export async function calculationSignature(data,row,patches={}){
  const group=data.contractGroups.find(g=>g.id===row.id);if(!group)return '';
  const dependencies=Object.entries(patches).filter(([id,p])=>id===row.id||String(p.verification?.partnerContract??'').toUpperCase()===group.ct||Object.values(patches[row.id]?.verification??{}).includes(data.contractGroups.find(g=>g.id===id)?.ct)).sort(([a],[b])=>a.localeCompare(b));
  const partner=patches[row.id]?.verification?.partnerContract,related=data.contractGroups.filter(g=>g.ct&&g.ct===partner).map(g=>({ct:g.ct,cells:g.cells,raw:g.raw,account:g.account,hubPolicy:g.hubPolicy}));
- const code=String(patches[row.id]?.K??group.cells.K??'').trim().toUpperCase(),vouchers=(data.extensions?.customVouchers??[]).filter(v=>String(v.code??'').trim().toUpperCase()===code);
+ const code=String(patches[row.id]?.K??group.cells.K??'').trim().toUpperCase(),vouchers=voucherForStudent(data.extensions?.customVouchers,code,group.cells.F,group.cells.G);
  // Published/imported policy packs are immutable. Share their digest across all
  // rows; hashing the full price catalogue for every CT made refresh quadratic.
  return digest({revision:CALCULATION_REVISION,dataset:data.dataset?.id??data.hash??'policy-2026',cutoff:data.cutoff,policy:await policyFingerprint(data.policy),ct:group.ct,student:String(group.cells.F),name:group.cells.G,cells:group.cells,raw:group.raw,account:group.account,courseInfo:group.courseInfo,hubPolicy:group.hubPolicy,hubContract:group.hubContract,hubReadMissing:group.hubReadMissing,patches:dependencies,related,vouchers});

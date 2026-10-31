@@ -37,7 +37,7 @@
    if(root.querySelector('input[type="password"]')){failure(j,'hub_login','Đăng nhập trong tab Hub đang mở rồi bấm lấy tiếp.');return;}
    if(j.course){const parsed=C.parseCoursePage({...C.coursePageFromDocument(root,{staticDocument:true}),url},j.course),result=j.projection?N.parseContractDetailProjection(j.projection,j.course,parsed.payload):parsed;
     if(result.error&&['student','conflict'].includes(result.error)){finish(j,C.courseFailure(result.error));return;}
-    if(result.payload&&['courseFee','hoursPerWeek','package','giftcode','discount'].every(k=>result.payload[k]!=null)){finish(j,{payload:result.payload});return;}
+    if(result.payload&&C.courseReadComplete(result.payload)){finish(j,{payload:result.payload});return;}
    }else{
     const anchors=[...root.querySelectorAll('table tbody a[href]')].map(a=>({text:a.textContent.trim(),href:new URL(a.getAttribute('href'),url).href})),links=[];
     for(const ct of j.codes){const result=I.selectIndexCandidate(anchors,ct);if(result.status==='conflict'){failure(j,'mismatch','Mã CT / DEP khớp nhiều ID; chưa lưu link.');return;}if(result.status==='found')links.push({ct,url:result.url});}
@@ -81,7 +81,7 @@
    if(j.activatedRoot!==root){j.activatedRoot=root;j.frame.contentWindow.postMessage({channel,type:'activate',id:j.id,course:j.course},P.HUB);}
    const result=courseResult(j,root,url),signature=JSON.stringify(result);
    if(signature!==j.signature){j.signature=signature;j.stableAt=Date.now();clearTimeout(j.settleTimer);j.settleTimer=setTimeout(()=>inspect(j),350);}
-   const complete=result.payload&&['courseFee','hoursPerWeek','package','giftcode','discount'].every(k=>result.payload[k]!=null);
+   const complete=result.payload&&C.courseReadComplete(result.payload);
    if(result.payload&&complete||expired){finish(j,result.payload?{payload:result.payload}:C.courseFailure(result.error,result.fields));return;}
   }else{
    if(j.codes[0].includes('-DEP-')&&!j.fields){const fields=discover(root,url);if(fields&&!I.indexURLMatches(url,j.codes,j.id,fields)){j.fields=fields;j.loaded=false;j.frame.src=I.indexURL(j.codes,j.id,fields);return;}}
@@ -114,7 +114,7 @@
    if(m.projection.ct&&m.projection.ct!==j.course.ct||m.projection.contractId&&m.projection.contractId!==j.course.url.replace(/\/$/,'').split('/').pop()){finish(j,C.courseFailure('identity'));return;}
    j.projection=m.projection;
    if(child&&typeof m.route==='string'&&m.route===new URL(m.projection.source).pathname)post(j,'learn-route',{course:j.course,source:N.courseDetailEndpoint(m.projection.source,j.course.url)});
-   if(result.payload&&['courseFee','hoursPerWeek','package','giftcode','discount'].every(k=>result.payload[k]!=null)){finish(j,{payload:result.payload});return;}
+   if(result.payload&&C.courseReadComplete(result.payload)){finish(j,{payload:result.payload});return;}
    clearTimeout(j.routeTimer);readPage(j);inspect(j);
   }
   if(m.type==='index'&&child&&!j.course&&Array.isArray(m.pairs)&&m.pairs.length<=I.INDEX_LIMIT&&Array.isArray(m.conflicts)&&m.conflicts.length<=I.INDEX_LIMIT){

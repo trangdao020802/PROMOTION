@@ -34,7 +34,7 @@ test('the final parent is resolved even when the retired CT or final CT is missi
   const b=sample();b.exports=b.exports.filter(e=>e.ct!==missing);const m=model(b);
   assert.equal(m.contractGroups.length,1);const g=m.contractGroups[0];assert.equal(g.ct,ct);assert.equal(g.account.ct,ct);
   const row=new AuditEngine(m).calculate({id:g.id});assert.equal(row.cells.contractTotal,ct);
-  if(missing===ct){assert.equal(g.cells.J,null);assert.equal(row.cells.AF,'CHECK');assert.equal(row.reconciliation.target,null);}
+  if(missing===ct){assert.equal(g.cells.J,'2 months');assert.deepEqual(g.courseInfo.originContracts,[old]);assert.equal(row.cells.AF,'CHECK');assert.equal(row.reconciliation.target,null);}
  }
 });
 test('a direct payment on the old CT also belongs to the final parent after full transfer',()=>{

@@ -230,21 +230,17 @@ var PromotionHubVoucher = (() => {
   }
   function withVoucherProfile(value, profile = {}) {
     const result = { ...value }, student = text(profile.studentId);
-    if (student && text(result.studentId) && giftcodeKey(result.studentId) !== giftcodeKey(student)) return result;
-    if (student && !text(result.studentId)) {
+    if (student) {
+      if (text(result.studentId) && giftcodeKey(result.studentId) !== giftcodeKey(student)) result.status = "PENDING";
       result.studentId = student;
-      if (!text(result.studentName)) result.studentName = text(profile.studentName);
-    } else if (student && giftcodeKey(result.studentId) === giftcodeKey(student) && !text(result.studentName)) result.studentName = text(profile.studentName);
+      result.studentName = text(profile.studentName) || result.studentName;
+    }
     if (!text(result.center)) result.center = text(profile.center);
     return result;
   }
   function mergeHubVoucher(value, source, profile = {}) {
     const payload = voucherPayload(source, { code: value.code });
     if (!payload) throw Error("K\u1EBFt qu\u1EA3 Hub kh\xF4ng x\xE1c nh\u1EADn \u0111\xFAng Giftcode \u0111\u1EA7y \u0111\u1EE7.");
-    if (profile.studentId && text(value.studentId) && giftcodeKey(value.studentId) !== giftcodeKey(profile.studentId)) throw Error("Voucher \u0111ang l\u01B0u thu\u1ED9c h\u1ECDc vi\xEAn kh\xE1c v\u1EDBi CT \u0111ang m\u1EDF. C\u1EA7n \u0111\u1ED1i chi\u1EBFu tr\u01B0\u1EDBc khi \u0111i\u1EC1n.");
-    const expected = text(profile.studentId) || text(value.studentId), name = text(profile.studentName) || text(value.studentName);
-    if (payload.studentId && expected && giftcodeKey(payload.studentId) !== giftcodeKey(expected)) throw Error("Student ID tr\xEAn Hub kh\xE1c h\u1ECDc vi\xEAn c\u1EE7a h\u1ED3 s\u01A1 \u0111ang m\u1EDF. Ch\u01B0a \u0111i\u1EC1n d\u1EEF li\u1EC7u.");
-    if (payload.studentName && name && fold(payload.studentName) !== fold(name)) throw Error("T\xEAn h\u1ECDc vi\xEAn tr\xEAn Hub kh\xE1c h\u1ED3 s\u01A1 \u0111ang m\u1EDF. C\u1EA7n \u0111\u1ED1i chi\u1EBFu tr\u01B0\u1EDBc khi \u0111i\u1EC1n.");
     let result = withVoucherProfile(value, profile);
     for (const key of ["label", "center", "startDate", "endDate", "type"]) if (payload[key]) result[key] = payload[key];
     for (const key of ["amount", "rate", "minimum", "maximum"]) if (payload[key] !== null) result[key] = payload[key];
@@ -253,8 +249,8 @@ var PromotionHubVoucher = (() => {
       result.amount = null;
       result.rate = null;
     }
-    if (payload.studentId) result.studentId = payload.studentId;
-    if (payload.studentName) result.studentName = payload.studentName;
+    if (!profile.studentId && payload.studentId) result.studentId = payload.studentId;
+    if (!profile.studentName && payload.studentName) result.studentName = payload.studentName;
     if (profile.centerName && fold(result.center) === fold(profile.centerName) && profile.center) result.center = profile.center;
     if (result.type === "percent") result.amount = null;
     else if (result.type === "amount") result.rate = null;

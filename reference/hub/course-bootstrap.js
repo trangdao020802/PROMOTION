@@ -11,7 +11,7 @@
   if(m.type==='ready'){activate();return;}
   if(!job||m.id!==job.id||m.type!=='snapshot')return;
   const result=N.parseContractDetailProjection(m.projection,job.course);wire.projection=m.projection;wire.error=result.error??null;
-  if(result.payload&&['courseFee','hoursPerWeek','package','giftcode','discount'].every(k=>result.payload[k]!=null)){
+  if(result.payload&&C.courseReadComplete(result.payload)){
    stopped=true;wire.done=true;window.postMessage({channel,type:'release',id:job.id},origin);
    void chrome.runtime.sendMessage({id:job.id,type:'course-complete',payload:result.payload});
   }

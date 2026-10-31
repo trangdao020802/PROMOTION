@@ -134,23 +134,19 @@ export function parseVoucherDetail(page,expected){
 }
 export function withVoucherProfile(value,profile={}){
  const result={...value},student=text(profile.studentId);
- if(student&&text(result.studentId)&&giftcodeKey(result.studentId)!==giftcodeKey(student))return result;
- if(student&&!text(result.studentId)){result.studentId=student;if(!text(result.studentName))result.studentName=text(profile.studentName);}
- else if(student&&giftcodeKey(result.studentId)===giftcodeKey(student)&&!text(result.studentName))result.studentName=text(profile.studentName);
+ if(student){if(text(result.studentId)&&giftcodeKey(result.studentId)!==giftcodeKey(student))result.status='PENDING';result.studentId=student;result.studentName=text(profile.studentName)||result.studentName;}
  if(!text(result.center))result.center=text(profile.center);
  return result;
 }
 export function mergeHubVoucher(value,source,profile={}){
  const payload=voucherPayload(source,{code:value.code});if(!payload)throw Error('Kết quả Hub không xác nhận đúng Giftcode đầy đủ.');
- if(profile.studentId&&text(value.studentId)&&giftcodeKey(value.studentId)!==giftcodeKey(profile.studentId))throw Error('Voucher đang lưu thuộc học viên khác với CT đang mở. Cần đối chiếu trước khi điền.');
- const expected=text(profile.studentId)||text(value.studentId),name=text(profile.studentName)||text(value.studentName);
- if(payload.studentId&&expected&&giftcodeKey(payload.studentId)!==giftcodeKey(expected))throw Error('Student ID trên Hub khác học viên của hồ sơ đang mở. Chưa điền dữ liệu.');
- if(payload.studentName&&name&&fold(payload.studentName)!==fold(name))throw Error('Tên học viên trên Hub khác hồ sơ đang mở. Cần đối chiếu trước khi điền.');
  let result=withVoucherProfile(value,profile);
  for(const key of ['label','center','startDate','endDate','type'])if(payload[key])result[key]=payload[key];
  for(const key of ['amount','rate','minimum','maximum'])if(payload[key]!==null)result[key]=payload[key];
  if(!payload.type){result.type='';result.amount=null;result.rate=null;}
- if(payload.studentId)result.studentId=payload.studentId;if(payload.studentName)result.studentName=payload.studentName;
+ // Student assignment is the current Contract/profile. A voucher catalogue's
+ // creator/last-used student is not the owner of every Contract using the code.
+ if(!profile.studentId&&payload.studentId)result.studentId=payload.studentId;if(!profile.studentName&&payload.studentName)result.studentName=payload.studentName;
  if(profile.centerName&&fold(result.center)===fold(profile.centerName)&&profile.center)result.center=profile.center;
  if(result.type==='percent')result.amount=null;else if(result.type==='amount')result.rate=null;
  const changed=['code','studentId','studentName','center','startDate','endDate','type','amount','rate','minimum','maximum'].some(k=>JSON.stringify(value[k]??null)!==JSON.stringify(result[k]??null));

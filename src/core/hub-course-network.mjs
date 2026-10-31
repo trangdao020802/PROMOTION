@@ -82,7 +82,7 @@ export function parseContractDetailProjection(projection,expected,domPayload=nul
  if(projection.contractId!=null&&projection.contractId!==detailId||projection.ct&&projection.ct!==request.ct)return {error:'identity'};
  if(projection.student&&projection.student!==request.student)return {error:'student'};
  if(!projection.ct&&!coursePayload(domPayload,request))return {error:'identity'};
- if(!Array.isArray(projection.courses)||projection.courses.length!==1)return {error:projection.courses?.length?'conflict':'empty',fields:['courseFee','hoursPerWeek','package']};
+ if(!Array.isArray(projection.courses)||projection.courses.length>1)return {error:projection.courses?.length?'conflict':'empty',fields:['courseFee','hoursPerWeek','package']};
  const root=projection.fields??{},course=projection.courses[0]??{},values={};
  for(const key of COURSE_FIELDS){
   if(key==='discount'){
@@ -94,5 +94,7 @@ export function parseContractDetailProjection(projection,expected,domPayload=nul
    values[key]=codes[0]??([course[key],root[key],domPayload?.[key]].includes('0')?'0':null);
   }else values[key]=course[key]??root[key]??domPayload?.[key]??null;
  }
- const payload=coursePayload({...request,...values,...(projection.hubContract?{hubContract:projection.hubContract}:{}),...(projection.hubPolicy?{hubPolicy:projection.hubPolicy}:{}),...(projection.hubPolicyError?{hubPolicyError:projection.hubPolicyError}:{})},request);return payload?{payload,via:domPayload?'network+dom':'network'}:{error:'format'};
+ const empty=projection.courses.length===0;
+ if(empty){for(const key of ['courseFee','hoursPerWeek','package'])values[key]=null;for(const key of ['giftcode','discount'])if(values[key]==='0')values[key]=null;}
+ const payload=coursePayload({...request,...values,...(empty?{courseState:'empty'}:{}),...(projection.hubContract?{hubContract:projection.hubContract}:{}),...(projection.hubPolicy?{hubPolicy:projection.hubPolicy}:{}),...(projection.hubPolicyError?{hubPolicyError:projection.hubPolicyError}:{})},request);return payload?{payload,via:domPayload?'network+dom':'network'}:{error:'format'};
 }

@@ -5,7 +5,7 @@ import {get,all,put,versioned,activatePolicy} from './db.mjs';
 import {buildModel,identity} from './model.mjs';
 import {validateBundle} from '../core/source-parser.mjs';
 import {AuditEngine} from './calculation.mjs';
-import {EMPTY_VOUCHER,voucherInput,validateVoucher,voucherCode,voucherReference} from '../core/vouchers.mjs';
+import {EMPTY_VOUCHER,voucherInput,validateVoucher,voucherCode,voucherReference,voucherStorageKey,voucherForStudent} from '../core/vouchers.mjs';
 import {validateVerification} from '../core/verification.mjs';
 import {validateReviews} from '../core/reviews.mjs';
 import {assetPath} from './paths.mjs';
@@ -21,8 +21,8 @@ let resolvedPolicy;
 // made an otherwise small IndexedDB write quadratic during a bulk Hub read.
 const identityIndexes=new Map();
 function indexModel(model){
- const groups=new Map(model.contractGroups.map(group=>[group.id,{id:group.id,ct:group.ct,kind:group.kind,paymentCode:group.paymentCode,cells:{F:group.cells.F,G:group.cells.G,A:group.cells.A,B:group.cells.B}}]));
- identityIndexes.set(model.hash,{hash:model.hash,groups,students:new Set([...groups.values()].map(g=>g.ct+'|'+String(g.cells.F)))});
+ const groups=new Map(model.contractGroups.map(group=>[group.id,{id:group.id,ct:group.ct,kind:group.kind,paymentCode:group.paymentCode,sourceContracts:group.sourceContracts??[],cells:{F:group.cells.F,G:group.cells.G,A:group.cells.A,B:group.cells.B}}]));
+ identityIndexes.set(model.hash,{hash:model.hash,groups,students:new Set([...groups.values()].flatMap(g=>[g.ct,...g.sourceContracts].map(ct=>ct+'|'+String(g.cells.F))))});
  while(identityIndexes.size>2)identityIndexes.delete(identityIndexes.keys().next().value);
 }
 async function datasetIndex(datasetId){const dataset=await currentDataset(datasetId),hash=dataset?.id||'policy-2026';if(!identityIndexes.has(hash))await loadWorkbook(dataset?.id);return identityIndexes.get(hash);}
@@ -33,7 +33,7 @@ const fail=(s,status=400)=>Object.assign(Error(s),{status});
 const id=()=>{if(typeof crypto.randomUUID==='function')return crypto.randomUUID();const b=crypto.getRandomValues(new Uint8Array(16));b[6]=(b[6]&15)|64;b[8]=(b[8]&63)|128;const h=[...b].map(x=>x.toString(16).padStart(2,'0')).join('');return [h.slice(0,8),h.slice(8,12),h.slice(12,16),h.slice(16,20),h.slice(20)].join('-')},now=()=>new Date().toISOString();
 export async function currentDataset(datasetId){if(datasetId){const d=await get('datasets',datasetId);if(!d)throw fail('Không tìm thấy bộ nguồn trên trình duyệt này. Mở Tải bộ nguồn để chọn lại.',404);return d}const setting=await get('settings','current');return setting?.datasetId?await get('datasets',setting.datasetId):null}
 export async function loadWorkbook(datasetId){const [dataset,p,vouchers,sources]=await Promise.all([currentDataset(datasetId),loadPolicies(),all('vouchers'),courseMemories()]);const model=buildModel(dataset?.bundle,p);model.dataset=dataset;model.hash=dataset?.id||'policy-2026';indexModel(model);const engine=new AuditEngine(model);engine.setVouchers(vouchers);engine.setCourseSources(sources.filter(s=>identityIndexes.get(model.hash).students.has(s.ct+'|'+s.student)));return engine.data}
-const baseRecord=g=>({...g.anchor,id:g.id,kind:g.kind,ct:g.ct,paymentCode:g.paymentCode,memberIds:g.memberIds,...(g.sourceContracts?{sourceContracts:g.sourceContracts}:{}),receipts:g.receipts,groupWarnings:g.warnings,hubContract:g.hubContract??null,hubReadMissing:g.hubReadMissing??[],hubPolicy:g.hubPolicy??null,hubPolicyError:g.hubPolicyError??null,cells:{...g.cells,contractTotal:g.ct||'',AG:'',AF:'CHECK'}});
+const baseRecord=g=>({...g.anchor,errors:[],reviewItems:[],courseInfo:g.courseInfo,id:g.id,kind:g.kind,ct:g.ct,paymentCode:g.paymentCode,memberIds:g.memberIds,...(g.sourceContracts?{sourceContracts:g.sourceContracts}:{}),receipts:g.receipts,groupWarnings:g.warnings,hubContract:g.hubContract??null,hubReadMissing:g.hubReadMissing??[],hubPolicy:g.hubPolicy??null,hubPolicyError:g.hubPolicyError??null,cells:{...g.cells,contractTotal:g.ct||'',AG:'',AF:'CHECK'}});
 async function bootstrap(datasetId){
  const model=await loadWorkbook(datasetId),saved=await all('edits'),links=await all('links');const savedMap=new Map(saved.map(x=>[x.id,x]));
  const edits={};for(const g of model.contractGroups){const e=savedMap.get(identity({kind:g.kind,ct:g.ct,paymentCode:g.paymentCode,cells:g.cells}));if(e)edits[g.id]={patch:e.patch,version:e.version,updatedAt:e.updatedAt}}
@@ -50,7 +50,7 @@ export async function localFetch(input,options={}){
  try{
   if(options.signal?.aborted)throw new DOMException('Đã hủy','AbortError');
   const url=new URL(String(input),globalThis.location?.origin||'https://local.invalid'),path=url.pathname,method=options.method||'GET';
-  if(path==='/api/vouchers'&&method==='GET'){const code=voucherCode(url.searchParams.get('code'));return response(code?{voucher:await get('vouchers',code)||null}:{vouchers:await all('vouchers')});}
+  if(path==='/api/vouchers'&&method==='GET'){const code=voucherCode(url.searchParams.get('code')),student=url.searchParams.get('student');return response(code?{voucher:student?voucherForStudent(await all('vouchers'),code,student,url.searchParams.get('name')||''):await get('vouchers',code)||null}:{vouchers:await all('vouchers')});}
   if(!path.startsWith('/api/'))return nativeFetch(input,options);
   const body=typeof options.body==='string'?JSON.parse(options.body):options.body;
   if(path==='/api/policy-versions'){
@@ -99,7 +99,10 @@ export async function localFetch(input,options={}){
    await ensureVouchers([patch.K||'']);const saved=await versioned('edits',key,body.version||0,()=>({patch,recordId:body.id,student:String(group.cells.F)}));return response({...saved,vouchers:await all('vouchers')});
   }
   if(path==='/api/vouchers'&&method==='PATCH'){
-   const voucher=voucherInput(body.voucher),problem=validateVoucher(voucher);if(problem)throw fail(problem);voucher.code=voucherCode(voucher.code);const saved=await versioned('vouchers',voucher.code,body.version||0,()=>voucher);return response({voucher:saved,vouchers:await all('vouchers')});
+   const voucher=voucherInput(body.voucher),problem=validateVoucher(voucher);if(problem)throw fail(problem);voucher.code=voucherCode(voucher.code);
+   const key=voucherStorageKey(voucher),exact=await get('vouchers',key),legacy=await get('vouchers',voucher.code),prior=exact||(legacy&&voucherCode(legacy.studentId)===voucherCode(voucher.studentId)?legacy:null);
+   if((prior?.version??0)!==(body.version||0))throw Object.assign(Error('Voucher đã được thay đổi ở tab khác. Tải lại trước khi ghi.'),{conflict:true});
+   const saved=await versioned('vouchers',key,exact?.version??0,()=>voucher);return response({voucher:saved,vouchers:await all('vouchers')});
   }
   if(path==='/api/hub-links'&&method==='GET'){
    const links=await all('links'),ct=url.searchParams.get('ct');return response({link:ct?links.find(l=>l.ct===ct)||null:null,links:ct?links.filter(l=>l.ct===ct):links});
@@ -133,9 +136,10 @@ export async function localFetch(input,options={}){
    const {model,group}=await recordFor(body.datasetId,'CT::'+body.payload?.ct);const payload=body.payload;
    if(body.hash!==model.hash||!model.students.has(payload.ct+'|'+String(payload.student)))throw fail('Nguồn Course info không khớp CT/học viên hiện tại.');
    const normalized=coursePayload(payload,payload);if(!normalized)throw fail('Thông tin đầu vào từ Hub không hợp lệ.');
-   await ensureVouchers([normalized.giftcode??'']);
+   if(normalized.inheritedCourses?.some(s=>!group.sourceContracts.includes(s.ct)||s.student!==String(group.cells.F)))throw fail('CT nguồn không có luồng Transfer đã xác minh vào CT tổng của học viên.');
+   await ensureVouchers([normalized.giftcode??'',...(normalized.inheritedCourses??[]).map(s=>s.giftcode??'')]);
    const key=sourceKey(payload.ct,payload.student),prior=await courseMemory(payload.ct,payload.student);if((prior?.version??0)!==(body.version??0))throw Object.assign(Error('Input đã đổi ở tab khác. Tải lại trước khi ghi.'),{conflict:true});
-   const saved=await versioned('courseSources',key,prior?.id===key?prior.version:0,stored=>{const old=stored??prior;return ({...((old?.student===normalized.student&&old?.url===normalized.url&&old?.hubPolicy)?{hubPolicy:old.hubPolicy}:{}),...normalized,profile:{studentName:String(group.cells.G??''),centerCode:String(group.cells.B??''),centerName:String(group.cells.A??'')},lastReadMissing:[...COURSE_FIELDS.filter(k=>normalized[k]==null)],...Object.fromEntries(COURSE_FIELDS.map(k=>[k,normalized[k]??(old?.student===normalized.student&&old?.url===normalized.url?old[k]:null)??null]))});});return response({source:saved,vouchers:await all('vouchers')});
+   const saved=await versioned('courseSources',key,prior?.id===key?prior.version:0,stored=>{const old=stored??prior;return ({...((old?.student===normalized.student&&old?.url===normalized.url&&old?.hubPolicy)?{hubPolicy:old.hubPolicy}:{}),...normalized,...(normalized.inheritedCourses?{inheritedCourses:[...new Map([...(old?.url===normalized.url?old.inheritedCourses??[]:[]),...normalized.inheritedCourses].filter(s=>group.sourceContracts.includes(s.ct)&&s.student===String(group.cells.F)).map(s=>[s.ct,s])).values()],inheritedReadComplete:group.sourceContracts.every(ct=>normalized.inheritedCourses.some(s=>s.ct===ct))}:{}),profile:{studentName:String(group.cells.G??''),centerCode:String(group.cells.B??''),centerName:String(group.cells.A??'')},lastReadMissing:[...COURSE_FIELDS.filter(k=>normalized[k]==null)],...Object.fromEntries(COURSE_FIELDS.map(k=>[k,normalized[k]??(old?.student===normalized.student&&old?.url===normalized.url?old[k]:null)??null]))});});return response({source:saved,vouchers:await all('vouchers')});
   }
   if(path==='/api/evidence'&&method==='GET'){
    const {key}=await recordFor(url.searchParams.get('dataset'),url.searchParams.get('record'));const files=(await all('evidence')).filter(e=>e.recordKey===key).map(({blob,...e})=>e);return response({files});

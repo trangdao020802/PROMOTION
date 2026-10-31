@@ -59,7 +59,7 @@ test('only explicit empty GiftCode plus empty GiftCodeId confirms no voucher; mi
 });
 test('network input refuses another contract, student, ID or more than one course',()=>{
  for(const [field,value,error]of [['ContractNo','QA2610-CT-009999','identity'],['ContractId',99999,'identity'],['StudentCode','QA-OTHER','student']]){const raw=record();raw[field]=value;assert.equal(parseContractDetailProjection(projectContractDetail(raw,api,expected.url),expected).error,error);}
- const raw=record();raw.ListCourseInfo.push({...raw.ListCourseInfo[0],PriceName:'ATLS - Layer 2'});assert.equal(parseContractDetailProjection(projectContractDetail(raw,api,expected.url),expected).error,'conflict');raw.ListCourseInfo=[];assert.equal(parseContractDetailProjection(projectContractDetail(raw,api,expected.url),expected).error,'empty');
+ const raw=record();raw.ListCourseInfo.push({...raw.ListCourseInfo[0],PriceName:'ATLS - Layer 2'});assert.equal(parseContractDetailProjection(projectContractDetail(raw,api,expected.url),expected).error,'conflict');raw.ListCourseInfo=[];assert.equal(parseContractDetailProjection(projectContractDetail(raw,api,expected.url),expected).payload.courseState,'empty');
 });
 test('partial API fields may use independently verified DOM fields without inventing a numeric lookup name',()=>{
  const raw=record();delete raw.ListCourseInfo[0].ProductPackageName;delete raw.ContractNo;

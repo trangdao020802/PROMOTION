@@ -64,7 +64,7 @@ test('approved voucher uses remaining tuition and validates student, center and 
  const e=engineFor(b),v={code:'COUPON-TEST',label:'Test',studentId:'ST001',studentName:'Học viên kiểm thử',center:'HN1',startDate:'2026-10-01',endDate:'2026-10-31',status:'APPROVED',type:'percent',rate:.1,amount:null,minimum:0,maximum:0,approvalNote:'Phê duyệt kiểm thử'};
  e.setVouchers([v]);let r=e.calculate({id:e.data.contractGroups[0].id});assert.equal(r.cells.O,10320000);assert.equal(r.cells.Q,65016000);
  e.setVouchers([{...v,status:'PENDING'}]);r=e.calculate({id:e.data.contractGroups[0].id},{approved:true});assert.equal(r.cells.O,null);assert.equal(r.cells.AF,'CHECK');
- e.setVouchers([{...v,studentId:'OTHER'}]);r=e.calculate({id:e.data.contractGroups[0].id});assert.ok(r.cells.CI.includes('STUDENT'));
+ e.setVouchers([{...v,studentId:'OTHER'}]);r=e.calculate({id:e.data.contractGroups[0].id});assert.ok(!r.cells.CI.includes('STUDENT'));assert.match(r.cells.CI,/CHƯA ĐƯỢC DUYỆT/);assert.equal(r.cells.O,null);assert.equal(r.cells.AF,'CHECK');
 });
 test('unlinked deposit keeps course fields empty and waits for verification',()=>{
  const b=fixture();b.cash[0].cells.E='HN2610-DEP-0001';const r=calc(b);assert.equal(r.kind,'unlinked');assert.equal(r.cells.H,null);assert.equal(r.cells.I,null);assert.equal(r.cells.J,null);assert.equal(r.cells.AF,'CHECK');

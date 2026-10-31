@@ -22,7 +22,7 @@ export default function VoucherEditor({initial={},profile={},disabled=false,onSa
    const payload=await readHubVoucher(current.code,{signal:task.signal,onProgress:setMessage});
    if(task.signal.aborted)return;
    setDraft(mergeHubVoucher(ref.current,payload,profile));const number=(n:number)=>n.toLocaleString('vi-VN',{maximumSignificantDigits:15});setMessage(payload.type==='percent'?'Đã đọc Discount amount '+number(payload.rate*100)+' % → Tỷ lệ giảm (%) = '+number(payload.rate*100)+'. Bấm Lưu voucher & tính lại.':payload.type==='amount'?'Đã đọc Discount amount '+number(payload.amount)+' đ → Số tiền giảm (VND) = '+number(payload.amount)+'. Bấm Lưu voucher & tính lại.':'Hub chưa có Discount amount đủ rõ; cần bổ sung trước khi duyệt.');
-  }catch(e:any){if(e.code!=='cancelled'){setBridgeNeeded(e.code==='bridge');setMessage(automatic&&e.code==='bridge'?'Cập nhật cầu nối Hub 1.6.13 để tự tra Voucher.':e.message);if(e.code!=='bridge')setFailure(e.message);}}
+  }catch(e:any){if(e.code!=='cancelled'){setBridgeNeeded(e.code==='bridge');setMessage(automatic&&e.code==='bridge'?'Cập nhật cầu nối Hub 1.6.14 để tự tra Voucher.':e.message);if(e.code!=='bridge')setFailure(e.message);}}
   finally{if(controller.current===task){controller.current=null;setBusy(false);}}
  },[disabled,saving,profile.ct,profile.studentId,profile.studentName,profile.center,profile.centerName]);
  useEffect(()=>{
@@ -31,7 +31,7 @@ export default function VoucherEditor({initial={},profile={},disabled=false,onSa
  },[initial.code,initial.version,disabled,lookup]);
  const change=(key:string,value:any)=>setDraft((old:any)=>key==='code'&&value!==old.code?old.hubUrl?withVoucherProfile(voucherInput({code:value}),profile):{...old,code:value,status:'PENDING',hubUrl:'',hubCheckedAt:'',hubStatus:''}:{...old,[key]:value});
  const save=async()=>{setSaving(true);setFailure('');setConflict(false);try{setDraft(voucherInput(await onSave(draft,initial.version??0)));setMessage('Đã lưu voucher và tính lại.');}catch(e:any){setFailure(e.message||'Chưa lưu được voucher.');setConflict(!!e.conflict);}finally{setSaving(false);}};
- const input=(key:string,label:string,extra:any={})=><label key={key}><span>{label}</span><input {...extra} value={draft[key]??''} disabled={locked||key==='code'&&!!initial.code} onChange={e=>change(key,e.target.value)}/></label>;
+ const input=(key:string,label:string,extra:any={})=><label key={key}><span>{label}</span><input {...extra} value={draft[key]??''} readOnly={!!profile.studentId&&['studentId','studentName'].includes(key)} disabled={locked||key==='code'&&!!initial.code} onChange={e=>change(key,e.target.value)}/></label>;
  const numberInput=(key:string,label:string,max=1e13)=><label key={key}><span>{label}</span><input type="number" min="0" max={max} step="any" value={draft[key]??''} disabled={locked} onChange={e=>change(key,e.target.value===''?null:Number(e.target.value))}/></label>;
  const source=voucherDetailURL(draft.hubUrl);
  return <section className="voucher-editor" aria-label="Bổ sung voucher">
@@ -44,7 +44,7 @@ export default function VoucherEditor({initial={},profile={},disabled=false,onSa
    <button type="button" className="quiet-button" disabled={!draft.code} onClick={()=>void navigator.clipboard.writeText(draft.code).then(()=>setMessage('Đã sao chép Giftcode đầy đủ.')).catch(()=>setFailure('Chưa sao chép được mã.'))}>Sao chép mã</button>
   </div>
   {message&&<p className="voucher-hub-message" role="status">{message}</p>}
-  {bridgeNeeded&&<details className="voucher-bridge-help"><summary>Cập nhật cầu nối để tự tìm Voucher</summary><p>Tải bản 1.6.13, giải nén và tải lại tiện ích tại chrome://extensions hoặc edge://extensions. Sau đó tải lại Promotion và các tab Hub, đăng nhập Hub rồi bấm Tìm & tự điền từ Hub.</p><a href={assetPath('downloads/promotion-hub-bridge.zip')+'?v=1.6.13'} download>Tải cầu nối Hub 1.6.13</a></details>}
+  {bridgeNeeded&&<details className="voucher-bridge-help"><summary>Cập nhật cầu nối để tự tìm Voucher</summary><p>Tải bản 1.6.14, giải nén và tải lại tiện ích tại chrome://extensions hoặc edge://extensions. Sau đó tải lại Promotion và các tab Hub, đăng nhập Hub rồi bấm Tìm & tự điền từ Hub.</p><a href={assetPath('downloads/promotion-hub-bridge.zip')+'?v=1.6.14'} download>Tải cầu nối Hub 1.6.14</a></details>}
   {source&&<p className="evidence-caption">Nguồn Hub: <a href={source} target="_blank" rel="noopener noreferrer">{draft.code}</a> · {hubStatus[draft.hubStatus]||'Chưa rõ'}{draft.hubCheckedAt?' · đọc lúc '+new Date(draft.hubCheckedAt).toLocaleString('vi-VN'):''}. Dữ liệu tự điền cần được lưu; trạng thái duyệt của hồ sơ kiểm tra riêng.</p>}
   <div className="verification-grid">
    {input('code','Giftcode No *',{maxLength:150,placeholder:'Nhập mã chính xác',onBlur:()=>{if(!initial.code&&voucherRequest({code:ref.current.code}))void lookup(false);},onKeyDown:(e:any)=>{if(e.key==='Enter'){e.preventDefault();void lookup(false);}}})}{input('label','Tên / mô tả voucher',{maxLength:200})}

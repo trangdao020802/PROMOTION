@@ -1,6 +1,15 @@
 import {dateSerial} from './verification.mjs';
 import {voucherDetailURL} from './hub-voucher.mjs';
 export const voucherCode=value=>{const code=String(value??'').trim().toUpperCase();return code==='0'?'':code;};
+export const voucherStorageKey=v=>voucherCode(v.code)+(String(v.studentId??'').trim()?'|'+voucherCode(v.studentId):'');
+export function voucherForStudent(vouchers,code,studentId,studentName=''){
+ const list=(vouchers??[]).filter(v=>voucherCode(v.code)===voucherCode(code)),student=voucherCode(studentId);
+ const exact=list.filter(v=>voucherCode(v.studentId)===student).sort((a,b)=>Number(b.id===voucherStorageKey(b))-Number(a.id===voucherStorageKey(a)))[0];
+ if(exact)return {...exact,studentId:String(studentId),studentName:String(studentName||exact.studentName||'')};
+ const quality=v=>['type','startDate','endDate','center','approvalNote','hubUrl'].reduce((n,k)=>n+Number(!!v[k]),0)+Number(v.type==='percent'?v.rate>0:v.amount>0)*2;
+ const template=[...list].sort((a,b)=>quality(b)-quality(a))[0];if(!template)return null;
+ return {...template,id:undefined,version:0,studentId:String(studentId??''),studentName:String(studentName??''),status:'PENDING'};
+}
 export const VOUCHER_POLICIES={'case-specific':'Phê duyệt riêng của mã / chưa phân loại chính sách',ceo:'CEO / RCM cứu Net Gain', 'four-centers':'Hỗ trợ 30% · RGI / TPU / LNQ / LBB','referral-points':'Điểm giới thiệu / Apo · trừ sau cùng','local-scholarship':'Học bổng Local / đặc quyền cụm',staff:'Học bổng nhân viên'};
 export const EMPTY_VOUCHER={code:'',label:'',studentId:'',studentName:'',center:'',startDate:'',endDate:'',type:'',amount:null,rate:null,minimum:null,maximum:null,status:'PENDING',approvalNote:'',hubUrl:'',hubCheckedAt:'',hubStatus:'',policyId:'case-specific',percentBasis:'policy-default'};
 const fields=new Set(Object.keys(EMPTY_VOUCHER));
@@ -28,7 +37,7 @@ export function voucherMissing(v){
 }
 export function voucherInput(v){return Object.fromEntries(Object.entries({...EMPTY_VOUCHER,...v}).filter(([k])=>fields.has(k)));}
 export function nativeVoucherCodes(data){return new Set(Object.entries(data.grids.PROMO_VOUCHER).filter(([key])=>/^AH\d+$/.test(key)&&Number(key.slice(2))>=3&&Number(key.slice(2))<=2500).map(([,v])=>voucherCode(v)).filter(Boolean));}
-export function voucherReference(v,i){const row=2501+i;return {row,M:v.label||v.code,AH:v.code,U:v.studentName,O:v.center,P:dateSerial(v.startDate),Q:dateSerial(v.endDate),R:v.status,Z:v.type==='amount'?'SỐ TIỀN':v.type==='percent'?'PHẦN TRĂM':'',AA:v.amount,V:v.rate,AB:v.minimum,AC:v.maximum,studentId:v.studentId,approvalNote:v.approvalNote,hubUrl:v.hubUrl||'',policyId:v.policyId??'case-specific',percentBasis:v.percentBasis??'policy-default',custom:true,version:v.version,updatedAt:v.updatedAt};}
+export function voucherReference(v,i){const row=2501+i;return {row,storageId:v.id||voucherStorageKey(v),M:v.label||v.code,AH:v.code,U:v.studentName,O:v.center,P:dateSerial(v.startDate),Q:dateSerial(v.endDate),R:v.status,Z:v.type==='amount'?'SỐ TIỀN':v.type==='percent'?'PHẦN TRĂM':'',AA:v.amount,V:v.rate,AB:v.minimum,AC:v.maximum,studentId:v.studentId,approvalNote:v.approvalNote,hubUrl:v.hubUrl||'',policyId:v.policyId??'case-specific',percentBasis:v.percentBasis??'policy-default',custom:true,version:v.version,updatedAt:v.updatedAt};}
 export function withVoucherRegistry(base,vouchers){
  const native=nativeVoucherCodes(base),entries=vouchers.filter(v=>!native.has(voucherCode(v.code))).map((v,i)=>({...v,code:voucherCode(v.code),row:2501+i}));
  const grid=Object.fromEntries(Object.entries(base.grids.PROMO_VOUCHER).filter(([k])=>Number(k.replace(/^[A-Z]+/,''))<=2500));

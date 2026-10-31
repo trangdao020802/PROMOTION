@@ -7,6 +7,7 @@ const text=v=>String(v??'').trim().replace(/\s+/g,' ');
 const label=v=>text(v).replace(/[\s:*]+$/,'').replace(/\s*\/\s*/g,'/').toLowerCase();
 export const courseLabel=v=>COURSE_LABELS[label(v)]??null;
 export const COURSE_FIELDS=['courseFee','hoursPerWeek','package','giftcode','discount','groupKoc','contractType'];
+export const courseReadComplete=payload=>!!payload&&(payload.courseState==='empty'||['courseFee','hoursPerWeek','package','giftcode','discount'].every(k=>payload[k]!=null));
 export const COURSE_LABELS={
  'price name':'courseFee','course fee koc':'courseFee','hour/week':'hoursPerWeek','hours/week':'hoursPerWeek','hours per week':'hoursPerWeek',
  'package':'package','package before discount':'package','package (before discount)':'package','student id':'student','student code':'student',
@@ -65,13 +66,16 @@ export function courseRequest(v){
 }
 export function coursePayload(v,expected){
  const request=courseRequest(expected);
- if(!request||!v||typeof v!=='object'||Object.keys(v).some(k=>!['ct','student','url','readPolicy','hubContract','hubPolicy','hubPolicyError',...COURSE_FIELDS].includes(k))||v.ct!==request.ct||v.student!==request.student||v.url!==request.url)return null;
+ if(!request||!v||typeof v!=='object'||Object.keys(v).some(k=>!['ct','student','url','readPolicy','courseState','inheritedCourses','hubContract','hubPolicy','hubPolicyError',...COURSE_FIELDS].includes(k))||v.ct!==request.ct||v.student!==request.student||v.url!==request.url)return null;
  const result={ct:request.ct,student:request.student,url:request.url};
  for(const key of COURSE_FIELDS){
   if(v[key]!=null&&(typeof v[key]!=='string'||!text(v[key])||text(v[key]).length>(key==='discount'?2000:200)))return null;
   result[key]=v[key]==null?null:key==='discount'?normalizeHubDiscount(v[key]):text(v[key]);
  }
- if(!COURSE_FIELDS.some(k=>result[k]!==null))return null;
+ if(v.courseState!==undefined&&v.courseState!=='empty')return null;
+ if(v.courseState==='empty'){if(!validateHubContract(v.hubContract)||v.hubContract.ct!==request.ct||v.hubContract.contractId!==request.url.replace(/\/$/,'').split('/').pop()||['courseFee','hoursPerWeek','package'].some(k=>result[k]!=null))return null;result.courseState='empty';}
+ if(!COURSE_FIELDS.some(k=>result[k]!==null)&&result.courseState!=='empty')return null;
+ if(v.inheritedCourses!==undefined){if(!Array.isArray(v.inheritedCourses)||v.inheritedCourses.length>20||new Set(v.inheritedCourses.map(s=>s?.ct)).size!==v.inheritedCourses.length)return null;const inherited=[];for(const source of v.inheritedCourses){if(!source||source.inheritedCourses!==undefined||source.ct===request.ct||source.student!==request.student)return null;const parsed=coursePayload(source,source);if(!parsed)return null;inherited.push(parsed);}result.inheritedCourses=inherited;}
  if(result.giftcode&&/^\d[\d.,\s]*\s*(?:vnd|vnđ|đ|₫|%)$/i.test(result.giftcode))result.giftcode=null;
  if(result.hoursPerWeek){const hours=weeklyHours(result.hoursPerWeek);if(!(hours>0&&hours<=168))return null;result.hoursPerWeek=hours+' hrs/week';}
  if(result.hoursPerWeek&&!(parseFloat(result.hoursPerWeek)>0&&parseFloat(result.hoursPerWeek)<=168))return null;
@@ -129,7 +133,7 @@ export async function fillContractInputs(rows,io){
     link=await io.saveLink({ct,url:found.url,version:link?.version??0});
    }
    if(io.signal?.aborted)break;
-   const expected={ct,student,url:link.url},payload=coursePayload(await io.read(expected),expected);
+   const expected={ct,student,url:link.url},payload=await readContractInputs(row,expected,io);
    if(!payload)throw Error('Thông tin trả về không khớp CT / Student ID.');
    if(io.signal?.aborted)break;
    const saved=await io.save(row,payload);
@@ -147,4 +151,20 @@ export async function fillContractInputs(rows,io){
   io.update?.([...results]);
  }
  return results;
+}
+// The caller supplies the source CTs from the validated Transfer graph. Every
+// read still verifies its own CT, detail URL and the receiving student's ID.
+export async function readContractInputs(row,expected,io){
+ const payload=coursePayload(await io.read(expected),expected);if(!payload)return null;
+ if(['courseFee','hoursPerWeek','package'].every(k=>payload[k]!=null)||!row.sourceContracts?.length)return payload;
+ const inherited=[];
+ for(const ct of row.sourceContracts.slice(0,20)){
+  if(io.signal?.aborted)break;
+  try{
+   await io.progress?.('CT '+expected.ct+' thiếu Course info; đang đọc CT chuyển vào '+ct+'…');
+   let link=await io.loadLink(ct);if(!courseRequest({ct,student:expected.student,url:link?.url??''})){const found=await io.lookup(ct);if(found.ct!==ct||!courseRequest({ct,student:expected.student,url:found.url}))throw Object.assign(Error('Link CT chuyển vào không khớp.'),{code:'course_unavailable'});link=await io.saveLink({ct,url:found.url,version:link?.version??0});}
+   const donor={ct,student:expected.student,url:link.url},source=coursePayload(await io.read(donor),donor);if(source)inherited.push(source);
+  }catch(e){if(io.signal?.aborted)break;if(!['index_unresolved','not_found','course_invalid','course_empty','course_unavailable','timeout','hub_timeout','hub_frame_unavailable'].includes(e.code))throw e;}
+ }
+ return {...payload,inheritedCourses:inherited};
 }

@@ -40,7 +40,7 @@ function dataset(rows){
  const day=parseDate('2026-10-10'),records=rows.map((r,i)=>({sourceKey:'p',sourceRow:i+2,cells:{B:'QA CENTER',C:'QA1',D:'QA2610-PAY-'+String(i+4).padStart(6,'0'),E:r.ct,R:r.cells.F,S:'DỮ LIỆU GIẢ',O:day,P:'QA00'+i,I:'Paid',F:'Payment',G:'New',X:'ATLS',Z:'',AA:'',AB:'',AQ:'',AO:'',AH:'Online Payments',AJ:'',AC:7200000,AD:0,AE:0,AF:7200000,AG:25}}));
  return {id:'qa-local',fileIds:[],bundle:{kind:'source-bundle-v1',scope:{from:'2026-10-01',to:'2026-10-31',center:''},cutoff:parseDate('2026-10-31'),records,cash:records,transfers:[],exports:records.map(r=>({sourceKey:'e',sourceRow:r.sourceRow,ct:r.cells.E,student:r.cells.R,target:7200000,paid:7200000,totalHours:25,contractType:'New',center:'QA1'})),sources:['payment','export','transfer'].map((role,fileIndex)=>({key:['p','e','t'][fileIndex],role,fileIndex,fileName:'QA-'+role+'.csv',sheetName:'CSV',headerRow:1,rowCount:records.length}))}};
 }
-async function runPanel({existing=false,count=1,lookupError=false,version='1.6.13',timeoutOnce=false,partialOnce=false,persisted=null,automatic=false,completeRows=[],policyRows=completeRows,noPolicy=false,partialOfferOnRestart=false}={}){
+async function runPanel({existing=false,count=1,lookupError=false,version='1.6.14',timeoutOnce=false,partialOnce=false,persisted=null,automatic=false,completeRows=[],policyRows=completeRows,noPolicy=false,partialOfferOnRestart=false}={}){
  const qa={states:[],effects:[],bridgeChecks:0,stores:{links:new Map(),datasets:new Map(),courseSources:new Map()},network:[],lookups:[],reads:[],saved:[],links:[],busy:[],attempts:new Map()};
  if(persisted)qa.stores=persisted;
  const ct='QA2610-CT-000004',student='QA-INPUTS',url='https://hub24.apollo.vn:7777/contract/detail/12345';
@@ -76,7 +76,7 @@ test('Input panel reports an interrupted batch without claiming all contracts we
  const {qa}=await runPanel({count:2,lookupError:true});assert.equal(qa.saved.length,0);assert.equal(qa.lookups.length,1);assert.match(qa.states[2],/Đã dừng/);assert.match(qa.states[2],/1\/2 CT/);assert.equal(qa.network.length,0);
 });
 test('the old Course info reader must be updated before starting a bulk read',{timeout:5000},async()=>{
- for(const version of ['1.6.2','1.6.3','1.6.4','1.6.6','1.6.11','1.6.12']){const {qa}=await runPanel({version});assert.match(qa.states[2],/1.6.13/);assert.equal(qa.states[4],true);assert.equal(qa.lookups.length,0);assert.equal(qa.reads.length,0);assert.equal(qa.saved.length,0);}
+ for(const version of ['1.6.2','1.6.3','1.6.4','1.6.6','1.6.11','1.6.12','1.6.13']){const {qa}=await runPanel({version});assert.match(qa.states[2],/1.6.14/);assert.equal(qa.states[4],true);assert.equal(qa.lookups.length,0);assert.equal(qa.reads.length,0);assert.equal(qa.saved.length,0);}
 });
 test('retry after a timeout skips completed contracts and continues the failed and untouched contracts',{timeout:5000},async()=>{
  const {qa,retry}=await runPanel({count:3,timeoutOnce:true});assert.equal(qa.saved.length,2);assert.equal(qa.reads.length,3);assert.match(qa.states[2],/3\/3 CT/);await retry();assert.equal(qa.saved.length,3);assert.equal(qa.reads.length,4);assert.equal(qa.attempts.get('QA2610-CT-000004'),1);assert.equal(qa.attempts.get('QA2610-CT-000005'),2);assert.equal(qa.attempts.get('QA2610-CT-000006'),1);await retry();assert.equal(qa.reads.length,4);assert.equal(qa.network.length,0);
@@ -121,4 +121,13 @@ test('reopening the panel retains the last active CT and progress message from t
  const r=await runPanel(),run=r.qa.stores.settings.get('hub-input-run:qa-local'),message='Đang đọc Course info '+r.ct+' trong nền…';
  const response=await r.api('/api/hub-input-progress',{method:'PATCH',body:JSON.stringify({operation:'status',datasetId:'qa-local',runId:run.runId,version:run.version,note:{state:'running',ct:r.ct,student:r.student,studentName:'Dữ liệu kiểm thử',message,index:1}})});assert.equal(response.status,200);
  r.restore();for(let i=0;i<80;i++)await Promise.resolve();assert.ok(r.qa.states[2].includes(message));assert.match(r.qa.states[2],/tạm dừng khi làm mới/);assert.ok(r.qa.states[2].includes(r.ct));
+});
+test('voucher saves are scoped by code and active student without overwriting another student or inheriting approval',{timeout:5000},async()=>{
+ const r=await runPanel(),code='15%QA-LOCAL-SCHOLARSHIP',voucher={code,label:'QA dùng nhiều hồ sơ',studentId:'QA-A',studentName:'Học viên A giả',center:'QA1',startDate:'2026-10-01',endDate:'2026-10-31',type:'percent',amount:null,rate:.15,minimum:0,maximum:0,status:'APPROVED',approvalNote:'QA đã kiểm tra'};
+ const first=await (await r.api('/api/vouchers',{method:'PATCH',body:JSON.stringify({voucher,version:0})})).json();assert.equal(first.voucher.id,code+'|QA-A');
+ r.qa.stores.vouchers.set(code,{...voucher,id:code,studentId:'',studentName:'',center:'',type:'',startDate:'',endDate:'',approvalNote:'',rate:null,version:1,status:'PENDING'});
+ const draft=await (await r.api('/api/vouchers?code='+encodeURIComponent(code)+'&student=QA-B&name=H%E1%BB%8Dc%20vi%C3%AAn%20B%20gi%E1%BA%A3')).json();assert.equal(draft.voucher.studentId,'QA-B');assert.equal(draft.voucher.studentName,'Học viên B giả');assert.equal(draft.voucher.version,0);assert.equal(draft.voucher.status,'PENDING');assert.equal(draft.voucher.rate,.15);
+ const second=await r.api('/api/vouchers',{method:'PATCH',body:JSON.stringify({voucher:draft.voucher,version:0})});assert.equal(second.status,200);
+ const a=await (await r.api('/api/vouchers?code='+encodeURIComponent(code)+'&student=QA-A')).json();assert.equal(a.voucher.status,'APPROVED');assert.equal(a.voucher.studentId,'QA-A');
+ assert.ok(r.qa.stores.vouchers.has(code+'|QA-A'));assert.ok(r.qa.stores.vouchers.has(code+'|QA-B'));
 });

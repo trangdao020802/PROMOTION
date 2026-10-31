@@ -63,10 +63,10 @@ test('incomplete Voucher metadata is saved as a draft, kept pending and does not
  const draft=first.vouchers.get('QA-FULL-10');assert.equal(draft.endDate,'');assert.equal(draft.status,'PENDING');assert.equal(draft.hubUrl,first.source.url);assert.ok(rowNeedsVoucher(first.engine.calculate(first.record),[draft]));assert.ok(!first.calls.includes('checkpoint'));
  first.voucherIO.readVoucher=async()=>first.source;const retry=await fillContractInputs(contractInputPlan(b.rows(),{refresh:true,completed:b.completed}),b.io);assert.equal(retry.length,1);assert.equal(retry[0].status,'saved');assert.equal(first.vouchers.get('QA-FULL-10').endDate,'2026-10-31');
 });
-test('a wrong-student Voucher is skipped without changing its saved manual values or blocking other CTs',async()=>{
+test('voucher catalogue identity is replaced by the active Contract student while manual money values and later CTs remain intact',async()=>{
  const b=batch(),first=b.fixtures[0],manual={code:'QA-FULL-10',studentId:expected.student,studentName:'DỮ LIỆU GIẢ',center:'QA1',rate:.2,type:'percent',status:'PENDING'};first.vouchers.set(manual.code,manual);
  first.voucherIO.readVoucher=async()=>({...first.source,studentId:'QA-OTHER'});
- const results=await fillContractInputs(b.rows(),b.io);assert.deepEqual(results.map(r=>r.status),['check','saved','saved']);assert.match(results[0].message,/Student ID/);assert.deepEqual(first.vouchers.get(manual.code),manual);assert.ok(!first.calls.includes('checkpoint'));
+ const results=await fillContractInputs(b.rows(),b.io);assert.deepEqual(results.map(r=>r.status),['saved','saved','saved']);const saved=first.vouchers.get(manual.code);assert.equal(saved.studentId,expected.student);assert.equal(saved.studentName,'DỮ LIỆU GIẢ');assert.equal(saved.rate,.2);assert.equal(saved.status,'PENDING');assert.ok(first.calls.includes('checkpoint'));
 });
 test('connection, login, save and cancellation failures still stop the batch instead of being treated as a missing Voucher',async()=>{
  for(const code of ['bridge','hub_login','hub_tab_missing','cancelled']){
@@ -84,8 +84,8 @@ test('manual voucher values are preserved and a different Hub value requires rev
  const result=await completeContractVoucher(f.row,f.payload,{row:{...f.row,cells:{...f.row.cells,K:prior.code}}},f.voucherIO);
  assert.equal(result.state,'review');assert.equal(f.vouchers.get(prior.code).rate,.2);assert.equal(f.vouchers.get(prior.code).status,'PENDING');
 });
-test('another student cannot receive the looked-up Voucher, and a cash Giftcode amount never supplies its code',async()=>{
+test('Voucher student comes from the Contract profile, while a cash Giftcode amount never supplies its code',async()=>{
  const f=fixture();f.voucherIO.readVoucher=async()=>({...f.source,studentId:'QA-OTHER'});
- await assert.rejects(completeContractVoucher(f.row,f.payload,{row:{...f.row,cells:{...f.row.cells,K:f.source.code}}},f.voucherIO),/Student ID/);assert.equal(f.vouchers.size,0);
+ await completeContractVoucher(f.row,f.payload,{row:{...f.row,cells:{...f.row.cells,K:f.source.code}}},f.voucherIO);assert.equal(f.vouchers.get(f.source.code).studentId,expected.student);assert.equal(f.vouchers.get(f.source.code).studentName,'DỮ LIỆU GIẢ');
  await assert.rejects(completeContractVoucher(f.row,{...f.payload,giftcode:'0'},{row:{...f.row,cells:{...f.row.cells,K:'0'}}},f.voucherIO),/chưa xác định/);
 });

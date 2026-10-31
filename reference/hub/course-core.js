@@ -27,10 +27,12 @@ var PromotionHubCourse = (() => {
     courseLabel: () => courseLabel,
     coursePageFromDocument: () => coursePageFromDocument,
     coursePayload: () => coursePayload,
+    courseReadComplete: () => courseReadComplete,
     courseRequest: () => courseRequest,
     fillContractInputs: () => fillContractInputs,
     missingContractInputs: () => missingContractInputs,
-    parseCoursePage: () => parseCoursePage
+    parseCoursePage: () => parseCoursePage,
+    readContractInputs: () => readContractInputs
   });
 
   // src/core/hub-discount.mjs
@@ -219,6 +221,7 @@ var PromotionHubCourse = (() => {
   var label = (v) => text3(v).replace(/[\s:*]+$/, "").replace(/\s*\/\s*/g, "/").toLowerCase();
   var courseLabel = (v) => COURSE_LABELS[label(v)] ?? null;
   var COURSE_FIELDS = ["courseFee", "hoursPerWeek", "package", "giftcode", "discount", "groupKoc", "contractType"];
+  var courseReadComplete = (payload) => !!payload && (payload.courseState === "empty" || ["courseFee", "hoursPerWeek", "package", "giftcode", "discount"].every((k) => payload[k] != null));
   var COURSE_LABELS = {
     "price name": "courseFee",
     "course fee koc": "courseFee",
@@ -304,13 +307,29 @@ var PromotionHubCourse = (() => {
   }
   function coursePayload(v, expected) {
     const request = courseRequest(expected);
-    if (!request || !v || typeof v !== "object" || Object.keys(v).some((k) => !["ct", "student", "url", "readPolicy", "hubContract", "hubPolicy", "hubPolicyError", ...COURSE_FIELDS].includes(k)) || v.ct !== request.ct || v.student !== request.student || v.url !== request.url) return null;
+    if (!request || !v || typeof v !== "object" || Object.keys(v).some((k) => !["ct", "student", "url", "readPolicy", "courseState", "inheritedCourses", "hubContract", "hubPolicy", "hubPolicyError", ...COURSE_FIELDS].includes(k)) || v.ct !== request.ct || v.student !== request.student || v.url !== request.url) return null;
     const result = { ct: request.ct, student: request.student, url: request.url };
     for (const key of COURSE_FIELDS) {
       if (v[key] != null && (typeof v[key] !== "string" || !text3(v[key]) || text3(v[key]).length > (key === "discount" ? 2e3 : 200))) return null;
       result[key] = v[key] == null ? null : key === "discount" ? normalizeHubDiscount(v[key]) : text3(v[key]);
     }
-    if (!COURSE_FIELDS.some((k) => result[k] !== null)) return null;
+    if (v.courseState !== void 0 && v.courseState !== "empty") return null;
+    if (v.courseState === "empty") {
+      if (!validateHubContract(v.hubContract) || v.hubContract.ct !== request.ct || v.hubContract.contractId !== request.url.replace(/\/$/, "").split("/").pop() || ["courseFee", "hoursPerWeek", "package"].some((k) => result[k] != null)) return null;
+      result.courseState = "empty";
+    }
+    if (!COURSE_FIELDS.some((k) => result[k] !== null) && result.courseState !== "empty") return null;
+    if (v.inheritedCourses !== void 0) {
+      if (!Array.isArray(v.inheritedCourses) || v.inheritedCourses.length > 20 || new Set(v.inheritedCourses.map((s) => s?.ct)).size !== v.inheritedCourses.length) return null;
+      const inherited = [];
+      for (const source of v.inheritedCourses) {
+        if (!source || source.inheritedCourses !== void 0 || source.ct === request.ct || source.student !== request.student) return null;
+        const parsed = coursePayload(source, source);
+        if (!parsed) return null;
+        inherited.push(parsed);
+      }
+      result.inheritedCourses = inherited;
+    }
     if (result.giftcode && /^\d[\d.,\s]*\s*(?:vnd|vnđ|đ|₫|%)$/i.test(result.giftcode)) result.giftcode = null;
     if (result.hoursPerWeek) {
       const hours = weeklyHours(result.hoursPerWeek);
@@ -391,7 +410,7 @@ var PromotionHubCourse = (() => {
           link = await io.saveLink({ ct, url: found.url, version: link?.version ?? 0 });
         }
         if (io.signal?.aborted) break;
-        const expected = { ct, student, url: link.url }, payload = coursePayload(await io.read(expected), expected);
+        const expected = { ct, student, url: link.url }, payload = await readContractInputs(row, expected, io);
         if (!payload) throw Error("Th\xF4ng tin tr\u1EA3 v\u1EC1 kh\xF4ng kh\u1EDBp CT / Student ID.");
         if (io.signal?.aborted) break;
         const saved = await io.save(row, payload);
@@ -410,6 +429,30 @@ var PromotionHubCourse = (() => {
       io.update?.([...results]);
     }
     return results;
+  }
+  async function readContractInputs(row, expected, io) {
+    const payload = coursePayload(await io.read(expected), expected);
+    if (!payload) return null;
+    if (["courseFee", "hoursPerWeek", "package"].every((k) => payload[k] != null) || !row.sourceContracts?.length) return payload;
+    const inherited = [];
+    for (const ct of row.sourceContracts.slice(0, 20)) {
+      if (io.signal?.aborted) break;
+      try {
+        await io.progress?.("CT " + expected.ct + " thi\u1EBFu Course info; \u0111ang \u0111\u1ECDc CT chuy\u1EC3n v\xE0o " + ct + "\u2026");
+        let link = await io.loadLink(ct);
+        if (!courseRequest({ ct, student: expected.student, url: link?.url ?? "" })) {
+          const found = await io.lookup(ct);
+          if (found.ct !== ct || !courseRequest({ ct, student: expected.student, url: found.url })) throw Object.assign(Error("Link CT chuy\u1EC3n v\xE0o kh\xF4ng kh\u1EDBp."), { code: "course_unavailable" });
+          link = await io.saveLink({ ct, url: found.url, version: link?.version ?? 0 });
+        }
+        const donor = { ct, student: expected.student, url: link.url }, source = coursePayload(await io.read(donor), donor);
+        if (source) inherited.push(source);
+      } catch (e) {
+        if (io.signal?.aborted) break;
+        if (!["index_unresolved", "not_found", "course_invalid", "course_empty", "course_unavailable", "timeout", "hub_timeout", "hub_frame_unavailable"].includes(e.code)) throw e;
+      }
+    }
+    return { ...payload, inheritedCourses: inherited };
   }
   return __toCommonJS(hub_course_exports);
 })();

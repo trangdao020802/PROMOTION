@@ -234,3 +234,16 @@ Dữ liệu đã lấy và sửa tay được giữ theo Contract tổng + Stude
 Xuất bảng đối chiếu đang lọc, báo cáo Hub và mẫu chính sách bằng XLSX thật, chia cột, có tiêu đề/bộ lọc/cố định dòng đầu. Tiền và giờ là ô số định dạng General; Student ID và số 0 đầu mã vẫn là chữ. File nguồn CSV/TSV đã lưu được đổi sang XLSX khi tải xuống, giữ bản nhập gốc. Đọc Input không ghi hoặc xóa dữ liệu trên Hub; trường Hub thiếu không xóa Input đã lưu, ô sửa tay vẫn ưu tiên, mâu thuẫn giữ cảnh báo.
 
 277 kiểm thử đạt, build thành công và đã kiểm tra sửa/lưu/Làm mới trên giao diện bằng dữ liệu giả. Chưa có phiên Hub riêng đã đăng nhập để kiểm tra CT thật. Chi tiết: [bộ nhớ và XLSX](docs/contract-memory-xlsx.md).
+
+
+## Bản 33 · Khối duyệt, chuyển center và hồ sơ voucher · Cầu nối 1.6.14
+
+Sửa trùng khóa hiển thị giữa khối duyệt và khối CT nguồn để lưu/tính lại không nhân đôi phần duyệt. Mỗi điều kiện hiện một lần, ghi rõ CT/học viên, ưu đãi và từng yêu cầu xác minh; chỉ hiện duyệt trả góp cho ngoại lệ vượt kỳ hoặc ngoại lệ đã duyệt.
+
+CT tổng thiếu Course info được bổ sung từ CT đã chuyển vào có luồng Transfer xác minh, cùng Student ID. Ưu tiên thông tin của CT nhận và ô sửa tay; ghi rõ CT nguồn của từng trường. Nhiều nguồn mâu thuẫn vẫn CHECK. CT cũ nằm trong lịch sử, không thành khóa học hay tiền thu thứ hai. Cầu nối 1.6.14 đọc CT nguồn trong nền khi Hub xác nhận CT nhận không có khóa học, không tạo/đổi/chuyển/đóng tab.
+
+Student ID và tên trong Voucher lấy từ học viên của hồ sơ đang mở. Danh mục mã trên Hub không được dùng làm chủ sở hữu học viên. Hồ sơ voucher lưu riêng theo mã + Student ID; cùng mã có thể bổ sung hồ sơ mới mà không ghi đè thông tin hoặc kế thừa dấu duyệt của học viên khác. Giá trị/đơn vị, hiệu lực, center và căn cứ vẫn kiểm tra riêng.
+
+284 kiểm thử đạt; đã kiểm tra UI với ba nguồn giả: một CT tổng sau chuyển center, tích/bỏ duyệt chỉ có một khối, và hai học viên cùng Giftcode hiển thị đúng ID/tên. CT 727772 và bộ nguồn riêng chưa đọc trực tiếp do không có Hub đăng nhập trong trình duyệt tác vụ. Cập nhật cầu nối 1.6.14, tải lại Promotion và tab Hub hiện có, rồi bấm Tạo lượt đọc mới để bổ sung các CT thiếu.
+
+Xem [căn cứ và phạm vi kiểm chứng](docs/transfer-course-and-voucher-profile.md).

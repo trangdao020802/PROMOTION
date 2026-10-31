@@ -1,4 +1,4 @@
-import {voucherCode,voucherInput,voucherMissing} from './vouchers.mjs';
+import {voucherCode,voucherInput,voucherMissing,voucherForStudent} from './vouchers.mjs';
 import {mergeHubVoucher,voucherRecordProfile,voucherDetailURL} from './hub-voucher.mjs';
 const blank=v=>v==null||String(v).trim()==='';
 export function newCompletionRequest(scope='filtered',crypto=globalThis.crypto){
@@ -8,15 +8,15 @@ export function voucherNeedsRead(voucher){
  return !voucher||!!voucherMissing(voucherInput(voucher))||(!voucherDetailURL(voucher.hubUrl)&&voucher.status==='PENDING');
 }
 export function rowNeedsVoucher(row,vouchers=[]){
- const code=voucherCode(row.cells?.K);return !!code&&voucherNeedsRead(vouchers instanceof Map?vouchers.get(code):vouchers.find(v=>voucherCode(v.code)===code));
+ const code=voucherCode(row.cells?.K);return !!code&&voucherNeedsRead(voucherForStudent(vouchers instanceof Map?[...vouchers.values()]:vouchers,code,row.cells?.F,row.cells?.G));
 }
 // Enrich only the receiving CT's saved/manual-effective code. A source write is
 // checkpointed only after its voucher read has also finished or is already known.
 export async function completeContractVoucher(row,payload,saved,io){
  const current=saved?.row??row,code=voucherCode(current.cells?.K??payload.giftcode);
  if(!code){if(Number(current.cells?.V)>0)throw Object.assign(Error('CT có tiền Giftcode nhưng chưa xác định được Giftcode No đầy đủ.'),{code:'course_unavailable'});return {state:'none'};}
- const previous=await io.loadVoucher(code);
- if(!voucherNeedsRead(previous))return {state:'known',code};
+ const previous=await io.loadVoucher(code,current);
+ if(!voucherNeedsRead(previous)){if(previous?.version===0&&!previous.id){await io.saveVoucher(voucherInput(previous),0);return {state:'saved',code,status:previous.status};}return {state:'known',code};}
  io.progress?.('Đang đọc Voucher '+code+' trong nền…');
  const source=await io.readVoucher(code);if(io.signal?.aborted)throw Object.assign(Error('Đã dừng tra Voucher.'),{code:'cancelled'});
  const initial=voucherInput({...previous,code});let merged;
@@ -24,7 +24,7 @@ export async function completeContractVoucher(row,payload,saved,io){
  catch(e){throw Object.assign(Error(String(e.message??e)),{code:'voucher_invalid'});}
  // Automatic completion fills gaps. Explicit values remain visible for review.
  const conflicts=[];
- for(const key of ['label','studentId','studentName','center','startDate','endDate','type','amount','rate','minimum','maximum']){
+ for(const key of ['label','center','startDate','endDate','type','amount','rate','minimum','maximum']){
   if(!blank(initial[key])&&initial[key]!==merged[key]){if(!['label','studentName'].includes(key))conflicts.push(key);merged[key]=initial[key];}
  }
  if(conflicts.length){merged.status='PENDING';merged.approvalNote=(merged.approvalNote+'\nHub khác giá trị đang giữ: '+conflicts.join(', ')+'. Cần đối chiếu trước khi duyệt.').slice(-2000);}

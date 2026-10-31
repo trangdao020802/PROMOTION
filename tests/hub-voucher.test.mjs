@@ -14,7 +14,7 @@ test('bulk Voucher progress cannot extend its absolute time budget and cancellat
  const listeners=new Set(),requests=[];let interval;
  const target={location:{origin:'https://promotion-hub-2026.quanghuym24.chatgpt.site'},addEventListener:(type,fn)=>listeners.add(fn),removeEventListener:(type,fn)=>listeners.delete(fn),postMessage:packet=>{
   requests.push(packet);const reply=extra=>{for(const fn of [...listeners])fn({source:target,origin:target.location.origin,data:{channel:'promotion-hub/v1',direction:'response',id:packet.id,...extra}});};
-  if(packet.action==='ping')queueMicrotask(()=>reply({type:'ready',version:'1.6.13',capabilities:['voucher']}));
+  if(packet.action==='ping')queueMicrotask(()=>reply({type:'ready',version:'1.6.14',capabilities:['voucher']}));
   if(packet.action==='voucher')interval=setInterval(()=>reply({type:'progress',message:'QA still loading'}),4);
   if(packet.action==='cancel')clearInterval(interval);
  }};
@@ -62,7 +62,7 @@ test('Center code overrides broad region and prefilled CT scope, using only the 
 });
 test('profile identity fills blank voucher fields without inventing a Hub assignment',()=>{
  const filled=withVoucherProfile({...EMPTY_VOUCHER,code},profile);assert.equal(filled.studentId,profile.studentId);assert.equal(filled.studentName,profile.studentName);assert.equal(filled.center,profile.center);
- const wrong=withVoucherProfile({...EMPTY_VOUCHER,code,studentId:'SOMEONE-ELSE'},profile);assert.equal(wrong.studentName,'');assert.equal(wrong.center,'');
+ const wrong=withVoucherProfile({...EMPTY_VOUCHER,code,studentId:'SOMEONE-ELSE'},profile);assert.equal(wrong.studentId,profile.studentId);assert.equal(wrong.studentName,profile.studentName);assert.equal(wrong.center,profile.center);
  const p=voucherRecordProfile({cells:{F:profile.studentId,G:profile.studentName,B:profile.center,A:profile.centerName,contractTotal:profile.ct}});assert.deepEqual(p,profile);
  const rows=[{cells:{F:profile.studentId,G:profile.studentName,B:profile.center,A:profile.centerName,contractTotal:profile.ct,K:code}}];assert.deepEqual(profileForVoucherCode(rows,code),profile);assert.deepEqual(profileForVoucherCode([...rows,...rows],code),{});
 });
@@ -73,10 +73,10 @@ test('Hub autofill preserves source link, stays pending until approval and survi
  const changed=mergeHubVoucher(saved,{...payload(),rate:.2},profile);assert.equal(changed.status,'PENDING');
  const inactive=mergeHubVoucher(saved,{...payload(),status:'INACTIVE'},profile);assert.equal(inactive.status,'INACTIVE');
 });
-test('autofill refuses an assigned student or stale Giftcode belonging to another case',()=>{
- assert.throws(()=>mergeHubVoucher({...EMPTY_VOUCHER,code},{...payload(),studentId:'QA-OTHER'},profile),/Student ID/);
- assert.throws(()=>mergeHubVoucher({...EMPTY_VOUCHER,code},{...payload(),studentName:'HỌC VIÊN KHÁC'},profile),/Tên học viên/);
- assert.throws(()=>mergeHubVoucher({...EMPTY_VOUCHER,code,studentId:'QA-OTHER'},payload(),profile),/học viên khác/);
+test('autofill uses the active Contract student and still rejects a mismatched Giftcode or source URL',()=>{
+ assert.equal(mergeHubVoucher({...EMPTY_VOUCHER,code},{...payload(),studentId:'QA-OTHER'},profile).studentId,profile.studentId);
+ assert.equal(mergeHubVoucher({...EMPTY_VOUCHER,code},{...payload(),studentName:'HỌC VIÊN KHÁC'},profile).studentName,profile.studentName);
+ assert.equal(mergeHubVoucher({...EMPTY_VOUCHER,code,studentId:'QA-OTHER'},payload(),profile).studentId,profile.studentId);
  assert.throws(()=>mergeHubVoucher({...EMPTY_VOUCHER,code:'OTHER'},payload(),profile),/Giftcode/);
  assert.throws(()=>mergeHubVoucher({...EMPTY_VOUCHER,code},{...payload(),url:'https://example.com/giftcode/detail/12345'},profile),/Giftcode/);
 });
@@ -87,7 +87,7 @@ test('Voucher provenance allows only observed read/detail routes on the exact Hu
  assert.ok(voucherCodesURL('/giftcode/listgiftcode/12345',url));assert.ok(voucherCodesURL('/giftcode/codes?giftcodeId=12345',url));assert.equal(voucherCodesURL('/giftcode/listgiftcode/99999',url),null);assert.equal(voucherCodesURL('https://example.com/giftcode/listgiftcode/12345',url),null);
  assert.equal(voucherPayload({...payload(),code:'OTHER'},{code}),null);assert.equal(voucherPayload({...payload(),rate:5},{code}),null);
 });
-function bridgeWindow({capabilities=['voucher'],wrong=false,version='1.6.13'}={}){
+function bridgeWindow({capabilities=['voucher'],wrong=false,version='1.6.14'}={}){
  const listeners=new Set(),target={location:{origin:'https://promotion-hub-2026.roundskunk11.chatgpt.site'},addEventListener:(type,fn)=>listeners.add(fn),removeEventListener:(type,fn)=>listeners.delete(fn),postMessage:m=>{
   if(m.direction!=='request'||m.action==='cancel')return;
   const reply={channel:m.channel,direction:'response',id:m.id,...m.action==='ping'?{type:'ready',version,capabilities}:{type:'voucher-result',payload:wrong?{...payload(),code:'OTHER'}:payload()}};
@@ -96,10 +96,10 @@ function bridgeWindow({capabilities=['voucher'],wrong=false,version='1.6.13'}={}
 }
 test('the Site bridge requires Voucher capability and validates returned identity',async()=>{
  assert.equal((await readHubVoucher(code,{window:bridgeWindow(),timeoutMs:100})).rate,.15);
- await assert.rejects(readHubVoucher(code,{window:bridgeWindow({capabilities:[]}),timeoutMs:100}),/1.6.13/);
- await assert.rejects(readHubVoucher(code,{window:bridgeWindow({version:'1.6.0'}),timeoutMs:100}),/1.6.13/);
- await assert.rejects(readHubVoucher(code,{window:bridgeWindow({version:'1.6.1'}),timeoutMs:100}),/1.6.13/);
- await assert.rejects(readHubVoucher(code,{window:bridgeWindow({version:'1.6.2'}),timeoutMs:100}),/1.6.13/);
+ await assert.rejects(readHubVoucher(code,{window:bridgeWindow({capabilities:[]}),timeoutMs:100}),/1.6.14/);
+ await assert.rejects(readHubVoucher(code,{window:bridgeWindow({version:'1.6.0'}),timeoutMs:100}),/1.6.14/);
+ await assert.rejects(readHubVoucher(code,{window:bridgeWindow({version:'1.6.1'}),timeoutMs:100}),/1.6.14/);
+ await assert.rejects(readHubVoucher(code,{window:bridgeWindow({version:'1.6.2'}),timeoutMs:100}),/1.6.14/);
  await assert.rejects(readHubVoucher(code,{window:bridgeWindow({wrong:true}),timeoutMs:100}),/không khớp/);
  const controller=new AbortController();controller.abort();await assert.rejects(readHubVoucher(code,{window:bridgeWindow(),signal:controller.signal,timeoutMs:100}),/Đã dừng/);
 });

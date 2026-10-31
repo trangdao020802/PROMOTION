@@ -120,6 +120,7 @@ export function buildContractGroups(data,input,{paymentTrace=false}={}){
    const candidates=uniq([...ctRows,...members.filter(r=>!sourceContracts.length||atContract(r,ct)).map(r=>r.rawRow),...included.filter(d=>courseDocument(d)&&!sourceContracts.length&&!isCT(d.contract)&&d.student===student).map(d=>rawByPayment.get(d.payment)).filter(Boolean)]);
    group.noCTInvoice=!ctRows.length;
    group.courseCandidates=candidates.map(r=>({...Object.fromEntries(fields.map(k=>[k,raw[rawFields[k]+r]??null])),fallback:raw['E'+r]!==ct,ref:{file:data.source,sheet:data.importInfo?.sheetName??'RAW_REPORT',row:data.sourceRows?.[r]??r}}));
+   group.transferCourseCandidates=rawRows.filter(r=>sourceContracts.includes(raw['E'+r])&&String(raw['R'+r])===String(student)).map(r=>({...Object.fromEntries(fields.map(k=>[k,raw[rawFields[k]+r]??null])),contract:raw['E'+r],ref:{file:data.source,sheet:data.importInfo?.sheetName??'RAW_REPORT',row:data.sourceRows?.[r]??r,contract:raw['E'+r]}}));
    applyCourseInfo(data,group);
   }
   return group;
@@ -131,7 +132,7 @@ export class ContractEngine{
  setPatches(patches){this.patches=new Map(Object.entries(patches));}
  setVouchers(vouchers){this.data=withVoucherRegistry(this.data,vouchers);this.engine=new WorkbookEngine(this.data);}
  setCourseSources(sources){withCourseSources(this.data,sources);}
- updateCourseSource(source){const group=this.groups.get('CT::'+source.ct);if(group&&String(group.cells.F)===source.student)applyCourseInfo(this.data,group,[source]);}
+ updateCourseSource(source){const prior=this.data.extensions.hubCourseSources??[],sources=[...prior.filter(s=>s.ct!==source.ct||s.student!==source.student),source];this.data.extensions.hubCourseSources=sources;for(const group of this.groups.values())if(String(group.cells.F)===source.student&&(group.ct===source.ct||group.sourceContracts?.includes(source.ct)))applyCourseInfo(this.data,group,sources);}
  dependentIds(id){const ct=this.groups.get(id)?.ct;return [...this.patches].filter(([key,p])=>key!==id&&ct&&String(p.verification?.partnerContract??'').toUpperCase()===ct.toUpperCase()).map(([key])=>key);}
  calculate(record,patch={}){
   // Resolve geometry from trusted source, never from the client-supplied row.
