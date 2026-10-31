@@ -47,6 +47,7 @@ export default function PriceRowEditor({row,onCancel}:any){
   if(missing.length)throw Error('Điền đủ các trường bắt buộc: '+missing.join(', ')+'.');
   if(!Number.isFinite(gross)||gross<=0)throw Error('Đơn giá và thời lượng phải tạo ra giá gốc lớn hơn 0.');
   if(net===null||net<0)throw Error('Số tiền giảm không được lớn hơn giá gốc.');
+  if(discount>0&&!String(form.discountLabels??'').trim())throw Error('Có giảm theo gói: cần nhập đúng nhãn Discount apply để bộ tính có thể áp dụng mức giảm này cho hợp đồng.');
   if(!weekly&&form.packageKey&&form.packageKey!==String(Number(form.months))&&form.variant==='standard')throw Error('Khóa gói standard phải khớp số tháng. Hãy xóa Khóa gói hoặc chọn đúng loại gói.');
   const value=normalized(),issues=validatePolicyRows([value]);
   if(issues.length)throw Error(issues.join('\n'));
