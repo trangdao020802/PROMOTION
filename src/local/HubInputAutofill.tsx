@@ -26,7 +26,7 @@ export default function HubInputAutofill({rows,datasetId,disabled,checkBridge,ma
    const readAll=fromStart||refresh,selected=contractInputPlan(rows,{refresh:readAll,completed:reset.current||restart?[]:completedInputs(previous,readAll),needsPolicy:r=>(!r.hubContract||r.hubContract.payments?.state!=='read')||policy&&hubPolicyMissing(r),needsVoucher:r=>!!onVoucherSave&&rowNeedsVoucher(r,voucherIndex)});
    if(!selected.length){setRun(previous);setMessage('Không còn CT thiếu Input trong bộ lọc này. Có thể tạo lượt mới để đọc lại.');return;}
    const ready=await checkBridge(task.signal),parts=String(ready.version??'').split('.').map(Number),version=(parts[0]||0)*1e6+(parts[1]||0)*1e3+(parts[2]||0);
-   if(version<1006014||(!ready.capabilities?.includes('contract-lists')||!ready.capabilities?.includes('contract-inputs')||!ready.capabilities?.includes('course-network')||!ready.capabilities?.includes('no-new-tabs'))){setBridgeNeeded(true);throw Error('Cần cầu nối Hub 1.6.14 để tự lấy Input và quy tắc giá theo Contract.');}
+   if(version<1006015||(!ready.capabilities?.includes('contract-lists')||!ready.capabilities?.includes('contract-inputs')||!ready.capabilities?.includes('course-network')||!ready.capabilities?.includes('no-new-tabs'))){setBridgeNeeded(true);throw Error('Cần cầu nối Hub 1.6.15 để tự lấy Input và quy tắc giá theo Contract.');}
    let activeRun=(await json('/api/hub-input-progress',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({operation:'start',datasetId,refresh:readAll,targets:inputTargets(selected,readAll,{facts:true}),version:previous?.version??0,reset:!!(reset.current||restart)}),signal:task.signal})).run;
    reset.current=false;setRun(activeRun);let queue=Promise.resolve<any>(null),current:any=null;
    const changeRun=(operation:any)=>{const next=queue.then(async()=>{const data=await json('/api/hub-input-progress',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({...operation,datasetId,runId:activeRun.runId,version:activeRun.version})});activeRun=data.run;setRun(activeRun);return data;});queue=next.catch(()=>null);return next;};
@@ -44,7 +44,7 @@ export default function HubInputAutofill({rows,datasetId,disabled,checkBridge,ma
      return changeRun({operation:'complete',ct:payload.ct,student:payload.student,sourceVersion:saved?.source?.version});
     }});
    setResults(results);await report((task.signal.aborted?'Đã dừng. ':results.length<selected.length?'Đã dừng để kiểm tra lỗi. ':'Hoàn tất lượt đọc. ')+'Đã xử lý '+results.length+'/'+selected.length+' CT; '+results.filter((r:any)=>r.status==='saved').length+' CT đã lưu và tính lại; '+results.filter((r:any)=>r.status!=='saved').length+' CT còn thiếu / cần kiểm tra. Tiến độ đã lưu; lần bấm tiếp theo bỏ qua CT đã lấy đủ.',undefined,task.signal.aborted?'paused':results.length<selected.length?'error':'complete');
-  }catch(e:any){setBridgeNeeded(e.code==='bridge'||String(e.message).includes('1.6.14'));setMessage(task.signal.aborted?'Đã dừng đọc Input.':e.message);}
+  }catch(e:any){setBridgeNeeded(e.code==='bridge'||String(e.message).includes('1.6.15'));setMessage(task.signal.aborted?'Đã dừng đọc Input.':e.message);}
   finally{if(controller.current===task)controller.current=null;setBusy(false);onBusyChange?.(false);if(auto)onRequestConsumed?.(request?.id);}
  };
  useEffect(()=>{
@@ -57,7 +57,7 @@ export default function HubInputAutofill({rows,datasetId,disabled,checkBridge,ma
   <label className="hub-input-refresh"><input type="checkbox" checked={policy} disabled={busy||disabled} onChange={e=>{setPolicy(e.target.checked);reset.current=true;setRun(null);}}/>Đọc thêm cấu hình giá và khuyến mãi từ Hub</label>
   <p className="source-note">Tạo lượt đọc mới bắt đầu đọc lại toàn bộ CT trong bộ lọc ngay từ dòng đầu, kể cả Discount apply và Giftcode No đã có. Mặc định lấy các danh sách của CT tổng để bổ sung bộ nguồn; bộ tính tiếp tục dùng bảng giá và quy tắc hiện có. Cấu hình giá từ Hub là phần bổ sung, không bắt buộc để lưu Input. Tiến độ lưu sau từng CT; hết giờ hoặc thiếu thông tin sẽ chuyển sang CT khác. Bấm lấy tiếp để thử lại phần còn thiếu. Ô nhập tay được giữ. Dùng phiên Hub đang đăng nhập; không tạo tab mới, đổi URL, chuyển hay đóng tab đó. Dữ liệu nguồn mâu thuẫn tiếp tục được đánh dấu để kiểm tra.</p>
   {message&&<p className="hub-input-message" role="status">{message}</p>}
-  {bridgeNeeded&&<p className="hub-input-message">Cập nhật <a href={assetPath('downloads/promotion-hub-bridge.zip')+'?v=1.6.14'} download>cầu nối Hub 1.6.14</a>, tải lại Promotion và các tab Hub rồi bấm Tự lấy Input.</p>}
+  {bridgeNeeded&&<p className="hub-input-message">Cập nhật <a href={assetPath('downloads/promotion-hub-bridge.zip')+'?v=1.6.15'} download>cầu nối Hub 1.6.15</a>, tải lại Promotion và các tab Hub rồi bấm Tự lấy Input.</p>}
   {!!results.length&&<details className="hub-input-results" open={results.some(r=>r.status!=='saved')}><summary>Kết quả từng CT ({results.length})</summary>{results.map(r=><p key={r.ct}><strong>{r.ct}</strong> · {r.status==='saved'?'Đã lưu: '+r.fields.map((f:string)=>names[f]).join(', '):r.status==='partial'?'Đã lưu phần đọc được; còn thiếu '+r.missing.map((f:string)=>names[f]).join(', ')+(r.hubPolicyError?' · '+policyReasons[r.hubPolicyError]:''):r.message}</p>)}</details>}
  </section>;
 }
