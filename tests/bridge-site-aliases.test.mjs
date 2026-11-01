@@ -28,8 +28,8 @@ test('downloadable Chrome bridge allows the exact production Vercel origin and k
   assert.ok(archive.core.includes(origin),origin+' missing from background origin allowlist');
  }
  assert.ok(manifest.host_permissions.includes('https://hub24.apollo.vn/*'));
- assert.equal(manifest.version,'1.6.16');
- assert.ok(archive.core.includes("const VERSION = '1.6.16'"));
+ assert.equal(manifest.version,'1.6.17');
+ assert.ok(archive.core.includes("const VERSION = '1.6.17'"));
  assert.ok(!matches.includes('https://*.vercel.app/*'),'Do not allow unrelated Vercel tenants');
  assert.ok(!matches.includes('<all_urls>'));
 });

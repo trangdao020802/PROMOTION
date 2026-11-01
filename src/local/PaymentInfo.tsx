@@ -34,6 +34,17 @@ export default function PaymentInfo({row,doc,SourceRefs,date,money}:any){
  };
  return <section className="payment-info" aria-label="Payment info"><h3>Payment info</h3>
   <HubContractEvidence facts={row.hubContract}/>
+  {(data.hubReceipts?.length??0)>0&&<div className="hub-backed-payment" aria-label="Hóa đơn gốc đã truy ngược từ Hub">
+   <h4>Hóa đơn gốc từ Hub · đã kiểm chứng đường chuyển</h4>
+   <p className="evidence-caption">Chỉ tính một lần số tiền Paid từ CT phát sinh hóa đơn, đã xác minh E-Invoice và từng chặng tới CT tổng. Số tiền dưới đây được cộng bổ sung riêng với PaymentList đã nhập.</p>
+   <div className="ledger-scroll"><table className="payment-table"><thead><tr><th>CT phát sinh</th><th>Payment code</th><th>E-Invoice ID / Số hóa đơn</th><th>Số tiền phân bổ</th><th>Đường Transfer đã đối chiếu</th></tr></thead>
+   <tbody>{data.hubReceipts.map((r:any)=><tr key={r.origin+'|'+r.paymentCode}>
+    <td>{doc(r.origin,true)}</td><td><strong>{r.paymentCode}</strong><small>Paid · {r.completeDate}</small></td>
+    <td>{r.invoiceRef}</td><td className="numeric"><strong>{money(r.allocated)}</strong></td>
+    <td>{r.path.map((step:any)=>step.from+' → '+step.to).join(' · ')}</td>
+   </tr>)}</tbody></table></div>
+   <p className="evidence-caption"><strong>Tổng bổ sung có căn cứ từ Hub: {money(row.reconciliation?.hubSupplement?.amount??0)} ₫</strong>. Không tự coi E-Invoice ID là số VAT; xem chứng từ gốc trên Hub để xác nhận khi cần.</p>
+  </div>}
   {data.originals.length>0&&<div className="payment-invoices"><h4>Hóa đơn gốc · PaymentList</h4><div className="ledger-scroll"><table className="payment-table"><thead><tr><th>Ngày hóa đơn gốc</th><th>VAT Invoice No.</th><th>Payment code / Thanh toán</th><th>Nguồn tiền · CT / DEP</th><th>Số tiền hóa đơn</th><th>Truy vết / căn cứ</th></tr></thead><tbody>{data.originals.map((r:any)=><tr className="payment-original" key={r.id} data-invoice={r.id}>{originalCells(r)}<td><SourceRefs refs={r.refs??[]}/></td></tr>)}</tbody></table></div></div>}
   {!row.receipts?.length&&<p className="evidence-caption">Chưa tìm thấy hóa đơn thu gốc trong bộ nguồn.</p>}
   {row.kind==='contract'?<>

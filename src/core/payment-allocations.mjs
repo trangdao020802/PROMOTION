@@ -66,11 +66,15 @@ export function paymentAllocations(row){
   }
  }
  for(const invoice of invoices)if(invoice.amount===null&&!invoice.warnings.length)invoice.warnings.push('Nguồn tiền trộn nhiều hóa đơn; chưa đủ căn cứ tách số phân bổ của từng hóa đơn.');
+ const hub=row.reconciliation?.hubSupplement??{amount:0,receipts:[]};
+ const hubCovered=incoming.filter(e=>!confirmed.includes(e)&&
+   (hub.receipts??[]).filter(r=>r.path?.some(step=>step.from===e.from&&step.to===e.to))
+     .reduce((n,r)=>n+r.allocated,0)>=e.amount-1);
  const assigned=new Set(invoices.map(r=>r.id));
  return {ct,invoices,originals:receipts.filter(r=>!assigned.has(r.id)),
-  incoming,total:confirmed.reduce((n,e)=>n+e.amount,0),
+  incoming,total:confirmed.reduce((n,e)=>n+e.amount,0)+(hub.amount??0),hubReceipts:hub.receipts??[],hubCovered,
   dates:unique(incoming.map(e=>Math.floor(e.date))).sort((a,b)=>a-b),
-  pending:incoming.filter(e=>!confirmed.includes(e)),
+  pending:incoming.filter(e=>!confirmed.includes(e)&&!hubCovered.includes(e)),
   outgoing:events.filter(e=>e.from===ct&&e.to!==ct),
   warnings:unique(invoices.flatMap(r=>r.warnings))};
 }

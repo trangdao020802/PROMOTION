@@ -53,6 +53,8 @@ function OriginNode({row,ct,parentCt,datasetId,hubLinks,onHubSaved,onRead,depth,
   finally{setBusy(false);}
  };
  const summary=fact?originPaymentSummary([fact]):null;
+ const verified=(row?.reconciliation?.hubSupplement?.receipts??[]).filter((r:any)=>r.origin===ct);
+ const counted=(r:any)=>verified.some((item:any)=>item.paymentCode===r.paymentCode);
  const audit=fact?compareChildFacts(fact,row):null;
  const related=fact?.hubContract?.movements?.rows?.some((m:any)=>m.from===ct&&m.to===parentCt);
  const matchingTransfer=(row.reconciliation?.movementHistory??[]).some((m:any)=>m.from===ct&&m.to===parentCt);
@@ -64,9 +66,14 @@ function OriginNode({row,ct,parentCt,datasetId,hubLinks,onHubSaved,onRead,depth,
    {link?.url&&<button type="button" disabled={busy||disabled} onClick={()=>void scan(link.url)}>Đọc lại hóa đơn</button>}
   </div>
   {status&&<p role="status">{status}</p>}{error&&<p role="alert" className="child-hub-warning">{error}</p>}
+  {fact&&<button type="button" className="secondary-button" onClick={()=>window.location.reload()}>Tính lại tổng thu từ các chứng từ đã lưu</button>}
   {fact&&<>
    <p><strong>Chứng từ tại CT gốc:</strong> {fact.hubContract.payments.state==='read'?(summary?.payments.length+' Payment · '+V(summary?.hubPaid)):'Chưa đọc được hóa đơn/Payment Info đầy đủ'}.</p>
-   {summary?.payments.map((p:any,i:number)=><p key={i}>{p.paymentCode} · {V(p.amount)} · {p.complete?'Đã thanh toán trên Hub':'Chưa xác minh thanh toán'} · {audit?.payments[i]?.status==='matched'?'Khớp PaymentList':'CHECK · chưa có hóa đơn gốc trong PaymentList'}</p>)}
+   {summary?.payments.map((p:any,i:number)=><p key={i}>
+    <strong>{p.paymentCode}</strong> · {V(p.amount)} · {p.complete?'Đã thanh toán trên Hub':'Chưa xác minh Paid'}.
+    <span> E-Invoice ID / Số hóa đơn: {fact.hubContract.payments.rows[i]?.invoiceRef??'Chưa đọc được từ Hub'}</span> ·
+    {counted(p)?'Đã phân bổ có căn cứ trong tổng thu':audit?.payments[i]?.status==='matched'?'Đã có trong PaymentList (không cộng lại)':'CHECK · chờ E-Invoice và đường Transfer đủ căn cứ'}
+   </p>)}
    <p><strong>Chặng {ct} → {parentCt}:</strong> {related?'Có Moving-out trên Hub':matchingTransfer?'Có trong Transfer đã nhập':'CHECK · chưa chứng minh được mối liên kết Transfer'}.</p>
    {fact.hubContract.movements?.state!=='read'&&<p className="child-hub-warning">Hub chưa trả Moving-out. Không tự tính tiền thu cho Contract tổng.</p>}
    {fact.hubContract.payments.state==='read'&&summary?.hubPaid===0&&<p className="child-hub-warning">CT này cũng chưa có khoản thu. Kiểm tra CT nguồn trước đó.</p>}

@@ -68,7 +68,7 @@ export function projectContractDetail(value,sourceURL,detailURL){
  const source=courseDetailEndpoint(sourceURL,detailURL);if(!source)return null;
  const root=contractRoot(value);
  if(root){
-   const lists=['ListCourseInfo','CourseInfos'].map(k=>listValue(pick(root,[k]),20)).filter(Boolean),list=lists.find(l=>l.length)??lists[0];
+   const lists=['ListCourseInfo','CourseInfos'].map(k=>listValue(pick(root,[k]),20)).filter(Boolean),list=lists.find(l=>l.length)??lists[0]??[];
    const id=pick(root,['ContractId','Id']),ct=scalar(root,['ContractNo','ContractCode','ContractNumber']),student=scalar(root,['StudentCode','StudentNo','StudentNumber','KidCode']);
    if(id!=null&&!numberId(id))return null;
    const facts=projectHubContract(root),rootFields=fields(root),discountPending=['ListDiscount','Discounts'].some(k=>root[k]!=null)&&rootFields.discount==null;

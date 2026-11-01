@@ -12,7 +12,7 @@ export function hubList(v,max=500){if(typeof v==='string'&&v.length<=1e6){try{v=
 export function contractRoot(value){
  let level=[value];const seen=new Set();
  for(let depth=0;depth<6&&level.length<=40;depth++){
-  const matches=level.filter(v=>plain(v)&&!seen.has(v)&&(hubList(v.ListCourseInfo,20)||hubList(v.CourseInfos,20)));
+  const matches=level.filter(v=>plain(v)&&!seen.has(v)&&(hubList(v.ListCourseInfo,20)||hubList(v.CourseInfos,20)||id(v.ContractId??v.Id)&&text(v.ContractNo??v.ContractCode)&&['ListPayment','ListMovingOut','ListMovingIn'].some(k=>v[k]!=null)));
   if(matches.length)return matches.length===1?matches[0]:null;
   const next=[];for(const v of level){if(!plain(v)||seen.has(v))continue;seen.add(v);for(const key of ['Data','data','Result','result','Model','model','Contract','contractInfo','item','$vm','vm'])if(plain(v[key]))next.push(v[key]);}level=next;
  }
@@ -31,6 +31,10 @@ export function contractDiscountFacts(root){
  }
  return result;
 }
+const invoiceEvidence=value=>{
+ const v=text(value);if(!v)return null;
+ return /^\d{4,15}$/.test(v)||/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v)?v:null;
+};
 export function projectContractPayments(value,contractId){
  let list=hubList(value,500);
  if(!list&&plain(value)){
@@ -42,7 +46,8 @@ export function projectContractPayments(value,contractId){
  for(const r of list){
   if(!plain(r)||r.ContractId!=null&&id(r.ContractId)!==String(contractId)||!id(r.PaymentId)||number(r.Amount)===null)return null;
   const code=text(r.PaymentCode);if(code.length>150||code&&!/^[A-Za-z0-9][A-Za-z0-9_.:/-]*$/.test(code))return null;
-  rows.push({id:id(r.PaymentId),code,amount:number(r.Amount),totalAmount:number(r.TotalAmount),remaining:number(r.RemainAmount),typeId:id(r.PaymentTypeId),type:text(r.PaymentTypeName).slice(0,200),method:text(r.PaymentMethodTypeName??r.PaymentMethodName).slice(0,200),scheduledDate:date(r.ScheduledDate),completeDate:date(r.CompleteDate),complete:typeof r.IsComplete==='boolean'?r.IsComplete:null});
+  const invoiceRef=invoiceEvidence(r.InvoiceNo??r.InvoiceNumber??r.EInvoiceId??r.EInvoiceGuid??r.EInvoice);
+  rows.push({id:id(r.PaymentId),code,amount:number(r.Amount),totalAmount:number(r.TotalAmount),remaining:number(r.RemainAmount),typeId:id(r.PaymentTypeId),type:text(r.PaymentTypeName).slice(0,200),method:text(r.PaymentMethodTypeName??r.PaymentMethodName).slice(0,200),scheduledDate:date(r.ScheduledDate),completeDate:date(r.CompleteDate),complete:typeof r.IsComplete==='boolean'?r.IsComplete:null,...(invoiceRef?{invoiceRef}:{})});
  }
  return new Set(rows.map(r=>r.id)).size===rows.length?rows:null;
 }
@@ -80,7 +85,7 @@ export function projectHubMovements(root){
 }
 
 export function projectHubContract(root,{payments=null,paymentState='pending',capturedAt=new Date().toISOString()}={}){
- const result={schema:HUB_CONTRACT_SCHEMA,ct:text(root?.ContractNo??root?.ContractCode).toUpperCase(),contractId:id(root?.ContractId??root?.Id),capturedAt,discounts:contractDiscountFacts(root),payments:{state:paymentState,rows:payments??[]},...(projectHubMovements(root)!==null?{movements:{state:'read',rows:projectHubMovements(root)}}:{movements:{state:'pending',rows:[]}})};
+ const result={schema:HUB_CONTRACT_SCHEMA,ct:text(root?.ContractNo??root?.ContractCode).toUpperCase(),contractId:id(root?.ContractId??root?.Id),capturedAt,discounts:contractDiscountFacts(root),payments:{state:paymentState==='pending'&&projectContractPayments(root,id(root?.ContractId??root?.Id))!==null?'read':paymentState,rows:payments??projectContractPayments(root,id(root?.ContractId??root?.Id))??[]},...(projectHubMovements(root)!==null?{movements:{state:'read',rows:projectHubMovements(root)}}:{movements:{state:'pending',rows:[]}})};
  return validateHubContract(result)?result:null;
 }
 export function validateHubContract(v){
@@ -93,7 +98,7 @@ export function validateHubContract(v){
  }
  const p=v.payments;
  if(!exact(p,['state','rows'])||!['read','pending','unavailable'].includes(p.state)||!hubList(p.rows,500)||p.state!=='read'&&p.rows.length||new Set(p.rows.map(r=>r.id??r.code)).size!==p.rows.length)return false;
- return p.rows.every(r=>exact(r,['id','code','amount','totalAmount','remaining','typeId','type','method','scheduledDate','completeDate','complete'])&&(r.id===null&&!!r.code||id(r.id)===r.id)&&typeof r.code==='string'&&r.code.length<=150&&(!r.code||/^[A-Za-z0-9][A-Za-z0-9_.:/-]*$/.test(r.code))&&number(r.amount)===r.amount&&['totalAmount','remaining'].every(k=>r[k]===null||number(r[k])===r[k])&&(r.typeId===null||id(r.typeId)===r.typeId)&&['type','method'].every(k=>typeof r[k]==='string'&&r[k].length<=200)&&['scheduledDate','completeDate'].every(k=>r[k]===null||date(r[k])===r[k])&&(r.complete===null||typeof r.complete==='boolean'))&&JSON.stringify(v).length<=300000;
+ return p.rows.every(r=>(exact(r,['id','code','amount','totalAmount','remaining','typeId','type','method','scheduledDate','completeDate','complete'])||exact(r,['id','code','amount','totalAmount','remaining','typeId','type','method','scheduledDate','completeDate','complete','invoiceRef']))&&(r.id===null&&!!r.code||id(r.id)===r.id)&&typeof r.code==='string'&&r.code.length<=150&&(!r.code||/^[A-Za-z0-9][A-Za-z0-9_.:/-]*$/.test(r.code))&&number(r.amount)===r.amount&&['totalAmount','remaining'].every(k=>r[k]===null||number(r[k])===r[k])&&(r.typeId===null||id(r.typeId)===r.typeId)&&['type','method'].every(k=>typeof r[k]==='string'&&r[k].length<=200)&&['scheduledDate','completeDate'].every(k=>r[k]===null||date(r[k])===r[k])&&(r.complete===null||typeof r.complete==='boolean')&&(r.invoiceRef===undefined||invoiceEvidence(r.invoiceRef)===r.invoiceRef))&&JSON.stringify(v).length<=300000;
 }
 
 /**
@@ -129,8 +134,9 @@ export function projectHubDisplayedTables(tables,ct){
    for(const r of rows){
     if(!Array.isArray(r)||r.length<headers.length)continue;
     const code=line(r[pcode]),amount=vnd(r[paid]),total=vnd(r[pamount]),done=ddmmyyyy(r[completed]);
+    const invoiceRef=invoiceEvidence(r[indexed(headers,['invoice no','invoice number','e-invoice','e-invoice id'])]);
     if(!/^[A-Z0-9]+-PAY-[A-Z0-9-]{3,30}$/i.test(code)||amount===null||total===null||amount<0||total<0||amount>total)continue;
-    values.push({id:null,code,amount,totalAmount:total,remaining:vnd(r[indexed(headers,['remain amount'])])??null,typeId:null,type:'Payment',method:line(r[indexed(headers,['payment method'])]).slice(0,200),scheduledDate:ddmmyyyy(r[indexed(headers,['scheduled date'])]),completeDate:done,complete:!!done&&amount>0});
+    values.push({id:null,code,amount,totalAmount:total,remaining:vnd(r[indexed(headers,['remain amount'])])??null,typeId:null,type:'Payment',method:line(r[indexed(headers,['payment method'])]).slice(0,200),scheduledDate:ddmmyyyy(r[indexed(headers,['scheduled date'])]),completeDate:done,complete:!!done&&amount>0,...(invoiceRef?{invoiceRef}:{})});
    }
    if(new Set(values.map(v=>v.code)).size===values.length)payments=values;
   }
@@ -155,7 +161,11 @@ export function projectHubDisplayedTables(tables,ct){
 export function mergeDisplayedHubContract(facts,tables,ct){
  if(!validateHubContract(facts)||facts.ct!==ct)return null;
  const extra=projectHubDisplayedTables(tables,ct);if(!extra)return facts;
- const payments=facts.payments.state==='read'?facts.payments:extra.payments!==null?{state:'read',rows:extra.payments}:facts.payments;
+ const payments=facts.payments.state==='read'?{...facts.payments,
+  rows:facts.payments.rows.map(row=>{
+   const match=extra.payments?.find(item=>item.code===row.code&&Math.abs(item.amount-row.amount)<=1);
+   return match?.invoiceRef&&!row.invoiceRef?{...row,invoiceRef:match.invoiceRef}:row;
+  })}:extra.payments!==null?{state:'read',rows:extra.payments}:facts.payments;
  const movements=facts.movements?.state==='read'?facts.movements:extra.movements!==null?{state:'read',rows:extra.movements}:facts.movements??{state:'pending',rows:[]};
  const result={...facts,payments,movements};return validateHubContract(result)?result:facts;
 }

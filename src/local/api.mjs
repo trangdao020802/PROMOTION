@@ -16,6 +16,7 @@ import {buildPriceCatalogue,policyRuleCatalogue,hubPriceCatalogue} from '../core
 import {POLICY_SCHEMA,normalizePolicyRow,validatePolicyRows,stagePolicyUpdate,mergePolicyPack} from '../core/policy-pack.mjs';
 import {childFactInput,childFactKey} from '../core/child-hub-evidence.mjs';
 import {ctCode,ancestryKey} from '../core/hub-upstream.mjs';
+import {verifiedHubSupplement} from '../core/hub-proven-funding.mjs';
 let policies;
 let resolvedPolicy;
 // Course inputs and review patches never change membership of a source bundle.
@@ -34,7 +35,30 @@ const response=(value,status=200)=>new Response(JSON.stringify(value),{status,he
 const fail=(s,status=400)=>Object.assign(Error(s),{status});
 const id=()=>{if(typeof crypto.randomUUID==='function')return crypto.randomUUID();const b=crypto.getRandomValues(new Uint8Array(16));b[6]=(b[6]&15)|64;b[8]=(b[8]&63)|128;const h=[...b].map(x=>x.toString(16).padStart(2,'0')).join('');return [h.slice(0,8),h.slice(8,12),h.slice(12,16),h.slice(16,20),h.slice(20)].join('-')},now=()=>new Date().toISOString();
 export async function currentDataset(datasetId){if(datasetId){const d=await get('datasets',datasetId);if(!d)throw fail('Không tìm thấy bộ nguồn trên trình duyệt này. Mở Tải bộ nguồn để chọn lại.',404);return d}const setting=await get('settings','current');return setting?.datasetId?await get('datasets',setting.datasetId):null}
-export async function loadWorkbook(datasetId){const [dataset,p,vouchers,sources]=await Promise.all([currentDataset(datasetId),loadPolicies(),all('vouchers'),courseMemories()]);const model=buildModel(dataset?.bundle,p);model.dataset=dataset;model.hash=dataset?.id||'policy-2026';indexModel(model);const engine=new AuditEngine(model);engine.setVouchers(vouchers);engine.setCourseSources(sources.filter(s=>identityIndexes.get(model.hash).students.has(s.ct+'|'+s.student)));return engine.data}
+async function attachVerifiedHubFunding(model){
+ const [settings,links]=await Promise.all([all('settings'),all('links')]);
+ const facts=settings.filter(x=>typeof x.id==='string'&&x.id.startsWith('hub-child-fact:'));
+ const codeSet=new Set(model.input?.cashSources?.flatMap(s=>s.rows??[]).map(r=>String(r.payment??'').trim().toUpperCase()));
+ for(const group of model.contractGroups){
+  if(group.kind!=='contract')continue;
+  const student=String(group.cells.F),evidence=verifiedHubSupplement({
+   masterCt:group.ct,student,datasetId:model.dataset?.id??model.hash,
+   sourcePayments:[...codeSet].map(payment=>({payment})),
+   sourceMovements:group.account?.movementHistory??[],facts,links
+  });
+  if(!evidence.amount&&!evidence.pending.length)continue;
+  group.account.hubSupplement=evidence;
+  if(!evidence.amount)continue;
+  if(typeof group.account.net!=='number'||!Number.isFinite(group.account.net)){
+   group.account.hubSupplement={...evidence,status:'pending-ledger',pending:[...evidence.pending,{reason:'Tổng tiền nguồn chưa xác định; không ghi đè thành 0'}]};
+   continue;
+  }
+  group.account.net+=evidence.amount;
+  if(typeof group.account.transferIn==='number')group.account.transferIn+=evidence.amount;
+  // Supplemental receipts stay in a separate audited ledger; no fake direct-transfer events.
+ }
+}
+export async function loadWorkbook(datasetId){const [dataset,p,vouchers,sources]=await Promise.all([currentDataset(datasetId),loadPolicies(),all('vouchers'),courseMemories()]);const model=buildModel(dataset?.bundle,p);model.dataset=dataset;model.hash=dataset?.id||'policy-2026';indexModel(model);await attachVerifiedHubFunding(model);const engine=new AuditEngine(model);engine.setVouchers(vouchers);engine.setCourseSources(sources.filter(s=>identityIndexes.get(model.hash).students.has(s.ct+'|'+s.student)));return engine.data}
 const baseRecord=g=>({...g.anchor,errors:[],reviewItems:[],courseInfo:g.courseInfo,id:g.id,kind:g.kind,ct:g.ct,paymentCode:g.paymentCode,memberIds:g.memberIds,...(g.sourceContracts?{sourceContracts:g.sourceContracts}:{}),receipts:g.receipts,groupWarnings:g.warnings,hubContract:g.hubContract??null,hubReadMissing:g.hubReadMissing??[],hubPolicy:g.hubPolicy??null,hubPolicyError:g.hubPolicyError??null,cells:{...g.cells,contractTotal:g.ct||'',AG:'',AF:'CHECK'}});
 async function bootstrap(datasetId){
  const model=await loadWorkbook(datasetId),saved=await all('edits'),links=await all('links');const savedMap=new Map(saved.map(x=>[x.id,x]));

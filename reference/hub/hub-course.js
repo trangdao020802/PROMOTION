@@ -19,10 +19,12 @@
    let financePresent=false;
    if(job.course.readFinance&&result.payload?.hubContract&&N?.mergeDisplayedHubContract){
     const tables=[...document.querySelectorAll('table')].slice(0,100).map(table=>{
-     const head=[...table.querySelectorAll('thead th')].map(node=>node.textContent||'');
-     const headers=head.length?head:[...table.querySelectorAll('tr:first-child th')].map(node=>node.textContent||'');
-     if(!headers.some(value=>/^(payment code|moving out amount|moving in amount)$/i.test(String(value).trim())))return null;
-     return {headers,rows:[...table.querySelectorAll('tbody tr')].slice(0,300).map(tr=>[...tr.querySelectorAll('td')].map(td=>td.textContent||''))};
+     const headerRows=[...table.querySelectorAll('thead tr')].map(tr=>[...tr.querySelectorAll('th')].map(node=>node.textContent||''));
+     const headers=headerRows.findLast(row=>row.some(value=>/^(payment code|moving out amount|moving in amount)$/i.test(String(value).trim())))||
+       [...table.querySelectorAll('tr')].slice(0,5).map(tr=>[...tr.querySelectorAll('th')].map(node=>node.textContent||'')).findLast(row=>row.some(value=>/^(payment code|moving out amount|moving in amount)$/i.test(String(value).trim())));
+     if(!headers?.length)return null;
+     const rows=[...table.querySelectorAll('tbody tr')].slice(0,300).map(tr=>[...tr.querySelectorAll('td')].map(td=>td.textContent||''));
+     return {headers,rows};
     }).filter(Boolean);
     const augmented=N.mergeDisplayedHubContract(result.payload.hubContract,tables,job.course.ct);
     if(augmented){const updated=C.coursePayload({...result.payload,hubContract:augmented},job.course);if(updated)result={...result,payload:updated};}
