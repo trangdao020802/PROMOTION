@@ -23,7 +23,7 @@ test('two separate 2025 original Paid references fund the master once across two
  const result=run();
  assert.equal(result.amount,9450000);
  assert.equal(result.receipts.length,2);
- assert.deepEqual(result.receipts.map(r=>r.origin).sort(),roots.sort());
+ assert.deepEqual(result.receipts.map(r=>r.origin).sort(),[...roots].sort());
  assert.ok(result.receipts.every(r=>r.path.length===2&&r.allocated===amount&&r.invoiceRef));
  assert.equal(result.pending.length,0);
 });
