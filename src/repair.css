@@ -90,3 +90,18 @@
 .price-edit-actions button:disabled{opacity:.5;cursor:not-allowed}
 @media(max-width:800px){.price-edit-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.price-edit-backdrop{padding:5px}.price-edit-panel{max-height:calc(100vh - 10px);padding:15px}.price-edit-actions{flex-wrap:wrap}}
 @media(max-width:480px){.price-edit-grid{grid-template-columns:minmax(0,1fr)}.price-edit-heading{flex-direction:column;gap:8px}.price-edit-actions button{width:100%}}
+
+/* Hub child CT payment/movement evidence: audited read-only trace, not cash ledger. */
+.child-hub-facts{border:1px solid #ccdbd3;background:#f6faf8;border-radius:10px;padding:14px 16px;margin:16px 0}
+.child-hub-facts h4{margin:0 0 7px;font-size:13px;color:#1c5343}
+.child-hub-facts p{font-size:12px;line-height:1.65;margin:7px 0;color:#425c52}
+.child-hub-action{display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between;margin-top:10px;font-size:12px}
+.child-hub-action button{margin-left:auto}
+.child-hub-warning{color:#925221!important;background:#fff5e9;border-radius:6px;padding:8px 10px}
+.child-hub-scroller{max-width:100%;overflow:auto;border:1px solid #d7e2d9;border-radius:7px;margin:10px 0}
+.child-hub-scroller table{width:100%;border-collapse:collapse;min-width:600px;font-size:11px}
+.child-hub-scroller th,.child-hub-scroller td{text-align:left;padding:8px;border-bottom:1px solid #d7e2d9}
+.child-hub-scroller td small{display:block;color:#6a7d72}
+.child-hub-facts details{margin-top:10px}
+.child-hub-facts summary{cursor:pointer;color:#225744;font-weight:600;font-size:12px}
+.child-hub-source{display:block;margin-top:10px;color:#65796e;font-size:11px}

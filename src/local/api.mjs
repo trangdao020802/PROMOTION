@@ -14,6 +14,7 @@ import {coursePayload,COURSE_FIELDS} from '../core/hub-course.mjs';
 import {validInputTargets,newInputRun,completeInputRun} from '../core/hub-input-progress.mjs';
 import {buildPriceCatalogue,policyRuleCatalogue,hubPriceCatalogue} from '../core/price-catalog.mjs';
 import {POLICY_SCHEMA,normalizePolicyRow,validatePolicyRows,stagePolicyUpdate,mergePolicyPack} from '../core/policy-pack.mjs';
+import {childFactInput,childFactKey} from '../core/child-hub-evidence.mjs';
 let policies;
 let resolvedPolicy;
 // Course inputs and review patches never change membership of a source bundle.
@@ -104,6 +105,23 @@ export async function localFetch(input,options={}){
    if((prior?.version??0)!==(body.version||0))throw Object.assign(Error('Voucher đã được thay đổi ở tab khác. Tải lại trước khi ghi.'),{conflict:true});
    const saved=await versioned('vouchers',key,exact?.version??0,()=>voucher);return response({voucher:saved,vouchers:await all('vouchers')});
   }
+  if(path==='/api/hub-child-facts'){
+    const query=method==='GET'?Object.fromEntries(url.searchParams):body;
+    const datasetId=String(query?.datasetId??''),masterCt=String(query?.masterCt??'').toUpperCase(),ct=String(query?.ct??'').toUpperCase(),student=String(query?.student??'');
+    if(!/^[A-Z0-9]+-CT-\d{4,20}$/.test(masterCt)||!/^[A-Z0-9]+-CT-\d{4,20}$/.test(ct)||masterCt===ct||!student)throw fail('Yêu cầu CT con không hợp lệ.');
+    const {group}=await recordFor(datasetId,'CT::'+masterCt);
+    if(group.ct!==masterCt||String(group.cells.F)!==student||!(group.sourceContracts??[]).includes(ct))throw fail('CT con không có luồng Transfer đã xác minh về CT tổng / học viên này.');
+    const link=await get('links',ct);
+    if(!link?.url||!validHubURL(link.url,ct))throw fail('CT con chưa có link Hub hợp lệ.');
+    const key=childFactKey({datasetId,masterCt,ct,student}),prior=await get('settings',key);
+    if(method==='GET')return response({fact:prior?.url===link.url?prior:null,version:prior?.version??0});
+    if(method!=='PATCH')throw fail('Yêu cầu không được hỗ trợ.');
+    if(body.url!==link.url)throw fail('Link Hub đã thay đổi. Đọc lại từ link hiện tại.');
+    const fact=childFactInput({datasetId,masterCt,ct,student,url:link.url,payload:body.payload});
+    if(!fact)throw fail('Hub chưa trả dữ liệu tài chính đúng CT / học viên / link, không thể lưu.');
+    const result=await versioned('settings',key,body.version??0,()=>fact);
+    return response({fact:result});
+   }
   if(path==='/api/hub-links'&&method==='GET'){
    const links=await all('links'),ct=url.searchParams.get('ct');return response({link:ct?links.find(l=>l.ct===ct)||null:null,links:ct?links.filter(l=>l.ct===ct):links});
   }

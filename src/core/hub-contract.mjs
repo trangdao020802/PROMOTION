@@ -46,13 +46,51 @@ export function projectContractPayments(value,contractId){
  }
  return new Set(rows.map(r=>r.id)).size===rows.length?rows:null;
 }
+// A Hub transfer is a trace, never a second original receipt.
+const contractCode=v=>/^[A-Z0-9]+-CT-\d{4,20}$/.test(text(v).toUpperCase())?text(v).toUpperCase():null;
+const moveDay=v=>{
+ const iso=date(v);if(iso)return iso;
+ const match=/^(\d{2})\/(\d{2})\/(\d{4})(?:\s|$)/.exec(text(v));
+ if(!match)return null;const candidate=match[3]+'-'+match[2]+'-'+match[1];
+ return Number.isFinite(Date.parse(candidate))&&new Date(candidate+'T00:00:00Z').toISOString().slice(0,10)===candidate?candidate:null;
+};
+export function projectHubMovements(root){
+ if(!plain(root))return null;
+ const ct=contractCode(root.ContractNo??root.ContractCode);
+ if(!ct)return null;
+ const lists=[['out',['ListMovingOut','ListTransferOut','MovingOut']],['in',['ListMovingIn','ListTransferIn','MovingIn']]];
+ const rows=[];let hasList=false;
+ for(const [direction,names]of lists){
+  const existing=names.find(name=>root[name]!=null);if(!existing)continue;
+  const list=hubList(root[existing],200);if(!list)return null;hasList=true;
+  for(const item of list){
+   if(!plain(item))return null;
+   const from=contractCode(item.FromContractNo??item.FromContractCode??(direction==='out'?ct:null));
+   const to=contractCode(item.ToContractNo??item.ToContractCode??(direction==='in'?ct:null));
+   const amount=number(item.TransferAmount??item.MovingAmount??item.Amount);
+   if(!from||!to||from===to||amount===null||amount<=0)return null;
+   if(direction==='out'&&from!==ct||direction==='in'&&to!==ct)return null;
+   const day=moveDay(item.TransferDate??item.MovingDate??item.Date);
+   const reference=text(item.PaymentCode??item.TransferCode??'');
+   if(!day||reference.length>150||reference&&!/^[A-Za-z0-9][A-Za-z0-9_.:/-]*$/.test(reference))return null;
+   rows.push({from,to,amount,date:day,reference,direction});
+  }
+ }
+ return hasList?rows:null;
+}
+
 export function projectHubContract(root,{payments=null,paymentState='pending',capturedAt=new Date().toISOString()}={}){
- const result={schema:HUB_CONTRACT_SCHEMA,ct:text(root?.ContractNo??root?.ContractCode).toUpperCase(),contractId:id(root?.ContractId??root?.Id),capturedAt,discounts:contractDiscountFacts(root),payments:{state:paymentState,rows:payments??[]}};
+ const result={schema:HUB_CONTRACT_SCHEMA,ct:text(root?.ContractNo??root?.ContractCode).toUpperCase(),contractId:id(root?.ContractId??root?.Id),capturedAt,discounts:contractDiscountFacts(root),payments:{state:paymentState,rows:payments??[]},...(projectHubMovements(root)!==null?{movements:{state:'read',rows:projectHubMovements(root)}}:{movements:{state:'pending',rows:[]}})};
  return validateHubContract(result)?result:null;
 }
 export function validateHubContract(v){
- if(!exact(v,['schema','ct','contractId','capturedAt','discounts','payments'])||v.schema!==HUB_CONTRACT_SCHEMA||!/^\w+-CT-\d{4,20}$/.test(v.ct)||id(v.contractId)!==v.contractId||typeof v.capturedAt!=='string'||!Number.isFinite(Date.parse(v.capturedAt)))return false;
+ if(!exact(v,['schema','ct','contractId','capturedAt','discounts','payments'])&&!exact(v,['schema','ct','contractId','capturedAt','discounts','payments','movements'])||v.schema!==HUB_CONTRACT_SCHEMA||!/^\w+-CT-\d{4,20}$/.test(v.ct)||id(v.contractId)!==v.contractId||typeof v.capturedAt!=='string'||!Number.isFinite(Date.parse(v.capturedAt)))return false;
  if(v.discounts!==null&&(!hubList(v.discounts,100)||!v.discounts.every(d=>exact(d,['label','groupId','discountId','type','percent','amount','months'])&&!!text(d.label)&&d.label.length<=2000&&['groupId','discountId'].every(k=>d[k]===null||id(d[k])===d[k])&&(d.type===null||[1,2,3].includes(d.type))&&['percent','amount','months'].every(k=>d[k]===null||number(d[k])===d[k]&&d[k]>=0&&d[k]<=(k==='percent'?100:k==='months'?120:1e13)))))return false;
+ if(v.movements!==undefined){
+  const m=v.movements;
+  if(!exact(m,['state','rows'])||!['read','pending'].includes(m.state)||!hubList(m.rows,400)||m.state==='pending'&&m.rows.length)return false;
+  if(!m.rows.every(x=>exact(x,['from','to','amount','date','reference','direction'])&&contractCode(x.from)===x.from&&contractCode(x.to)===x.to&&x.from!==x.to&&number(x.amount)===x.amount&&x.amount>0&&moveDay(x.date)===x.date&&typeof x.reference==='string'&&x.reference.length<=150&&(!x.reference||/^[A-Za-z0-9][A-Za-z0-9_.:/-]*$/.test(x.reference))&&['out','in'].includes(x.direction)&&((x.direction==='out'&&x.from===v.ct)||(x.direction==='in'&&x.to===v.ct))))return false;
+ }
  const p=v.payments;
  if(!exact(p,['state','rows'])||!['read','pending','unavailable'].includes(p.state)||!hubList(p.rows,500)||p.state!=='read'&&p.rows.length||new Set(p.rows.map(r=>r.id)).size!==p.rows.length)return false;
  return p.rows.every(r=>exact(r,['id','code','amount','totalAmount','remaining','typeId','type','method','scheduledDate','completeDate','complete'])&&id(r.id)===r.id&&typeof r.code==='string'&&r.code.length<=150&&(!r.code||/^[A-Za-z0-9][A-Za-z0-9_.:/-]*$/.test(r.code))&&number(r.amount)===r.amount&&['totalAmount','remaining'].every(k=>r[k]===null||number(r[k])===r[k])&&(r.typeId===null||id(r.typeId)===r.typeId)&&['type','method'].every(k=>typeof r[k]==='string'&&r[k].length<=200)&&['scheduledDate','completeDate'].every(k=>r[k]===null||date(r[k])===r[k])&&(r.complete===null||typeof r.complete==='boolean'))&&JSON.stringify(v).length<=300000;
