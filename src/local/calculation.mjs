@@ -1,10 +1,10 @@
-import {courseHourTotals,renewalWeekOffer} from '../core/course-hours.mjs';
+import {courseHourTotals,courseHoursExplanation} from '../core/course-hours.mjs';
 import {ContractEngine,packageKey} from '../core/contracts.mjs';
 import {financialResult} from '../core/reconcile.mjs';
-import {discountPolicyMatch,discountPolicyCheck,discountOffers,promotionResult} from '../core/promotions.mjs';
+import {discountPolicyMatch,discountPolicyCheck,discountOffers,promotionResult,RENEWAL_WEEK_REVIEW} from '../core/promotions.mjs';
 import {voucherCode,customVoucherIssue,withVoucherRegistry,voucherCenterApplies,voucherForStudent} from '../core/vouchers.mjs';
 import {dateSerial,fullPaymentDay} from '../core/verification.mjs';
-import {reviewAccepted,applyReviews} from '../core/reviews.mjs';
+import {reviewAccepted,applyReviews,manualCheckKey} from '../core/reviews.mjs';
 import {toleranceFor,auditPolicyChecks,auditPackageKey,voucherBasisFor} from '../core/audit-policy.mjs';
 import {priceFor} from '../core/price-resolver.mjs';
 export {priceFor} from '../core/price-resolver.mjs';
@@ -32,8 +32,6 @@ class IndependentCalculator{
   if(voucher){context.voucherType=voucher.type==='percent'?'PHẦN TRĂM':'SỐ TIỀN';context.voucherBasis=voucher.percentBasis??'policy-default';if(voucher.policyId&&voucher.policyId!=='case-specific'||voucher.percentBasis&&voucher.percentBasis!=='policy-default')context.voucherPolicyScope=JSON.stringify([voucher.policyId,voucher.percentBasis,voucher.type,voucher.amount,voucher.rate,voucher.startDate,voucher.endDate,voucher.center,voucher.approvalNote]);}
   context.hubPolicy=group.hubPolicy??null;
   const account=options.account||group.account;const pricing=priceFor(data,cells,context),label=text(cells.L);
-   const allOffers=discountOffers(label),weekBonusWeeks=allOffers.some(offer=>renewalWeekOffer(offer)===2)?2:0;
-   const regularOffers=allOffers.filter(offer=>!renewalWeekOffer(offer)),regularLabel=regularOffers.join(';');
   const hub=pricing?.hub?calculateHubPolicy(group.hubPolicy,cells,context,voucher):null,hubActive=hub&&!hub.error;
   context.hubRules=!!hubActive;
   const customOffer=pricing?.override&&discountOffers(label).length===1&&pricing.discountLabels?.some(s=>priceText(s)===priceText(label));
@@ -49,26 +47,27 @@ class IndependentCalculator{
   cells.AJ=pricing?.hours??null;cells.AK=pricing?.pkg??packageKey(cells.J);cells.AO=pricing?.phase==='q4'?'BBQ426':pricing?.phase==='october'?'OCT_BASE':'BASE2026';
   cells.M=pricing?.gross??null;cells.N=pricing?.short?pricing.discount:label&&label!=='0'?null:number(pricing?.gross)?0:null;cells.O=0;cells.S=pricing?(/installment/i.test(text(context.method))?pricing.maxTerms:0):null;cells.BD=pricing?.issue?.startsWith('XÁC MINH')?'OK':pricing?.issue??(pricing?'OK':/VTDH|vững tin/i.test([cells.H,cells.J,cells.L].join(' '))?'CHECK - VTDH CÓ POLICY RIÊNG':'CHECK - CHƯA CÓ RULE / ĐỦ ĐẦU VÀO');
   cells.AL=label&&label!=='0'?match.ruleKey||'OTHER':'NONE';cells.BO=match.issues[0]||'OK';cells.CH='OK';
-  let loyaltyMissing=false,straightMissing=false;const discountComponents=[],monthComponents=[];
+  let loyaltyMissing=false,straightMissing=false;const discountComponents=[],monthComponents=[],reviewDetails={};
   const awardMonths=(kind,months)=>{if(number(months)&&months>0)monthComponents.push({kind,months});};
-  const legacy=!hubActive&&regularLabel?legacyDiscountFor(pricing,regularOffers,context):null;
+  const regularOffers=discountOffers(label).filter(offer=>discountPolicyMatch(offer,cells.D).kind!=='weeks');
+  const legacy=!hubActive&&regularOffers.length?legacyDiscountFor(pricing,regularOffers,context):null;
   if(hub?.error){cells.BO=hub.error;checks.push(hub.error);}
   if(hubActive){cells.N=hub.discount;cells.AL='HUB_POLICY';cells.BO='OK';discountComponents.push(...hub.components);checks.push(...hub.checks);}
   if(legacy){cells.N=legacy.amount;cells.AL=pricing.policyKey;checks.push(...legacy.checks);discountComponents.push(...legacy.components);}
   if(!hubActive&&!legacy&&label&&label!=='0'&&pricing&&!pricing.short){
-   const terms=regularOffers,matches=terms.map(s=>customOffer?match:discountPolicyMatch(s,cells.D));
+   const terms=discountOffers(label),matches=terms.map(s=>customOffer?match:discountPolicyMatch(s,cells.D));
    const typedOffer=pricing.discountLabels?.length&&discountOffers(label).every(offer=>pricing.discountLabels.some(known=>priceText(offer)===priceText(known)));
    const base=/học bổng (đồng hành|ghi danh)|new price 2026.*(đồng hành|ghi danh)/i.test(label)&&pricing.phase==='base'||typedOffer;
    const september=pricing.policyKey==='BBSEP26_CASH';
    const special=/Special (?:30%|Support)/i.test(label)&&between(cells.D,'2026-06-24','2026-12-31');
-   const supported=terms.length<=4&&((terms.length===0&&weekBonusWeeks===2)||typedOffer||matches.every((m,i)=>!!m.ruleKey||/học bổng (đồng hành|ghi danh)|Special (?:30%|Support)|Big Bang Sep|Flash Sale/i.test(terms[i])));
-   if(supported&&((terms.length===0&&weekBonusWeeks===2)||base||september||special||matches.some(m=>m.ruleKey))){
+   const supported=terms.length<=4&&(typedOffer||matches.every((m,i)=>!!m.ruleKey||/học bổng (đồng hành|ghi danh)|Special (?:30%|Support)|Big Bang Sep|Flash Sale/i.test(terms[i])));
+   if(supported&&(base||september||special||matches.some(m=>m.ruleKey))){
     const cashOffer=base||september||special||matches.some(m=>m.kind==='cash');
     cells.N=special?Math.round(cells.M*.3):cashOffer?pricing.discount:0;
-    cells.AL=terms.length===0&&weekBonusWeeks?'RENEWAL_WEEK_2':special?'SPECIAL30':typedOffer?pricing.policyKey:base?'BASE2026':september?'BBSEP26_CASH':match.ruleKey||matches.find(m=>m.ruleKey)?.ruleKey||'OTHER';
+    cells.AL=special?'SPECIAL30':typedOffer?pricing.policyKey:base?'BASE2026':september?'BBSEP26_CASH':match.ruleKey||matches.find(m=>m.ruleKey)?.ruleKey||'OTHER';
     if(match.sharedSepOct&&pricing.phase==='base'&&match.kind==='straight')cells.AL='BBSEP26_STRAIGHT';
     if(match.sharedSepOct&&pricing.phase==='october'&&match.kind==='straight')cells.AL='OCT26_BASE';
-    for(const [i,m]of matches.entries())if(m.kind!=='sibling-cash')discountComponents.push({label:terms[i],ruleKey:m.ruleKey,kind:m.kind,amount:m.ruleKey==='BBSEP26_STRAIGHT'?cells.N:m.kind==='months'||m.kind==='straight'?0:m.kind==='cash'?cells.N:null});
+    for(const [i,m]of matches.entries())if(m.kind!=='sibling-cash')discountComponents.push({label:terms[i],ruleKey:m.ruleKey,kind:m.kind,amount:m.ruleKey==='BBSEP26_STRAIGHT'?cells.N:['months','straight','weeks'].includes(m.kind)?0:m.kind==='cash'?cells.N:null});
     const fixed=[...new Map(matches.filter(m=>m.kind==='sibling-cash').map(m=>[m.ruleKey,m])).values()];
     if(fixed.length>1){cells.N=null;checks.push('CHECK - NHIỀU MỨC GIẢM SIBLINGS TRONG CÙNG HỒ SƠ');}
     for(const m of fixed){
@@ -140,19 +139,32 @@ class IndependentCalculator{
   cells.P=number(account.transferIn)?account.transferIn:0;
   cells.Q=number(cells.M)&&number(cells.N)&&number(cells.O)?Math.max(0,cells.M-cells.N-cells.O):null;
   const hoursPending=[];
+  const weekOffers=discountOffers(label).map(label=>({label,...discountPolicyMatch(label,cells.D)})).filter(m=>m.kind==='weeks');
+  if(weekOffers.length){
+   // Keep the existing manual-policy id/scope so an approval already saved for
+   // this exact CT/student/input context drives the calculation on reload.
+   const message=RENEWAL_WEEK_REVIEW,id=manualCheckKey(message);
+   checks.push(message);
+   const quantities=unique(weekOffers.map(m=>m.addonWeeks)),weeks=quantities[0];
+   const current=/^(?:renew|current|renewal)$/i.test(text(context.contractType));
+   const valid=quantities.length===1&&current&&context.priceGroup==='ATLS'&&[3,4].includes(pricing?.hours);
+   reviewDetails[id]=[
+    ...weekOffers.map(m=>m.label),
+    'Xác nhận đúng học viên tái phí, ngày hết phí, ngày đóng đủ, kỳ áp dụng và quyền cộng với ưu đãi khác; trường hợp ngoài chính sách chung cần căn cứ duyệt riêng.',
+    quantities.length===1?`${weeks} tuần tặng × ${pricing?.hours??'Hour/week'} giờ/tuần; không giảm thêm tiền và không quy thành tháng.`:'Có nhiều số tuần tặng khác nhau; sửa Discount apply trước khi tính.',
+    ...(!current?['Ưu đãi tái phí cần Contract type Renew / Current.']:[])
+   ];
+   if(quantities.length!==1)checks.push('CHECK - SỐ TUẦN TẶNG TÁI PHÍ MÂU THUẪN');
+   if(!current)checks.push('CHECK - TẶNG TUẦN TÁI PHÍ: học viên New hoặc chưa xác định Renew / Current, chưa đủ điều kiện.');
+   if(!valid||!reviewed(id))hoursPending.push('Chưa chốt điều kiện học bổng tái phí tặng tuần; đối chiếu căn cứ và tích Học bổng tái phí · Tặng tuần.');
+   else if(!hubActive)monthComponents.push({kind:'renewal-week',weeks});
+  }
   if(discountPending)hoursPending.push('Chưa đọc đủ chương trình Discount apply và tháng tặng của CT tổng.');
-  if(!hubActive&&!legacy&&!customOffer&&regularOffers.some(offer=>{const item=discountPolicyMatch(offer,cells.D);return ['straight','months','referral'].includes(item.kind)&&(!item.ruleKey||item.issues.length);}))hoursPending.push('Nhãn tháng tặng chưa khớp quy tắc được xác minh.');
+  if(!hubActive&&!legacy&&!customOffer&&discountOffers(label).some(offer=>{const item=discountPolicyMatch(offer,cells.D);return ['straight','months','referral'].includes(item.kind)&&(!item.ruleKey||item.issues.length);}))hoursPending.push('Nhãn tháng tặng chưa khớp quy tắc được xác minh.');
   if(loyaltyMissing)hoursPending.push('Chưa chốt điều kiện tháng loyalty.');
   if(straightMissing)hoursPending.push('Chưa xác minh trả thẳng và ngày đóng đủ.');
-   const weekAllowed=weekBonusWeeks===2&&reviewed('renewal-week')&&!/^new$/i.test(text(context.contractType));
-   if(weekBonusWeeks&&/^new$/i.test(text(context.contractType))){hoursPending.push('Học bổng tặng tuần tái phí không áp dụng cho học viên New.');checks.push('CHECK - TẶNG TUẦN TÁI PHÍ: học viên New không đủ điều kiện.');}
-   else if(weekBonusWeeks&&!weekAllowed)hoursPending.push('Suất tặng 2 tuần chưa được duyệt đúng hồ sơ.');
-   if(weekAllowed&&!(number(pricing?.hours)&&pricing.hours>0))hoursPending.push('Thiếu Hour/week để quy đổi 2 tuần tặng.');
-   const approvedWeekWeeks=weekAllowed?weekBonusWeeks:0;
   if(/SPLIT$/.test(String(pricing?.pkg))&&options.cells?.AT!=='YES'&&!reviewed('sibling')){hoursPending.push('Chưa đủ điều kiện gói sibling chia đôi.');checks.push('XÁC MINH - SIBLING: đối chiếu hai CT, hai học viên, quan hệ và ngày full cùng ngày.');}
-  const weekHours=approvedWeekWeeks*(number(pricing?.hours)?pricing.hours:0);
-   const hubHoursKnown=number(hub?.baseHours)&&number(hub?.extraHours)&&!hoursPending.length;
-   const courseHours=hubActive?{unit:pricing.unit,baseWeeks:pricing.weeks,weeklyHours:pricing.hours,baseMonths:pricing.months,factor:null,baseHours:hub.baseHours,bonusMonths:hub.giftMonths,bonusWeeks:hubHoursKnown?approvedWeekWeeks:null,extraHours:hubHoursKnown?hub.extraHours+weekHours:null,totalHours:hubHoursKnown?Math.round(hub.baseHours+hub.extraHours+weekHours):null,components:[...hub.components.filter(c=>c.kind==='months'),...(approvedWeekWeeks?[{kind:'renewal-week',weeks:approvedWeekWeeks,hours:weekHours}]:[])],pending:hoursPending}:courseHourTotals(pricing,monthComponents,data.policy.hourFactor,hoursPending,approvedWeekWeeks);
+  const courseHours=hubActive?{unit:pricing.unit,baseWeeks:pricing.weeks,weeklyHours:pricing.hours,baseMonths:pricing.months,factor:null,baseHours:hub.baseHours,bonusMonths:hub.giftMonths,bonusWeeks:hub.giftWeeks,extraHours:hoursPending.length?null:hub.extraHours,totalHours:hoursPending.length?null:hub.totalHours,components:hub.components.filter(c=>['months','weeks'].includes(c.kind)),pending:hoursPending}:courseHourTotals(pricing,monthComponents,data.policy.hourFactor,hoursPending);
   cells.extraHours=courseHours.extraHours;cells.R=courseHours.totalHours;
   cells.W=number(account.net)?account.net:null;cells.Y=group.raw.AJ??null;
   const actualTerm=typeof cells.Y==='number'?cells.Y:/^\d+(?:\.\d+)?/.test(text(cells.Y))?parseFloat(cells.Y):null;
@@ -173,12 +185,12 @@ class IndependentCalculator{
   cells.ctCheck=reconciliation.status;cells.promoCheck=promotion.status;cells.contractTotal=account.ct||'';cells.ctNet=account.ct?account.net:null;
   const complete=['Z','AA','AB','AC','AD'].every(k=>number(cells[k])&&Math.abs(cells[k])<=1);
   cells.AF=complete&&cells.AE==='OK'&&cells.BD==='OK'&&cells.BO==='OK'&&['OK','NO GIFTCODE'].includes(cells.CI)&&!promotion.blocking&&!reconciliation.blocking?'OK':'CHECK';
-  cells.AN=unique([pricing?.key?'Khóa giá: '+pricing.key:'',pricing?pricing.refs.map(r=>r.file+' · '+r.sheet+' · dòng '+r.row+(r.cell?' · ô '+r.cell:'')).join('; '):'Chưa có quy tắc giá đúng Course fee / giờ / gói / ngày.',pricing?.short&&number(pricing.monthly)?'Giá gốc gói lẻ = '+pricing.monthly.toLocaleString('vi-VN')+' VND/tháng chưa giảm × '+pricing.months+' tháng. Discount và Giftcode tính riêng.':'',number(cells.Q)?'Phải đóng = giá niêm yết − discount − giftcode. Transfer là phân bổ tiền, không trừ học phí lần hai.':'Chưa đủ dữ liệu để tính; ô trống không được coi là 0.',code&&hubActive?'Giftcode tính theo thứ tự và trần gốc của mã; đối chiếu cấu hình Hub và căn cứ duyệt.':code?((context.voucherBasis&&context.voucherBasis!=='policy-default'?context.voucherBasis:voucherBasisFor(data,cells.D))==='gross'?'Giftcode % trên giá gốc trước Discount; kiểm tra căn cứ phê duyệt của mã.':'Giftcode % trên giá gốc trừ Discount; theo căn cứ phê duyệt của mã.'):'',number(cells.extraHours)?hubActive?'Giờ tặng và tổng giờ tính theo thời lượng của PriceId '+group.hubPolicy.product.priceId+' trên Hub; tổng giờ làm tròn sau khi cộng.':'Giờ tặng = '+courseHours.bonusMonths+' tháng × '+courseHours.weeklyHours+' giờ/tuần × '+(courseHours.factor===25/6?'25/6':courseHours.factor)+'; tổng giờ làm tròn sau khi cộng, không cộng lại giờ tặng lần hai.':'',loyaltyMissing?'Cần lịch sử học phí và ngày dừng học để xét loyalty.':'',...promotion.checks]).join(' | ');
+  cells.AN=unique([pricing?.key?'Khóa giá: '+pricing.key:'',pricing?pricing.refs.map(r=>r.file+' · '+r.sheet+' · dòng '+r.row+(r.cell?' · ô '+r.cell:'')).join('; '):'Chưa có quy tắc giá đúng Course fee / giờ / gói / ngày.',pricing?.short&&number(pricing.monthly)?'Giá gốc gói lẻ = '+pricing.monthly.toLocaleString('vi-VN')+' VND/tháng chưa giảm × '+pricing.months+' tháng. Discount và Giftcode tính riêng.':'',number(cells.Q)?'Phải đóng = giá niêm yết − discount − giftcode. Transfer là phân bổ tiền, không trừ học phí lần hai.':'Chưa đủ dữ liệu để tính; ô trống không được coi là 0.',code&&hubActive?'Giftcode tính theo thứ tự và trần gốc của mã; đối chiếu cấu hình Hub và căn cứ duyệt.':code?((context.voucherBasis&&context.voucherBasis!=='policy-default'?context.voucherBasis:voucherBasisFor(data,cells.D))==='gross'?'Giftcode % trên giá gốc trước Discount; kiểm tra căn cứ phê duyệt của mã.':'Giftcode % trên giá gốc trừ Discount; theo căn cứ phê duyệt của mã.'):'',number(cells.extraHours)?hubActive?'Giờ tặng và tổng giờ tính theo thời lượng của PriceId '+group.hubPolicy.product.priceId+' trên Hub; tổng giờ làm tròn sau khi cộng.':courseHoursExplanation(courseHours):'',loyaltyMissing?'Cần lịch sử học phí và ngày dừng học để xét loyalty.':'',...promotion.checks]).join(' | ');
   if(account.hubSupplement?.amount){
    const proofs=account.hubSupplement.receipts.map(r=>r.origin+' / '+r.paymentCode+' / E-Invoice '+r.invoiceRef).join('; ');
    cells.AN=[cells.AN,'Bổ sung thu từ Hub có căn cứ: '+account.hubSupplement.amount.toLocaleString('vi-VN')+' đ. Chứng từ: '+proofs+'. Không cộng lại tiền chuyển nội bộ.'].filter(Boolean).join(' | ');
   }
-  return {...record,cells,context,errors:[],reconciliation,promotion,pricing,tolerance,discountComponents,courseHours};
+  return {...record,cells,context,errors:[],reconciliation,promotion,pricing,tolerance,discountComponents,courseHours,reviewDetails};
  }
 }
 export class AuditEngine extends ContractEngine{

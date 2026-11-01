@@ -82,6 +82,19 @@ test('the existing Angular GET client can read immediately with its real role, w
  const cancelled=mainRuntime();let resolve,aborted=0;const promise=new Promise(r=>{resolve=r;});promise.abort=()=>{aborted++;};cancelled.context.document={querySelector:()=>root};cancelled.context.window.angular={element:()=>({injector:()=>({get:name=>name==='$rootScope'?scope:{getContractDetail:params=>{new cancelled.XHR().open('GET',origin+'/qa/GetContractDetail?contractId='+params.contractId+'&userRoleId=41');return promise;}}})})};
  cancelled.send({type:'read-course',course});cancelled.send({type:'stop'});resolve(raw());await drain();assert.equal(aborted,1);assert.ok(!cancelled.messages.some(m=>m.type==='course'));
 });
+test('finance reads follow a different payer CT and Deposit through the existing Hub client without writing its model',async()=>{
+ for(const deposit of [false,true]){
+  const r=mainRuntime(),ct='QA2506-'+(deposit?'DEP':'CT')+'-000804',url=origin+'/'+(deposit?'deposit':'contract')+'/detail/12345',request={...course,ct,url,readFinance:true,readPolicy:false};
+  const root={},scope={sessionInfo:{UserRoleId:41},$apply:()=>{throw Error('No writes');}};
+  const value={...(deposit?{DepositId:12345,DepositNo:ct}:{ContractId:12345,ContractNo:ct}),StudentCode:'QA-OTHER-PAYER',ListCourseInfo:[],ListMovingOut:[{FromContractNo:ct,ToContractNo:course.ct,Amount:4725000,TransferDate:'2026-10-31'}]};
+  const payments=[{PaymentId:91,Amount:4725000,PaymentCode:'QA2506-PAY-000804',IsComplete:true,CompleteDate:'2025-06-27',EInvoiceId:'0000804'}],calls=[];
+  const detail=p=>{calls.push(p);const parameter=deposit?'depositId':'contractId';new r.XHR().open('GET',origin+'/api/'+(deposit?'Deposit/GetDepositDetail':'Contract/GetContractDetail')+'?'+parameter+'='+p[parameter]+'&userRoleId='+p.userRoleId);return Promise.resolve(value);};
+  const service=deposit?{getDepositDetail:detail,getDepositPayment:()=>Promise.resolve(payments)}:{getContractDetail:detail,getContractPayment:()=>Promise.resolve(payments)};
+  r.context.document={querySelector:()=>root};r.context.window.angular={element:()=>({injector:()=>({get:name=>name==='$rootScope'?scope:service})})};
+  r.send({type:'read-course',course:request});await drain();const result=r.messages.find(m=>m.type==='course');assert.ok(result);assert.equal(result.projection.ct,ct);assert.equal(result.projection.hubContract.movements.rows[0].to,course.ct);assert.equal(r.calls.length,0);assert.equal(calls.length,1);
+  const parsed=r.context.PromotionHubCourseNetwork.parseContractDetailProjection(result.projection,request);assert.ok(parsed.payload);assert.equal(parsed.payload.student,course.student);assert.equal(parsed.payload.courseFee,null);assert.equal(parsed.payload.hubContract.payments.rows[0].invoiceRef,'0000804');assert.equal(r.context.location.href,origin+'/home');
+ }
+});
 test('a managed inner frame projects its own request and sends only requested fields to its parent',async()=>{
  const r=mainRuntime({managed:true});await r.context.window.fetch(origin+'/qa/GetContractDetail?contractId=12345');await drain();assert.equal(r.messages.length,0);
  r.send({type:'activate',course},r.context.window.parent);assert.equal(r.messages.at(-1).type,'course');assert.equal(r.messages.at(-1).id,'qa-main');assert.ok(!JSON.stringify(r.messages).includes('PRIVATE-DO-NOT-COPY'));assert.equal(r.calls.length,1);

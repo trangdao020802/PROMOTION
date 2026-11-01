@@ -1,17 +1,25 @@
+import {hubDocumentCode} from './hub-document.mjs';
 import {coursePayload} from './hub-course.mjs';
 import {validateHubContract} from './hub-contract.mjs';
 
-const code=v=>typeof v==='string'&&/^[A-Z0-9]+-CT-\d{4,20}$/.test(v.trim().toUpperCase())?v.trim().toUpperCase():null;
+const code=hubDocumentCode;
 export const childFactKey=({datasetId,masterCt,ct,student})=>
  'hub-child-fact:'+String(datasetId)+':'+String(masterCt)+':'+String(ct)+':'+String(student);
+export function mergeChildFinancialFact(prior,next){
+ if(!prior||prior.id!==next.id||prior.url!==next.url||!validateHubContract(prior.hubContract))return next;
+ const missing=['payments','movements'].filter(k=>next.hubContract[k]?.state!=='read');
+ const hubContract={...next.hubContract};
+ for(const k of missing)if(prior.hubContract[k]?.state==='read')hubContract[k]=prior.hubContract[k];
+ return {...next,hubContract,lastReadMissing:missing};
+}
 export function childFactInput({datasetId,masterCt,ct,student,url,payload,parentCt=null}){
  const main=code(masterCt),child=code(ct);
  if(!datasetId||typeof datasetId!=='string'||datasetId.length>150||!main||!child||main===child||
     !student||typeof student!=='string'||student.length>150)return null;
- const course=coursePayload(payload,{ct:child,student,url});
+ const course=coursePayload(payload,{ct:child,student,url,readFinance:true});
  if(!course||!course.hubContract||!validateHubContract(course.hubContract)||course.hubContract.ct!==child)return null;
  const facts={ct:child,student,url,parentCt:parentCt&&code(parentCt)!==child?code(parentCt):null,hubContract:course.hubContract,
-  courseSummary:{courseFee:course.courseFee,package:course.package,hoursPerWeek:course.hoursPerWeek},
+  courseSummary:{courseFee:null,package:null,hoursPerWeek:null},
   capturedAt:course.hubContract.capturedAt};
  return {id:childFactKey({datasetId,masterCt:main,ct:child,student}),datasetId,masterCt:main,...facts};
 }

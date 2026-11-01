@@ -12,20 +12,13 @@
    if(globalThis.PromotionHubCourseWire?.done){done=true;clearInterval(timer);observer.disconnect();return;}
    if([...document.querySelectorAll('input[type="password"]')].some(visible)||/\/(?:login|signin)(?:\/|$)/i.test(location.pathname)){if(!login){login=true;void send({type:'login'});}return;}
    if(location.href!==job.course.url){if(/^\/(?:home|dashboard)?(?:\/index)?\/?$/i.test(location.pathname))finish({type:'resume'});else finish({type:'course-failure',reason:'navigation'});return;}
-   const page=C.coursePageFromDocument(document),dom=C.parseCoursePage({url:location.href,...page},job.course),projection=globalThis.PromotionHubCourseWire?.projection;
+   const page=C.coursePageFromDocument(document,{readFinance:job.course.readFinance}),dom=C.parseCoursePage({url:location.href,...page},job.course),projection=globalThis.PromotionHubCourseWire?.projection;
    let result=projection&&N?N.parseContractDetailProjection(projection,job.course,dom.payload):dom;
    // Finance mode reads only the named columns of Payment Info/Moving tables.
    // The full DOM, address, E-Invoice link and session are never transmitted.
    let financePresent=false;
    if(job.course.readFinance&&result.payload?.hubContract&&N?.mergeDisplayedHubContract){
-    const tables=[...document.querySelectorAll('table')].slice(0,100).map(table=>{
-     const headerRows=[...table.querySelectorAll('thead tr')].map(tr=>[...tr.querySelectorAll('th')].map(node=>node.textContent||''));
-     const headers=headerRows.findLast(row=>row.some(value=>/^(payment code|moving out amount|moving in amount)$/i.test(String(value).trim())))||
-       [...table.querySelectorAll('tr')].slice(0,5).map(tr=>[...tr.querySelectorAll('th')].map(node=>node.textContent||'')).findLast(row=>row.some(value=>/^(payment code|moving out amount|moving in amount)$/i.test(String(value).trim())));
-     if(!headers?.length)return null;
-     const rows=[...table.querySelectorAll('tbody tr')].slice(0,300).map(tr=>[...tr.querySelectorAll('td')].map(td=>td.textContent||''));
-     return {headers,rows};
-    }).filter(Boolean);
+    const tables=N.hubDisplayedTablesFromDocument(document);
     const augmented=N.mergeDisplayedHubContract(result.payload.hubContract,tables,job.course.ct);
     if(augmented){const updated=C.coursePayload({...result.payload,hubContract:augmented},job.course);if(updated)result={...result,payload:updated};}
     financePresent=result.payload.hubContract?.payments?.state==='read'&&result.payload.hubContract?.movements?.state==='read';

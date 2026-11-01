@@ -14,7 +14,13 @@ export function reviewScope(row){
  return JSON.stringify(['review-v1',a?.ct??c.contractTotal??c.C,String(c.F??''),c.D,...['H','I','J','K','L'].map(k=>String(c[k]??'').trim()),context.method??'',context.term??'',context.contractType??'',fullPaymentDay(a),a?.paid?.target??a?.snapshot?.target??null,a?.net??null,...(context.voucherPolicyScope?[context.voucherPolicyScope]:[]),...(context.policyRevision&&context.policyRevision!=='published'?[context.policyRevision]:[])]);
 }
 const itemScope=(row,id)=>reviewScope(row)+(id==='source-comparison'?JSON.stringify(['T','U','V','X'].map(k=>row.cells[k]??null)):'');
-export const reviewAccepted=(patch,id,row)=>patch?.reviews?.[id]?.approved===true&&patch.reviews[id].scope===itemScope(row,id);
+export const reviewAccepted=(patch,id,row)=>{
+ const current=patch?.reviews?.[id];
+ if(current)return current.approved===true&&current.scope===itemScope(row,id);
+ // v33 used a generic manual-policy review for this same scoped week offer.
+ const legacy=id==='renewal-week'?patch?.reviews?.[manualCheckKey('XÁC MINH - Ưu đãi cần xác minh riêng: chưa đủ chính sách được duyệt')]:null;
+ return legacy?.approved===true&&legacy.scope===itemScope(row,id);
+};
 export function validateReviews(reviews){
  if(!reviews||typeof reviews!=='object'||Array.isArray(reviews)||Object.keys(reviews).length>60)return 'Các mục duyệt không hợp lệ.';
  for(const [id,value]of Object.entries(reviews))if(!(Object.hasOwn(REVIEW_LABELS,id)||/^policy-[a-f0-9]{1,8}$/.test(id))||!value||typeof value!=='object'||Array.isArray(value)||Object.keys(value).some(k=>!['approved','scope'].includes(k))||typeof value.approved!=='boolean'||typeof value.scope!=='string'||value.scope.length>6000)return 'Mục duyệt cần đúng điều kiện, trạng thái và phạm vi CT/học viên.';
@@ -34,7 +40,7 @@ export function applyReviews(row,patch={}){
  for(const [id,field]of [['registration','registrationVerified'],['sibling','siblingVerified'],['loyalty','loyaltyVerified'],['course','courseVerified']])if(approved(id))verification[field]=true;
  const removed=new Set((verification.conditions??[]).filter(c=>approved(c.id)).flatMap(c=>c.messages));
  verification.pending=(verification.pending??[]).filter(message=>!removed.has(message));
- const reviewItems=[...items.values()].map(item=>({...item,details:reviewMessages(item.messages),description:reviewMessages(item.messages).join('\n')}));
+ const reviewItems=[...items.values()].map(item=>{const details=reviewMessages(row.reviewDetails?.[item.id]??item.messages);return {...item,details,description:details.join('\n')};});
  verification.hasInput=verification.hasInput||reviewItems.some(i=>i.approved);
  const promotion={...row.promotion,checks:(row.promotion?.checks??[]).filter(message=>!approved(manualCheckKey(message)))};
  promotion.blocking=promotion.checks.length>0;

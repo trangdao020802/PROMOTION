@@ -6,6 +6,8 @@ import {buildModel} from '../src/local/model.mjs';
 import {parseDate} from '../src/core/source-parser.mjs';
 import {discountPolicyMatch} from '../src/core/promotions.mjs';
 import {courseHourTotals,renewalWeekOffer} from '../src/core/course-hours.mjs';
+import {manualCheckKey,updateReview} from '../src/core/reviews.mjs';
+import {hubFixture} from './helpers/hub-policy-fixture.mjs';
 const policy=policyData(),cash='2026 October - Promotion Discount - 24 months - From 06/10';
 const addon='1 Months (Sep/Oct2026 - Tặng Tháng (TRẢ THẲNG) - All layer - Tặng 1 tháng)';
 function fixture({hours=3,pkg='24 months',type='New',label=cash,method='Online Payments',when='2026-10-10',gross=hours===3?77400000:103200000,discount=hours===3?20898000:27864000,totalHours=hours===3?313:417,full=true}={}){
@@ -80,6 +82,46 @@ test('an explicitly displayed loyalty quantity is checked as award months, not p
 });
 test('a paid-in-full loyalty-only offer still receives its source-defined straight award once',()=>{
  const f=fixture({type:'Renew',label:'2026 October - Promotion Month - 24 months',discount:0,totalHours:350});let r=f.read();r=f.read(reviews(r));assert.equal(r.cells.N,0);assert.equal(r.courseHours.bonusMonths,4);assert.equal(r.cells.extraHours,50);assert.equal(r.cells.R,350);
+});
+
+const weekGift='Học bổng tái phí - Tặng tuần - Tặng 2 tuần',cash12='2026 October - Promotion Discount - 12 months';
+test('a saved case approval unlocks renewal weeks without blocking the known 12-month cash formula',()=>{
+ for(const [hours,gross,discount,extra,total]of [[3,38700000,3870000,18.5,169],[4,51600000,5160000,74/3,225]]){
+  const config={hours,gross,discount,type:'Renew',pkg:'12 months',label:cash12+';'+weekGift,totalHours:total},f=fixture(config),before=f.read();
+  assert.equal(before.cells.N,discount);assert.equal(before.cells.Q,gross-discount);assert.equal(before.cells.R,null);assert.equal(before.cells.extraHours,null);
+  const id='renewal-week',item=before.reviewItems.find(i=>i.id===id);
+  assert.ok(item);assert.ok(item.details.some(s=>s.includes('2 tuần tặng × '+hours)));assert.equal(item.approved,false);
+  const patch={reviews:{[manualCheckKey('XÁC MINH - Ưu đãi cần xác minh riêng: chưa đủ chính sách được duyệt')]:{approved:true,scope:item.scope}}},after=f.read(patch);
+  assert.equal(after.cells.N,discount);assert.equal(after.cells.Q,gross-discount);assert.ok(Math.abs(after.cells.extraHours-extra)<1e-9);assert.equal(after.cells.R,total);assert.equal(after.courseHours.bonusWeeks,2);assert.equal(after.courseHours.bonusMonths,1);assert.equal(after.cells.AF,'OK');
+  assert.ok(after.cells.AN.includes('2 tuần × '+hours+' giờ/tuần'));assert.ok(!after.promotion.checks.some(s=>/CHƯA CÓ RULE/.test(s)));
+  const reload=fixture(config).read(JSON.parse(JSON.stringify(patch)));assert.equal(reload.cells.R,total);assert.equal(reload.reviewItems.find(i=>i.id===id).approved,true);
+  const revoked=f.read({reviews:updateReview(after,id,false)});assert.equal(revoked.cells.R,null);assert.equal(revoked.cells.N,discount);assert.equal(revoked.cells.AF,'CHECK');
+  const changed=f.read({...patch,I:hours===3?'4 hrs/week':'3 hrs/week'});assert.equal(changed.cells.R,null);assert.equal(changed.reviewItems.find(i=>i.id===id).approved,false);
+ }
+});
+test('a standalone week scholarship changes hours only; equivalent duplicate labels grant it once',()=>{
+ for(const label of [weekGift,weekGift+';  HOC BONG TAI PHI — TANG TUAN — TANG 2 TUAN  ']){
+  const f=fixture({type:'Renew',pkg:'12 months',gross:38700000,discount:0,label,totalHours:156}),before=f.read(),after=f.read(reviews(before));
+  assert.equal(after.cells.N,0);assert.equal(after.cells.Q,38700000);assert.equal(after.cells.extraHours,6);assert.equal(after.cells.R,156);assert.equal(after.courseHours.components.filter(c=>c.kind==='renewal-week').length,1);
+ }
+});
+test('weekly approval cannot approve New eligibility, conflicting quantities or unknown financial rules',()=>{
+ const newborn=fixture({type:'New',pkg:'12 months',label:cash12+';'+weekGift,gross:38700000,discount:3870000,totalHours:169});let r=newborn.read();r=newborn.read(reviews(r));assert.equal(r.cells.R,null);assert.equal(r.cells.AF,'CHECK');assert.ok(r.promotion.checks.some(s=>s.includes('chưa đủ điều kiện')));
+ const conflicting=fixture({type:'Renew',label:cash+';'+weekGift+';'+weekGift.replace('2 tuần','1 tuần')});r=conflicting.read();r=conflicting.read(reviews(r));assert.equal(r.cells.R,null);assert.ok(r.promotion.checks.some(s=>s.includes('SỐ TUẦN TẶNG TÁI PHÍ MÂU THUẪN')));
+ for(const invalid of [weekGift.replace('2 tuần','-2 tuần'),weekGift.replace('2 tuần','2.5 tuần'),'Học bổng riêng - Giảm tiền - Chưa có mức giảm']){
+  const f=fixture({type:'Renew',label:cash+';'+invalid});let before=f.read(),after=f.read(reviews(before));assert.equal(after.cells.N,null);assert.equal(after.cells.Q,null);assert.equal(after.cells.AF,'CHECK');assert.ok(after.calculationIssues.some(i=>i.code==='discount'));
+ }
+});
+test('month and week awards share one final round without a month factor on weekly gifts',()=>{
+ const r=courseHourTotals({months:12,hours:3},[{kind:'straight',months:1},{kind:'renewal-weeks',weeks:2}],25/6);assert.equal(r.extraHours,18.5);assert.equal(r.totalHours,169);assert.deepEqual(r.components.map(c=>c.hours),[12.5,6]);
+ const weekly=courseHourTotals({unit:'weeks',weeks:2,hours:4},[{kind:'renewal-weeks',weeks:2}],null);assert.equal(weekly.extraHours,8);assert.equal(weekly.totalHours,16);
+});
+test('Hub lookup rules also wait for the scoped renewal-week approval and then recalculate',()=>{
+ const h=hubFixture({ct:'QA2610-CT-000101'}),p=structuredClone(h.policy);
+ p.groups[1].name='Học bổng tái phí - Tặng tuần';p.groups[1].discounts[0].name='Tặng 2 tuần';p.groups[1].discounts[0].detail.months=2;
+ const f=fixture({type:'Renew',pkg:'12 months',gross:38700000,discount:3870000,label:cash12+';'+weekGift,totalHours:156});f.engine.data.contractGroups[0].hubPolicy=p;
+ const before=f.read();assert.equal(before.context.hubRules,true);assert.equal(before.cells.R,null);assert.equal(before.cells.N,3870000);assert.equal(before.reviewItems.length,1);
+ const after=f.read(reviews(before));assert.equal(after.cells.extraHours,6);assert.equal(after.cells.R,156);assert.equal(after.courseHours.bonusMonths,0);assert.equal(after.courseHours.bonusWeeks,2);assert.equal(after.cells.AF,'OK');
 });
 
 test('approved renewal two-week award extends hours without replacing a 12-month cash discount',()=>{

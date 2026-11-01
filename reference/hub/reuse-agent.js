@@ -35,7 +35,7 @@
    const html=await response.text();if(job!==j)return;if(html.length>2*1024*1024){frame(j);return;}
    const root=new DOMParser().parseFromString(html,'text/html');
    if(root.querySelector('input[type="password"]')){failure(j,'hub_login','Đăng nhập trong tab Hub đang mở rồi bấm lấy tiếp.');return;}
-   if(j.course){const parsed=C.parseCoursePage({...C.coursePageFromDocument(root,{staticDocument:true}),url},j.course),result=j.projection?N.parseContractDetailProjection(j.projection,j.course,parsed.payload):parsed;
+   if(j.course){const parsed=C.parseCoursePage({...C.coursePageFromDocument(root,{staticDocument:true,readFinance:j.course.readFinance}),url},j.course),result=j.projection?N.parseContractDetailProjection(j.projection,j.course,parsed.payload):parsed;
     if(result.error&&['student','conflict'].includes(result.error)){finish(j,C.courseFailure(result.error));return;}
     if(result.payload&&C.courseReadComplete(result.payload)){finish(j,{payload:result.payload});return;}
    }else{
@@ -57,7 +57,7 @@
   document.documentElement.appendChild(element);
  }
  function courseResult(j,root,url){
-  const parsed=C.parseCoursePage({...C.coursePageFromDocument(root),url},j.course);
+  const parsed=C.parseCoursePage({...C.coursePageFromDocument(root,{readFinance:j.course.readFinance}),url},j.course);
   const network=j.projection&&N.parseContractDetailProjection(j.projection,j.course,parsed.payload);
   if(network?.error&&['student','conflict'].includes(network.error))return network;
   return network?.payload?network:parsed;

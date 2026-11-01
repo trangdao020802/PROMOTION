@@ -45,7 +45,7 @@ export default function PaymentInfo({row,doc,SourceRefs,date,money}:any){
    </tr>)}</tbody></table></div>
    <p className="evidence-caption"><strong>Tổng bổ sung có căn cứ từ Hub: {money(row.reconciliation?.hubSupplement?.amount??0)} ₫</strong>. Không tự coi E-Invoice ID là số VAT; xem chứng từ gốc trên Hub để xác nhận khi cần.</p>
   </div>}
-  {data.originals.length>0&&<div className="payment-invoices"><h4>Hóa đơn gốc · PaymentList</h4><div className="ledger-scroll"><table className="payment-table"><thead><tr><th>Ngày hóa đơn gốc</th><th>VAT Invoice No.</th><th>Payment code / Thanh toán</th><th>Nguồn tiền · CT / DEP</th><th>Số tiền hóa đơn</th><th>Truy vết / căn cứ</th></tr></thead><tbody>{data.originals.map((r:any)=><tr className="payment-original" key={r.id} data-invoice={r.id}>{originalCells(r)}<td><SourceRefs refs={r.refs??[]}/></td></tr>)}</tbody></table></div></div>}
+  {data.originals.length>0&&<div className="payment-invoices"><h4>Hóa đơn gốc · PaymentList / Hub</h4><div className="ledger-scroll"><table className="payment-table"><thead><tr><th>Ngày hóa đơn gốc</th><th>VAT Invoice No. / E-Invoice</th><th>Payment code / Thanh toán</th><th>Nguồn tiền · CT / DEP</th><th>Số tiền hóa đơn</th><th>Truy vết / căn cứ</th></tr></thead><tbody>{data.originals.map((r:any)=><tr className="payment-original" key={r.id} data-invoice={r.id}>{originalCells(r)}<td><SourceRefs refs={r.refs??[]}/></td></tr>)}</tbody></table></div></div>}
   {!row.receipts?.length&&<p className="evidence-caption">Chưa tìm thấy hóa đơn thu gốc trong bộ nguồn.</p>}
   {row.kind==='contract'?<>
    <section className="moving-card moving-in" aria-label="Moving-in · Phân bổ vào hợp đồng">

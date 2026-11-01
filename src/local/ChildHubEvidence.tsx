@@ -1,6 +1,7 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {localFetch} from './api.mjs';
 import {compareChildFacts} from '../core/child-hub-evidence.mjs';
+import {hubDocumentCode} from '../core/hub-document.mjs';
 import UpstreamHubOrigins from './UpstreamHubOrigins.tsx';
 
 const money=(n:any)=>typeof n==='number'&&Number.isFinite(n)?n.toLocaleString('vi-VN')+' đ':'—';
@@ -10,9 +11,9 @@ const request=async(path:string,init:any={})=>{
  if(!res.ok)throw Error(body.error||'Chưa đọc hoặc lưu được chứng từ Hub.');
  return body;
 };
-export default function ChildHubEvidence({row,ct,datasetId,link,hubLinks,onHubSaved,onRead,disabled}:any){
+export default function ChildHubEvidence({row,ct,datasetId,link,hubLinks,onHubSaved,onRead,onFactsSaved,disabled}:any){
  const student=String(row?.cells?.F??''),masterCt=String(row?.ct||row?.cells?.contractTotal||'');
- const child=!!ct&&ct!==masterCt&&(row?.sourceContracts??[]).includes(ct)&&ct.includes('-CT-');
+ const child=!!hubDocumentCode(ct)&&ct!==masterCt;
  const url=link?.url||'',[fact,setFact]=useState<any>(null),[message,setMessage]=useState(''),
  [busy,setBusy]=useState(false),[problem,setProblem]=useState(''),[ready,setReady]=useState(false);
  const active=useRef<AbortController|null>(null);
@@ -25,7 +26,7 @@ export default function ChildHubEvidence({row,ct,datasetId,link,hubLinks,onHubSa
    setMessage('Đang đọc Payment Info của '+ct+' từ link đã gắn…');
    const current=await request('/api/hub-child-facts?'+query,{signal:task.signal});
    if(task.signal.aborted)return;
-   if(!force&&current.fact?.url===url&&current.fact?.hubContract?.payments?.state==='read'){
+   if(!force&&current.fact?.url===url&&current.fact?.hubContract?.payments?.state==='read'&&current.fact?.hubContract?.movements?.state==='read'){
     setFact(current.fact);setMessage('Đã có dữ liệu Hub của đúng CT, không đọc lại.');return;
    }
    const payload=await onRead({ct,student,url,readFinance:true},(text:string)=>setMessage(String(text).slice(0,450)),task.signal);
@@ -35,7 +36,7 @@ export default function ChildHubEvidence({row,ct,datasetId,link,hubLinks,onHubSa
    const saved=await request('/api/hub-child-facts',{method:'PATCH',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({datasetId,masterCt,ct,student,url,payload,version:current.version}),signal:task.signal});
    if(task.signal.aborted)return;
-   setFact(saved.fact);setMessage(saved.fact.hubContract.payments.state==='read'?'Đã lưu Payment Info và đối chiếu dữ liệu gốc.':'Đã lưu căn cứ Hub; chi tiết Payment vẫn thiếu, cần đọc lại hoặc bổ sung nguồn.');
+   setFact(saved.fact);await onFactsSaved?.();setMessage(saved.fact.hubContract.payments.state==='read'?'Đã lưu Payment Info và tính lại đường chuyển tiền.':'Đã lưu phần đọc được; Payment còn thiếu, có thể đọc tiếp nguồn trước đó.');
   }catch(e:any){if(!task.signal.aborted){setProblem(e.message||'Không đọc được Hub.');setMessage('Không thay đổi bảng thu khi đọc lỗi.');}}
   finally{if(active.current===task)active.current=null;if(!task.signal.aborted)setBusy(false);}
  };
@@ -44,11 +45,11 @@ export default function ChildHubEvidence({row,ct,datasetId,link,hubLinks,onHubSa
   if(child&&url&&datasetId){setReady(true);void run(false,controller.signal);}
   return()=>{controller.abort();active.current?.abort();active.current=null;};
  },[ct,url,datasetId,masterCt,student,child,disabled]);
- if(!child)return null;
+ if(!child)return ct===masterCt?<section className="child-hub-facts" aria-label="Chứng từ bổ sung"><h4>Chứng từ bổ sung · Truy ngược nguồn tiền</h4><UpstreamHubOrigins row={row} parentCt={masterCt} parentFact={{hubContract:row.hubContract}} datasetId={datasetId} hubLinks={hubLinks} onHubSaved={onHubSaved} onRead={onRead} onFactsSaved={onFactsSaved} disabled={disabled}/></section>:null;
  const comparisons=fact?compareChildFacts(fact,row):null;
  return <section className="child-hub-facts" aria-label={'Đọc thêm chứng từ từ '+ct}>
   <h4>Chứng từ bổ sung · {ct}</h4>
-  <p>Gắn link đúng CT con sẽ tự đọc thông tin được Hub cho phép. Tiền nhận/chuyển chỉ dùng đối chiếu với PaymentList và Transfer, không tự cộng thành tiền thu mới.</p>
+  <p>Gắn link đúng CT / DEP để đọc hóa đơn và Moving trong nền. Hóa đơn Paid gốc có đường chuyển tiền được bổ sung vào sổ đối chiếu; chuyển nội bộ không tạo thêm tiền thu.</p>
   {!url?<p role="status">CT này chưa có link chi tiết trên Hub. Hãy gắn link và lưu phía trên.</p>:
    <div className="child-hub-action"><span role="status">{message||(ready?'Đang chuẩn bị đọc Hub…':'Chưa kiểm tra')}</span>
    <button type="button" className="secondary-button" disabled={busy||disabled} onClick={()=>void run(true)}>{busy?'Đang đọc…':'Đọc lại chứng từ CT này'}</button></div>}
@@ -64,8 +65,8 @@ export default function ChildHubEvidence({row,ct,datasetId,link,hubLinks,onHubSa
    {comparisons.transfers.length>0&&<details><summary>Transfer từ file nguồn của CT này ({comparisons.transfers.length})</summary>
     {comparisons.transfers.map((t:any,i:number)=><p key={i}>{t.from} → {t.to} · {money(t.amount)} · {date(t.date)} · {t.backed?'Có đối chiếu hóa đơn gốc':'CHECK · chưa đủ chứng từ gốc'}</p>)}</details>}
    {!comparisons.transfers.length&&<p className="child-hub-warning">Chưa thấy Transfer tương ứng trong bộ nguồn đang mở; không suy từ số tiền Hub.</p>}
-   <small className="child-hub-source">Cập nhật Hub: {new Date(fact.capturedAt).toLocaleString('vi-VN')}. Các khoản Moving lấy từ Hub chỉ để đối chiếu; chỉ chuyển thành tiền thu sau khi có hóa đơn Paid gốc trong PaymentList và Transfer khớp.</small>
+   <small className="child-hub-source">Cập nhật Hub: {new Date(fact.capturedAt).toLocaleString('vi-VN')}. Chỉ hóa đơn Paid gốc có căn cứ và đường Moving / Transfer mới bổ sung được lịch sử thu còn thiếu.</small>
   </div>}
-  {url&&<UpstreamHubOrigins row={row} parentCt={ct} parentFact={fact} datasetId={datasetId} hubLinks={hubLinks} onHubSaved={onHubSaved} onRead={onRead} disabled={disabled} path={[ct]} />}
+  {url&&<UpstreamHubOrigins row={row} parentCt={ct} parentFact={fact} datasetId={datasetId} hubLinks={hubLinks} onHubSaved={onHubSaved} onRead={onRead} onFactsSaved={onFactsSaved} disabled={disabled} path={[ct]} />}
  </section>;
 }

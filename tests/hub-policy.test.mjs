@@ -49,6 +49,12 @@ test('weeks retain week units; unknown week-to-gift-month conversion is not inve
  const cells={...f.cells,H:p.product.priceName,J:'2 weeks',L:'0'};const r=calculateHubPolicy(p,cells,f.context);assert.equal(r.gross,1000000);assert.equal(r.baseHours,6);assert.equal(r.extraHours,0);
  const gift=calculateHubPolicy(p,{...cells,L:f.cells.L},f.context);assert.equal(gift.extraHours,null);assert.equal(gift.totalHours,null);assert.ok(gift.checks.some(s=>s.includes('GÓI TUẦN')));
 });
+test('an explicit renewal-week group is never interpreted as GiftMonths by the Hub calculator',()=>{
+ const f=hubFixture(),p=structuredClone(f.policy);
+ p.groups[1].name='Học bổng tái phí - Tặng tuần';p.groups[1].discounts[0].name='Tặng 2 tuần';p.groups[1].discounts[0].detail.months=2;
+ const cells={...f.cells,L:f.cells.L.split(';')[0]+';Học bổng tái phí - Tặng tuần - Tặng 2 tuần'};
+ const r=calculateHubPolicy(p,cells,{...f.context,contractType:'Renew'});assert.equal(r.discount,3870000);assert.equal(r.giftMonths,0);assert.equal(r.giftWeeks,2);assert.equal(r.extraHours,6);assert.equal(r.totalHours,156);assert.equal(r.components[1].kind,'weeks');
+});
 test('lookup invokes only source-known read services with CT parameters and a shared deadline',async()=>{
  const f=hubFixture(),calls=[];const client={info:async p=>(calls.push(['info',p]),f.info),prices:async p=>(calls.push(['prices',p]),[f.price]),groups:async p=>(calls.push(['groups',p]),f.groups)};
  const result=await readHubPolicy(f.detail,client);assert.ok(result.policy);assert.equal(calls.length,3);assert.deepEqual(calls[0][1],{contractId:12345});assert.deepEqual(calls[1][1],{centerId:1,productGroupIds:'49',groupPeopleId:2});assert.equal(calls[2][1].date,'2026-10-10T08:00:00');assert.deepEqual(JSON.parse(calls[2][1].listProductGroup),[{productGroupId:49,hourWeekId:8,packageId:71,priceTypeId:1}]);

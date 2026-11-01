@@ -247,3 +247,12 @@ Student ID và tên trong Voucher lấy từ học viên của hồ sơ đang m�
 284 kiểm thử đạt; đã kiểm tra UI với ba nguồn giả: một CT tổng sau chuyển center, tích/bỏ duyệt chỉ có một khối, và hai học viên cùng Giftcode hiển thị đúng ID/tên. CT 727772 và bộ nguồn riêng chưa đọc trực tiếp do không có Hub đăng nhập trong trình duyệt tác vụ. Cập nhật cầu nối 1.6.14, tải lại Promotion và tab Hub hiện có, rồi bấm Tạo lượt đọc mới để bổ sung các CT thiếu.
 
 Xem [căn cứ và phạm vi kiểm chứng](docs/transfer-course-and-voucher-profile.md).
+
+
+## Cầu nối 1.6.18 và truy ngược hóa đơn
+
+Đọc CT/DEP nguồn qua nhiều tầng Moving-in/Moving-out, thêm mã và lưu link riêng khi thiếu lịch sử báo cáo. Chứng từ tiền có thể thuộc học viên khác; khóa học và ưu đãi của người chuyển không ghi đè CT nhận. Hóa đơn Paid có căn cứ đi vào cùng sổ tiền với PaymentList, tính lại Summary và chênh lệch trong trang, không cộng lặp chuyển nội bộ hoặc hóa đơn đã có. Lượt đọc dở giữ chứng từ đã lưu.
+
+Duyệt học bổng tái phí tặng tuần cập nhật giờ tặng và tổng giờ ngay, giữ riêng khoản giảm nền; nhận lại duyệt cũ khi đúng phạm vi CT/học viên. Các chính sách chưa có công thức và nguồn mâu thuẫn vẫn cần xử lý.
+
+319 kiểm thử tự động đã qua; kiểm tra giao diện xác nhận duyệt, tải lại và thêm nguồn DEP thủ công. Hai địa chỉ dùng cùng bản mã nguồn: https://promotion-hub-2026.quanghuym24.chatgpt.site/ và https://promotion-hub-2026.vercel.app/. Chi tiết: [docs/upstream-invoice-evidence.md](docs/upstream-invoice-evidence.md).

@@ -1,23 +1,24 @@
 import {normalizeHubDiscount} from './hub-discount.mjs';
 import {weeklyHours,pricingIdentity} from './pricing-key.mjs';
 import {validateHubPolicy,HUB_POLICY_ERRORS} from './hub-policy.mjs';
-import {validateHubContract} from './hub-contract.mjs';
+import {validateHubContract,projectHubContract,mergeDisplayedHubContract,hubDisplayedTablesFromDocument} from './hub-contract.mjs';
+import {hubDocumentCode,hubDocumentId} from './hub-document.mjs';
 const HUB='https://hub24.apollo.vn:7777';
 const text=v=>String(v??'').trim().replace(/\s+/g,' ');
 const label=v=>text(v).replace(/[\s:*]+$/,'').replace(/\s*\/\s*/g,'/').toLowerCase();
 export const courseLabel=v=>COURSE_LABELS[label(v)]??null;
 export const COURSE_FIELDS=['courseFee','hoursPerWeek','package','giftcode','discount','groupKoc','contractType'];
-export const courseReadComplete=payload=>!!payload&&(payload.courseState==='empty'||['courseFee','hoursPerWeek','package','giftcode','discount'].every(k=>payload[k]!=null));
+export const courseReadComplete=payload=>!!payload&&(payload.readFinance?payload.hubContract?.payments?.state==='read'||payload.hubContract?.movements?.state==='read':payload.courseState==='empty'||['courseFee','hoursPerWeek','package','giftcode','discount'].every(k=>payload[k]!=null));
 export const COURSE_LABELS={
  'price name':'courseFee','course fee koc':'courseFee','hour/week':'hoursPerWeek','hours/week':'hoursPerWeek','hours per week':'hoursPerWeek',
  'package':'package','package before discount':'package','package (before discount)':'package','student id':'student','student code':'student',
  'giftcode no':'giftcode','giftcode no.':'giftcode','giftcode':'giftcode','gift code':'giftcode','discount apply':'discount','promotion apply':'discount','discount':'discount',
  'group koc':'groupKoc','contract type':'contractType',
- 'contract no':'contract','contract no.':'contract','contract code':'contract','contract number':'contract'
+ 'contract no':'contract','contract no.':'contract','contract code':'contract','contract number':'contract','deposit no':'contract','deposit no.':'contract','deposit code':'contract'
 };
 // Read only explicitly labeled values, including Hub's read-only column layout.
 // "Course fee" is money; only Price name / Course fee KOC identifies a price.
-export function coursePageFromDocument(root,{staticDocument=false}={}){
+export function coursePageFromDocument(root,{staticDocument=false,readFinance=false}={}){
  const visible=e=>!!e&&!e.hidden&&e.getAttribute?.('aria-hidden')!=='true'&&(!staticDocument?(!e.getClientRects||e.getClientRects().length>0):!e.closest?.('[hidden],[aria-hidden="true"],script,template'));
  const query=(e,s)=>[...e?.querySelectorAll?.(s)??[]];
  const controls='input:not([type="hidden"]):not([type="password"]),select,textarea';
@@ -51,7 +52,7 @@ export function coursePageFromDocument(root,{staticDocument=false}={}){
   if(key==='discount'&&!normalizeHubDiscount(value,{wrappedOnly:label(node.textContent)==='discount'}))continue;
   if(text(value))pairs.push({label:node.textContent,value:key==='discount'?String(value).trim():text(value)});
  }
- return {titles:query(root,'h1,h2,h3,h4,h5,h6,[role="heading"],.page-title,.content-header,.breadcrumb').filter(visible).map(e=>e.textContent),pairs};
+ return {titles:query(root,'h1,h2,h3,h4,h5,h6,[role="heading"],.page-title,.content-header,.breadcrumb').filter(visible).map(e=>e.textContent),pairs,...(readFinance?{financeTables:hubDisplayedTablesFromDocument(root)}:{})};
 }
 export function courseFailure(reason,fields=[]){
  const messages={identity:'Không xác minh được duy nhất mã CT trên tiêu đề hoặc trường Contract code / Contract No.',student:'Student ID trên Hub không khớp học viên đang đối chiếu.',conflict:'Có nhiều giá trị khác nhau cho cùng trường Course info.',empty:'Chưa tìm thấy trường Course info có nhãn đọc được trên Hub.',format:'Định dạng dữ liệu Course info chưa hợp lệ.',loading:'Hub vẫn đang tải Course info khi hết thời gian chờ.',navigation:'Hub đã chuyển khỏi URL chi tiết CT được yêu cầu.'};
@@ -61,13 +62,19 @@ export function courseFailure(reason,fields=[]){
 export function courseRequest(v){
  if(!v||typeof v!=='object'||typeof v.ct!=='string'||typeof v.student!=='string'||typeof v.url!=='string')return null;
  const ct=v.ct.trim().toUpperCase(),student=v.student.trim();
- if(!/^[A-Z0-9]+-CT-\d{4,20}$/.test(ct)||!/^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,149}$/.test(student)||Object.hasOwn(Object.prototype,student))return null;
- try{const u=new URL(v.url);if(u.origin!==HUB||u.username||u.password||u.hash||u.search||!/^\/contract\/detail\/[1-9]\d{0,14}\/?$/i.test(u.pathname)||v.readPolicy!==undefined&&typeof v.readPolicy!=='boolean'||v.readFinance!==undefined&&typeof v.readFinance!=='boolean')return null;return {ct,student,url:u.href,...(v.readPolicy!==undefined?{readPolicy:v.readPolicy}:{}),...(v.readFinance!==undefined?{readFinance:v.readFinance}:{})};}catch{return null;}
+ if(!(v.readFinance===true?hubDocumentCode(ct):/^[A-Z0-9]+-CT-\d{4,20}$/.test(ct))||!/^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,149}$/.test(student)||Object.hasOwn(Object.prototype,student))return null;
+ try{const u=new URL(v.url);if(u.origin!==HUB||u.username||u.password||u.hash||!(v.readFinance===true?hubDocumentId(u.href,ct):!u.search&&/^\/contract\/detail\/[1-9]\d{0,14}\/?$/i.test(u.pathname))||v.readPolicy!==undefined&&typeof v.readPolicy!=='boolean'||v.readFinance!==undefined&&typeof v.readFinance!=='boolean')return null;return {ct,student,url:u.href,...(v.readPolicy!==undefined?{readPolicy:v.readPolicy}:{}),...(v.readFinance!==undefined?{readFinance:v.readFinance}:{})};}catch{return null;}
 }
 export function coursePayload(v,expected){
  const request=courseRequest(expected);
  if(!request||!v||typeof v!=='object'||Object.keys(v).some(k=>!['ct','student','url','readPolicy','readFinance','courseState','inheritedCourses','hubContract','hubPolicy','hubPolicyError',...COURSE_FIELDS].includes(k))||v.ct!==request.ct||v.student!==request.student||v.url!==request.url)return null;
  const result={ct:request.ct,student:request.student,url:request.url};
+ if(request.readFinance===true){
+  if(!validateHubContract(v.hubContract)||v.hubContract.ct!==request.ct||v.hubContract.contractId!==hubDocumentId(request.url,request.ct))return null;
+  // A financial source may belong to another payer. Only its document
+  // identity and financial evidence are imported; its course is never copied.
+  return {...result,readFinance:true,courseState:'empty',...Object.fromEntries(COURSE_FIELDS.map(k=>[k,null])),hubContract:{...v.hubContract,discounts:null}};
+ }
  for(const key of COURSE_FIELDS){
   if(v[key]!=null&&(typeof v[key]!=='string'||!text(v[key])||text(v[key]).length>(key==='discount'?2000:200)))return null;
   result[key]=v[key]==null?null:key==='discount'?normalizeHubDiscount(v[key]):text(v[key]);
@@ -89,8 +96,13 @@ export function coursePayload(v,expected){
 export function parseCoursePage(page,expected){
  const request=courseRequest(expected);if(!request||page.url!==request.url)return {error:'identity'};
  const identity=[...(page.titles??[]),...(page.pairs??[]).filter(p=>courseLabel(p.label)==='contract').map(p=>p.value)];
- const codes=[...new Set(identity.flatMap(t=>text(t).match(/[A-Z0-9]+-CT-\d{4,20}\b/gi)??[]).map(v=>v.toUpperCase()))];
+ const codes=[...new Set(identity.flatMap(t=>text(t).match(/[A-Z0-9]+-(?:CT|DEP)-\d{4,20}\b/gi)??[]).map(v=>v.toUpperCase()))];
  if(codes.length!==1||codes[0]!==request.ct)return {error:'identity'};
+ if(request.readFinance===true){
+  const facts=projectHubContract({ContractId:hubDocumentId(request.url,request.ct),ContractNo:request.ct,ListCourseInfo:[]});
+  const hubContract=mergeDisplayedHubContract(facts,page.financeTables??[],request.ct);
+  const payload=coursePayload({...request,hubContract},request);return payload?{payload}:{error:'format'};
+ }
  const pairs=page.pairs??[],hasBefore=pairs.some(p=>/before discount/i.test(p.label)&&COURSE_LABELS[label(p.label)]==='package'),values={};
  for(const pair of pairs){
   const key=COURSE_LABELS[label(pair.label)];if(!key||key==='contract'||hasBefore&&key==='package'&&!/before discount/i.test(pair.label))continue;

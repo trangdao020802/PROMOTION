@@ -11,7 +11,7 @@
  const originalFetch=window.fetch,proto=window.XMLHttpRequest?.prototype,originalOpen=proto?.open;
  const publish=data=>(managed?window.parent:window).postMessage({channel,...data},P.HUB);
  function endpoint(value,method='GET'){
-  try{const u=new URL(value,location.href),id=u.searchParams.get('contractId'),detail=P.HUB+'/contract/detail/'+id;
+  try{const u=new URL(value,location.href),deposit=/\/GetDepositDetail\/?$/i.test(u.pathname),id=u.searchParams.get(deposit?'depositId':'contractId'),detail=P.HUB+(deposit?'/deposit/detail/':'/contract/detail/')+id;
    const normalized=N.courseDetailEndpoint(u.href,detail,method);return normalized?{url:normalized,detail}:null;
   }catch{return null;}
  }
@@ -19,7 +19,7 @@
   route=e.url;
   if(serviceCapture&&e.detail===serviceCapture.detail&&new URL(e.url).searchParams.get('userRoleId')===serviceCapture.role)serviceCapture.url=e.url;
  }
- function angularReader(){
+ function angularReader(request){
   // Hub can host its Angular application in an existing same-origin frame.
   // Reuse that authenticated client without navigating any frame or tab.
   const worlds=[window];
@@ -28,19 +28,30 @@
    const doc=world===window?document:world.document,root=doc.querySelector('[ng-app],[data-ng-app]')||doc.body||doc.documentElement;
    const injector=world.angular?.element(root).injector?.(),role=injector?.get('$rootScope')?.sessionInfo?.UserRoleId;
    if(!/^(?:0|[1-9]\d{0,14})$/.test(String(role??'')))continue;
-   const service=injector.get('contractService');if(typeof service?.getContractDetail!=='function')continue;
+   const deposit=request?.readFinance&&request.ct.includes('-DEP-'),service=injector.get(deposit?'depositService':'contractService');if(typeof service?.[deposit?'getDepositDetail':'getContractDetail']!=='function')continue;
    const invoke=name=>typeof service[name]==='function'?params=>service[name](params):undefined;
-   return {role:String(role),read:id=>service.getContractDetail({contractId:id,userRoleId:role}),payments:invoke('getContractPayment'),policy:{info:invoke('getContractInfoForUpdate'),prices:invoke('getCoursePrice'),groups:invoke('getApplicableGroupDiscount'),voucher:invoke('checkContractGiftCode')}};
+   return {role:String(role),deposit,read:id=>deposit?service.getDepositDetail({depositId:id,userRoleId:role}):service.getContractDetail({contractId:id,userRoleId:role}),payments:invoke(deposit?'getDepositPayment':'getContractPayment'),policy:{info:invoke('getContractInfoForUpdate'),prices:invoke('getCoursePrice'),groups:invoke('getApplicableGroupDiscount'),voucher:invoke('checkContractGiftCode')}};
   }catch{}
   return null;
  }
  const bounded=(pending,ms)=>new Promise(resolve=>{let settled=false;const finish=value=>{if(settled)return;settled=true;clearTimeout(timer);resolve(value);},timer=setTimeout(()=>finish(null),ms);Promise.resolve(pending).then(finish,()=>finish(null));});
- async function fetchJSON(url,signal){
+ async function fetchBody(url,signal){
   const response=await originalFetch.call(window,url,{method:'GET',credentials:'same-origin',cache:'no-store',headers:{'X-Requested-With':'XMLHttpRequest'},signal,redirect:'error'});
   if(!response.ok)throw Error('response');
   const reader=response.body?.getReader();if(!reader)throw Error('body');let body='',bytes=0;const decoder=new TextDecoder();
   try{for(;;){const c=await reader.read();if(c.done)break;bytes+=c.value.byteLength;if(bytes>2*1024*1024||signal.aborted){await reader.cancel();throw Error('limit');}body+=decoder.decode(c.value,{stream:true});}}catch(e){try{await reader.cancel();}catch{}throw e;}
-  return JSON.parse(body+decoder.decode());
+  return body+decoder.decode();
+ }
+ const fetchJSON=async(url,signal)=>JSON.parse(await fetchBody(url,signal));
+ async function addDisplayedFinance(projection,request,signal){
+  if(!request.readFinance||!projection?.hubContract||typeof DOMParser!=='function')return;
+  if(projection.hubContract.payments?.rows?.every(p=>p.invoiceRef)&&projection.hubContract.payments.rows.length&&projection.hubContract.movements?.state==='read')return;
+  const controller=new AbortController(),stop=()=>controller.abort(),timer=setTimeout(stop,3000);signal.addEventListener('abort',stop,{once:true});
+  try{const html=await fetchBody(request.url,controller.signal),doc=new DOMParser().parseFromString(html,'text/html');
+   const titles=[...doc.querySelectorAll('title,h1,h2,h3,.page-title,.content-header')].map(n=>n.textContent??'').join(' ');
+   if(!titles.includes(request.ct))return;
+   const merged=N.mergeDisplayedHubContract(projection.hubContract,N.hubDisplayedTablesFromDocument(doc),request.ct);if(merged)projection.hubContract=merged;
+  }catch{}finally{clearTimeout(timer);signal.removeEventListener('abort',stop);}
  }
  const indexEndpoint=(value,method)=>{try{const u=new URL(value,location.href);return String(method||'GET').toUpperCase()==='GET'&&u.origin===P.HUB&&!u.username&&!u.password&&!u.hash&&/\/GetAllContracts\/?$/i.test(u.pathname);}catch{return false;}};
  function accept(value,url,method){
@@ -98,24 +109,25 @@
   if(m.type!=='read-course')return;
   const request=globalThis.PromotionHubCourse?.courseRequest(m.course);if(!request)return;
   controller?.abort();controller=new AbortController();const signal=controller.signal;active={id:m.id};
-  const client=angularReader();
+  const client=angularReader(request);
   if(client){
    // Call Hub's existing GET service so its own role/authentication headers are
    // used. Never assign a controller field or run an Angular digest/model save.
    const capture={detail:request.url.replace(/\/$/,''),role:client.role,url:null};serviceCapture=capture;publish({type:'course-fetch',id:m.id});
    void (async()=>{let pending,paymentPending;try{
-    const contractId=request.url.replace(/\/$/,'').split('/').pop();
-    if(client.payments)try{paymentPending=client.payments({contractId});}catch{}
+    const requestURL=new URL(request.url),contractId=requestURL.searchParams.get('depositId')??requestURL.searchParams.get('id')??requestURL.pathname.replace(/\/$/,'').split('/').pop();
+    if(client.payments)try{paymentPending=client.payments(client.deposit?{depositId:contractId}:{contractId});}catch{}
     const paymentRead=paymentPending?bounded(paymentPending,2000):Promise.resolve(null);
     pending=client.read(contractId);
     signal.addEventListener('abort',()=>{for(const p of [pending,paymentPending])try{p?.abort?.();}catch{}},{once:true});
     const value=await pending;
     // This service/GET path is defined by the supplied Hub source. The role
     // comes exclusively from its live session, including an existing frame.
-    const source=capture.url||N.courseDetailEndpoint(P.HUB+'/api/Contract/GetContractDetail?contractId='+contractId+'&userRoleId='+client.role,request.url);
+    const source=capture.url||N.courseDetailEndpoint(P.HUB+(client.deposit?'/api/Deposit/GetDepositDetail?depositId=':'/api/Contract/GetContractDetail?contractId=')+contractId+'&userRoleId='+client.role,request.url);
     const projection=source&&N.projectContractDetail(value,source,request.url),root=N.contractRoot(value);
     if(projection&&root){const payments=N.projectContractPayments(await paymentRead,contractId),facts=N.projectHubContract(root,{payments,paymentState:payments?'read':'unavailable'});if(facts)projection.hubContract=facts;}
-    if(projection&&request.readPolicy!==false&&client.policy.prices&&client.policy.groups&&!signal.aborted){
+    await addDisplayedFinance(projection,request,signal);
+    if(projection&&!request.readFinance&&request.readPolicy!==false&&client.policy.prices&&client.policy.groups&&!signal.aborted){
      const rules=await N.readHubPolicy(root,client.policy,{signal,budgetMs:5000});
      if(rules.policy)projection.hubPolicy=rules.policy;else projection.hubPolicyError=rules.policyError;
     }
@@ -132,6 +144,7 @@
     if(paymentURL.pathname.toLowerCase()==='/api/contract/getcontractdetail'){paymentURL.pathname='/api/Contract/GetContractPayment';paymentURL.searchParams.delete('userRoleId');paymentRead=bounded(fetchJSON(paymentURL.href,signal),2000);}
     const value=await fetchJSON(url,signal),projection=N.projectContractDetail(value,url,request.url),root=N.contractRoot(value);
     if(projection&&root){const payments=N.projectContractPayments(await paymentRead,projection.contractId),facts=N.projectHubContract(root,{payments,paymentState:payments?'read':'unavailable'});if(facts)projection.hubContract=facts;}
+    await addDisplayedFinance(projection,request,signal);
     if(active?.id===m.id&&!signal.aborted)publish(projection?{type:'course',id:m.id,projection}:{type:'route-missing',id:m.id});
    }catch{if(active?.id===m.id&&!signal.aborted)publish({type:'route-missing',id:m.id});}
   })();

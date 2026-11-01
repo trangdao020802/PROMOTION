@@ -6,6 +6,11 @@ const remember=rows=>Promise.all(rows.map(row=>rememberCalculation(engine.data,r
 self.onmessage=async({data})=>{try{
  if(data.type==='init'){engine=new AuditEngine(await loadWorkbook(data.datasetId));self.postMessage({type:'ready'});return}
  if(!engine)throw Error('Bộ tính chưa sẵn sàng.');
+ if(data.type==='funding-refresh'){
+  engine=new AuditEngine(await loadWorkbook(data.datasetId));engine.setPatches(patches);
+  const rows=engine.data.contractGroups.map(g=>engine.calculate({id:g.id},patches[g.id]??{}));
+  await remember(rows);self.postMessage({type:'funding-ready',requestId:data.requestId,rows});return;
+ }
  if(data.type==='patches'){patches=data.patches;engine.setPatches(patches);return}
  if(data.type==='vouchers'){engine.setVouchers(data.vouchers);self.postMessage({type:'vouchers-ready',requestId:data.requestId});return}
  if(data.type==='course-sources'){engine.setCourseSources(data.sources);self.postMessage({type:'course-sources-ready',requestId:data.requestId});return}

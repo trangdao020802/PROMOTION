@@ -1,4 +1,3 @@
-import {renewalWeekOffer} from './course-hours.mjs';
 import {regularMonthlyPrice} from './monthly-price.mjs';
 export const normalize = value => String(value ?? '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/g,'d');
 const serial = value => value ? (Date.parse(value+'T00:00:00Z') - Date.UTC(1899,11,30)) / 86400000 : null;
@@ -8,6 +7,15 @@ const inWindow = (p, date) => (p.from == null || date >= serial(p.from)) && (p.t
 // retained. Duration here is descriptive and never supplies Package/AK.
 export const discountLabelKey = value => normalize(value).trim().replace(/\s+/g,' ');
 export const discountOffers=value=>[...new Map(String(value??'').split(';').map(s=>s.trim()).filter(s=>s&&s!=='0').map(label=>[discountLabelKey(label),label])).values()];
+// Only this explicitly quantified, non-cash family can be completed by a
+// case approval. Unknown financial offers still require their own formula.
+export function renewalWeekGift(label){
+ const key=discountLabelKey(label);
+ const match=/^hoc bong tai phi(?:\s*[-–—:;.,]+\s*|\s+)tang tuan(?:\s*[-–—:;.,]+\s*|\s+)tang\s+([12])\s+tuan[.!]?$/.exec(key);
+ return match?Number(match[1]):null;
+}
+export const promotionReviewMessage=p=>`XÁC MINH - ${p.title}: ${p.state==='unverified'?'chưa đủ chính sách được duyệt':'cần căn cứ thời kỳ/phê duyệt riêng'}`;
+export const RENEWAL_WEEK_REVIEW='XÁC MINH - TẶNG TUẦN TÁI PHÍ: kiểm tra căn cứ duyệt đúng học viên và CT cho suất tặng tuần; không tự cấp từ tên ưu đãi.';
 export function fixedSiblingAmount(label){
  const match=/^siblings?\s*[-–—]\s*siblings?\s+(1[.,]000[.,]000|800[.,]000|1000000|800000)\s+vnd\s*\(\s*agls\s*\/\s*atls\s*\/\s*ielts\s*\)$/i.exec(discountLabelKey(label));
  return match?Number(match[1].replace(/[.,]/g,'')):null;
@@ -20,7 +28,8 @@ export function discountPolicyMatch(label,date,regime){
   if(periods.size>1)issues.push('CHECK - KEY DISCOUNT MÂU THUẪN: nhiều kỳ giảm tiền trong cùng Discount apply.');
   return {...primary,keys:[...new Set(matches.flatMap(m=>m.keys))],programIds:[...new Set(matches.flatMap(m=>m.programIds))],issues,siblings:matches.some(m=>m.siblings),siblingAddon:matches.some(m=>m.siblingAddon),offers};
  }
- if(renewalWeekOffer(offers[0]??label))return {keys:['Học bổng tái phí','Tặng 2 tuần'],kind:'weeks',period:null,ruleKey:'RENEWAL_WEEK_2',programIds:[],issues:[],siblings:false,siblingAddon:false,weekAddon:true,addonWeeks:2};
+ const weeks=renewalWeekGift(offers[0]??label);
+ if(weeks!==null)return {keys:['Tái phí tặng tuần',weeks+' tuần'],kind:'weeks',ruleKey:'RENEWAL_WEEK_GIFT',programIds:[],period:null,issues:[],addonWeeks:weeks};
  const fixedAmount=fixedSiblingAmount(offers[0]??label);
  if(fixedAmount!==null){
   const q4=typeof date==='number'&&date>=serial('2026-10-06')&&date<serial('2027-01-01');
@@ -101,7 +110,7 @@ export function regularTwoMonthPrice(data,{course,hours,package:pkg,group}){
 
 export function matchingPrograms(label, programs, date) {
   if (!label || label === '0') return [];
-  if(renewalWeekOffer(label))return [];
+  if(renewalWeekGift(label)!==null)return [];
   const offers=discountOffers(label);
   if(offers.length>1)return [...new Map(offers.flatMap(offer=>matchingPrograms(offer,programs,date)).map(p=>[p.id,p])).values()];
   const match=discountPolicyMatch(label,date),text=discountLabelKey(label).replace(/[–—_:-]/g,' ').replace(/\s+/g,' ');
@@ -125,13 +134,12 @@ export function promotionResult(cells, context, account, programs) {
   const legacy=context.customPolicy||context.priceYear===2024&&String(cells.AL).startsWith('LEGACY');
   const found = legacy?[]:matchingPrograms(label,programs,Number(cells.D)).filter(p=>!context.hubRules||p.id!=='manual');
   const match=discountPolicyMatch(label,cells.D,cells.AO),checks=legacy?[]:[...match.issues];
-  if(discountOffers(label).some(offer=>renewalWeekOffer(offer)))checks.push('XÁC MINH - TẶNG TUẦN TÁI PHÍ: kiểm tra căn cứ duyệt đúng học viên và CT cho suất tặng 2 tuần; không tự cấp từ tên ưu đãi.');
   if(!legacy&&match.kind==='straight'&&/installment/i.test(String(context.method??'')))checks.push('CHECK - TRẢ GÓP KHÔNG TẶNG TRẢ THẲNG');
   if(label&&label!=='0'&&cells.AL==='OTHER')checks.push('XÁC MINH - CHƯA ĐỦ BỘ GIÁ/CÔNG THỨC CHO DISCOUNT NÀY; xem quy tắc và chứng từ');
   if(!context.hubRules&&context.voucherType==='PHẦN TRĂM'&&Number(cells.N)>0&&cells.CI==='OK'&&(!context.voucherBasis||context.voucherBasis==='policy-default'))checks.push('XÁC MINH - CƠ SỞ % GIFTCODE: nguồn có cả Before − Discount và Before; chọn cơ sở % theo căn cứ phê duyệt của mã khi cộng giảm tiền.');
   if(context.hubRules&&label&&label!=='0'&&!found.length)checks.push('XÁC MINH - ĐIỀU KIỆN CHƯƠNG TRÌNH HUB: đối chiếu căn cứ đối tượng, ngày và phê duyệt của '+label+'.');
   for (const p of found) {
-    if (p.state !== 'confirmed') checks.push(`XÁC MINH - ${p.title}: ${p.state === 'unverified' ? 'chưa đủ chính sách được duyệt' : 'cần căn cứ thời kỳ/phê duyệt riêng'}`);
+    if (p.state !== 'confirmed') checks.push(promotionReviewMessage(p));
     if (typeof cells.D !== 'number') checks.push('CHECK - THIẾU NGÀY ÁP DỤNG PROMOTION');
     else {
       const current = !/^new$/i.test(String(context.contractType ?? ''));

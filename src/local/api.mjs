@@ -14,9 +14,10 @@ import {coursePayload,COURSE_FIELDS} from '../core/hub-course.mjs';
 import {validInputTargets,newInputRun,completeInputRun} from '../core/hub-input-progress.mjs';
 import {buildPriceCatalogue,policyRuleCatalogue,hubPriceCatalogue} from '../core/price-catalog.mjs';
 import {POLICY_SCHEMA,normalizePolicyRow,validatePolicyRows,stagePolicyUpdate,mergePolicyPack} from '../core/policy-pack.mjs';
-import {childFactInput,childFactKey} from '../core/child-hub-evidence.mjs';
-import {ctCode,ancestryKey} from '../core/hub-upstream.mjs';
-import {verifiedHubSupplement} from '../core/hub-proven-funding.mjs';
+import {childFactInput,childFactKey,mergeChildFinancialFact} from '../core/child-hub-evidence.mjs';
+import {ctCode,ancestryKey,knownFinanceDocuments,upstreamCandidates} from '../core/hub-upstream.mjs';
+import {attachHubFunding} from '../core/hub-proven-funding.mjs';
+import {validateHubContract} from '../core/hub-contract.mjs';
 let policies;
 let resolvedPolicy;
 // Course inputs and review patches never change membership of a source bundle.
@@ -24,7 +25,7 @@ let resolvedPolicy;
 // made an otherwise small IndexedDB write quadratic during a bulk Hub read.
 const identityIndexes=new Map();
 function indexModel(model){
- const groups=new Map(model.contractGroups.map(group=>[group.id,{id:group.id,ct:group.ct,kind:group.kind,paymentCode:group.paymentCode,sourceContracts:group.sourceContracts??[],cells:{F:group.cells.F,G:group.cells.G,A:group.cells.A,B:group.cells.B}}]));
+ const groups=new Map(model.contractGroups.map(group=>[group.id,{id:group.id,ct:group.ct,kind:group.kind,paymentCode:group.paymentCode,sourceContracts:group.sourceContracts??[],account:{movementHistory:group.account?.movementHistory??[]},cells:{F:group.cells.F,G:group.cells.G,A:group.cells.A,B:group.cells.B}}]));
  identityIndexes.set(model.hash,{hash:model.hash,groups,students:new Set([...groups.values()].flatMap(g=>[g.ct,...g.sourceContracts].map(ct=>ct+'|'+String(g.cells.F))))});
  while(identityIndexes.size>2)identityIndexes.delete(identityIndexes.keys().next().value);
 }
@@ -35,30 +36,18 @@ const response=(value,status=200)=>new Response(JSON.stringify(value),{status,he
 const fail=(s,status=400)=>Object.assign(Error(s),{status});
 const id=()=>{if(typeof crypto.randomUUID==='function')return crypto.randomUUID();const b=crypto.getRandomValues(new Uint8Array(16));b[6]=(b[6]&15)|64;b[8]=(b[8]&63)|128;const h=[...b].map(x=>x.toString(16).padStart(2,'0')).join('');return [h.slice(0,8),h.slice(8,12),h.slice(12,16),h.slice(16,20),h.slice(20)].join('-')},now=()=>new Date().toISOString();
 export async function currentDataset(datasetId){if(datasetId){const d=await get('datasets',datasetId);if(!d)throw fail('Không tìm thấy bộ nguồn trên trình duyệt này. Mở Tải bộ nguồn để chọn lại.',404);return d}const setting=await get('settings','current');return setting?.datasetId?await get('datasets',setting.datasetId):null}
-async function attachVerifiedHubFunding(model){
- const [settings,links]=await Promise.all([all('settings'),all('links')]);
- const facts=settings.filter(x=>typeof x.id==='string'&&x.id.startsWith('hub-child-fact:'));
- const codeSet=new Set(model.input?.cashSources?.flatMap(s=>s.rows??[]).map(r=>String(r.payment??'').trim().toUpperCase()));
- for(const group of model.contractGroups){
-  if(group.kind!=='contract')continue;
-  const student=String(group.cells.F),evidence=verifiedHubSupplement({
-   masterCt:group.ct,student,datasetId:model.dataset?.id??model.hash,
-   sourcePayments:[...codeSet].map(payment=>({payment})),
-   sourceMovements:group.account?.movementHistory??[],facts,links
-  });
-  if(!evidence.amount&&!evidence.pending.length)continue;
-  group.account.hubSupplement=evidence;
-  if(!evidence.amount)continue;
-  if(typeof group.account.net!=='number'||!Number.isFinite(group.account.net)){
-   group.account.hubSupplement={...evidence,status:'pending-ledger',pending:[...evidence.pending,{reason:'Tổng tiền nguồn chưa xác định; không ghi đè thành 0'}]};
-   continue;
-  }
-  group.account.net+=evidence.amount;
-  if(typeof group.account.transferIn==='number')group.account.transferIn+=evidence.amount;
-  // Supplemental receipts stay in a separate audited ledger; no fake direct-transfer events.
- }
+async function financeSettings(context){
+ const [settings,source]=await Promise.all([all('settings'),courseMemory(context.masterCt,context.student)]);
+ if(validateHubContract(source?.hubContract)&&source.hubContract.ct===context.masterCt)settings.push({...context,ct:context.masterCt,hubContract:source.hubContract});
+ return settings;
 }
-export async function loadWorkbook(datasetId){const [dataset,p,vouchers,sources]=await Promise.all([currentDataset(datasetId),loadPolicies(),all('vouchers'),courseMemories()]);const model=buildModel(dataset?.bundle,p);model.dataset=dataset;model.hash=dataset?.id||'policy-2026';indexModel(model);await attachVerifiedHubFunding(model);const engine=new AuditEngine(model);engine.setVouchers(vouchers);engine.setCourseSources(sources.filter(s=>identityIndexes.get(model.hash).students.has(s.ct+'|'+s.student)));return engine.data}
+async function attachVerifiedHubFunding(model,sources=[]){
+ const [settings,links]=await Promise.all([all('settings'),all('links')]);
+ const datasetId=model.dataset?.id??model.hash,masterFacts=sources.filter(s=>validateHubContract(s.hubContract)&&model.contractGroups.some(g=>g.ct===s.ct&&String(g.cells.F)===s.student)).map(s=>({datasetId,masterCt:s.ct,ct:s.ct,student:s.student,url:s.url,hubContract:s.hubContract,id:childFactKey({datasetId,masterCt:s.ct,ct:s.ct,student:s.student})}));
+ attachHubFunding(model,{datasetId,facts:[...settings.filter(x=>typeof x.id==='string'&&x.id.startsWith('hub-child-fact:')),...masterFacts],links});
+}
+
+export async function loadWorkbook(datasetId){const [dataset,p,vouchers,sources]=await Promise.all([currentDataset(datasetId),loadPolicies(),all('vouchers'),courseMemories()]);const model=buildModel(dataset?.bundle,p);model.dataset=dataset;model.hash=dataset?.id||'policy-2026';indexModel(model);await attachVerifiedHubFunding(model,sources);const engine=new AuditEngine(model);engine.setVouchers(vouchers);engine.setCourseSources(sources.filter(s=>identityIndexes.get(model.hash).students.has(s.ct+'|'+s.student)));return engine.data}
 const baseRecord=g=>({...g.anchor,errors:[],reviewItems:[],courseInfo:g.courseInfo,id:g.id,kind:g.kind,ct:g.ct,paymentCode:g.paymentCode,memberIds:g.memberIds,...(g.sourceContracts?{sourceContracts:g.sourceContracts}:{}),receipts:g.receipts,groupWarnings:g.warnings,hubContract:g.hubContract??null,hubReadMissing:g.hubReadMissing??[],hubPolicy:g.hubPolicy??null,hubPolicyError:g.hubPolicyError??null,cells:{...g.cells,contractTotal:g.ct||'',AG:'',AF:'CHECK'}});
 async function bootstrap(datasetId){
  const model=await loadWorkbook(datasetId),saved=await all('edits'),links=await all('links');const savedMap=new Map(saved.map(x=>[x.id,x]));
@@ -136,12 +125,11 @@ export async function localFetch(input,options={}){
     if(!masterCt||!parentCt||!student||!datasetId)throw fail('Thiếu định danh CT tổng, CT nhận hoặc học viên.');
     const {group}=await recordFor(datasetId,'CT::'+masterCt);
     if(group.ct!==masterCt||String(group.cells.F)!==student)throw fail('Hồ sơ đang mở không khớp học viên.');
-    const parentKnown=parentCt===masterCt||(group.sourceContracts??[]).includes(parentCt)||
-     (group.account?.movementHistory??[]).some(e=>e.from===parentCt||e.to===parentCt)||
-     (await all('settings')).some(record=>record.id.startsWith('hub-upstream|'+datasetId+'|'+masterCt+'|'+student+'|')&&(record.codes??[]).includes(parentCt));
+    const settings=await financeSettings({datasetId,masterCt,student}),parentKnown=knownFinanceDocuments(group,settings,{datasetId,masterCt,student}).has(parentCt);
     if(!parentKnown)throw fail('CT nhận chưa thuộc luồng chuyển tiền của hồ sơ.');
     const key=ancestryKey({datasetId,masterCt,student,parentCt}),stored=await get('settings',key);
-    if(method==='GET')return response({codes:stored?.codes??[],version:stored?.version??0});
+    const parentFact=settings.find(s=>s.id===childFactKey({datasetId,masterCt,student,ct:parentCt}));
+    if(method==='GET')return response({codes:upstreamCandidates(group,parentCt,parentFact,stored?.codes??[]),version:stored?.version??0});
     if(method!=='PATCH'||!ctCode(body.upstreamCt)||body.upstreamCt===parentCt||body.upstreamCt===masterCt)throw fail('Mã CT nguồn không hợp lệ.');
     const list=[...new Set([...(stored?.codes??[]),ctCode(body.upstreamCt)])];
     if(list.length>20)throw fail('Quá nhiều CT nguồn. Chỉ đọc các CT có căn cứ.');
@@ -151,14 +139,12 @@ export async function localFetch(input,options={}){
   if(path==='/api/hub-child-facts'){
     const query=method==='GET'?Object.fromEntries(url.searchParams):body;
     const datasetId=String(query?.datasetId??''),masterCt=String(query?.masterCt??'').toUpperCase(),ct=String(query?.ct??'').toUpperCase(),student=String(query?.student??'');
-    if(!/^[A-Z0-9]+-CT-\d{4,20}$/.test(masterCt)||!/^[A-Z0-9]+-CT-\d{4,20}$/.test(ct)||masterCt===ct||!student)throw fail('Yêu cầu CT con không hợp lệ.');
+    if(!/^[A-Z0-9]+-CT-\d{4,20}$/.test(masterCt)||!/^[A-Z0-9]+-(?:CT|DEP)-\d{4,20}$/.test(ct)||masterCt===ct||!student)throw fail('Yêu cầu CT con không hợp lệ.');
     const {group}=await recordFor(datasetId,'CT::'+masterCt);
     if(group.ct!==masterCt||String(group.cells.F)!==student)throw fail('CT/học viên không khớp.');
-    const inSource=(group.sourceContracts??[]).includes(ct)||
-      (group.account?.movementHistory??[]).some(e=>e.from===ct||e.to===ct);
-    const parentCt=ctCode(query?.parentCt),chain=parentCt&&await get('settings',ancestryKey({datasetId,masterCt,student,parentCt}));
-    if(!inSource&&!(chain?.codes??[]).includes(ct))throw fail('CT nguồn chưa có trong Transfer hoặc chưa được gắn với CT chuyển tiếp.');
-    
+    const parentCt=ctCode(query?.parentCt);
+    if(!knownFinanceDocuments(group,await financeSettings({datasetId,masterCt,student}),{datasetId,masterCt,student}).has(ct))throw fail('CT / DEP nguồn chưa có trong Transfer, Moving-in hoặc danh sách cần gắn link.');
+
     const link=await get('links',ct);
     if(!link?.url||!validHubURL(link.url,ct))throw fail('CT con chưa có link Hub hợp lệ.');
     const key=childFactKey({datasetId,masterCt,ct,student}),prior=await get('settings',key);
@@ -166,8 +152,8 @@ export async function localFetch(input,options={}){
     if(method!=='PATCH')throw fail('Yêu cầu không được hỗ trợ.');
     if(body.url!==link.url)throw fail('Link Hub đã thay đổi. Đọc lại từ link hiện tại.');
     const fact=childFactInput({datasetId,masterCt,ct,student,url:link.url,payload:body.payload,parentCt:parentCt??null});
-    if(!fact)throw fail('Hub chưa trả dữ liệu tài chính đúng CT / học viên / link, không thể lưu.');
-    const result=await versioned('settings',key,body.version??0,()=>fact);
+    if(!fact)throw fail('Hub chưa trả dữ liệu tài chính đúng mã CT / DEP và link, không thể lưu.');
+    const result=await versioned('settings',key,body.version??0,old=>mergeChildFinancialFact(old,fact));
     return response({fact:result});
    }
   if(path==='/api/hub-links'&&method==='GET'){
@@ -201,7 +187,7 @@ export async function localFetch(input,options={}){
   if(path==='/api/course-sources'&&method==='PATCH'){
    const {model,group}=await recordFor(body.datasetId,'CT::'+body.payload?.ct);const payload=body.payload;
    if(body.hash!==model.hash||!model.students.has(payload.ct+'|'+String(payload.student)))throw fail('Nguồn Course info không khớp CT/học viên hiện tại.');
-   const normalized=coursePayload(payload,payload);if(!normalized)throw fail('Thông tin đầu vào từ Hub không hợp lệ.');
+   const normalized=payload?.readFinance===true?null:coursePayload(payload,payload);if(!normalized)throw fail('Thông tin đầu vào từ Hub không hợp lệ. Chứng từ tài chính bổ sung không thay thông tin khóa học.');
    if(normalized.inheritedCourses?.some(s=>!group.sourceContracts.includes(s.ct)||s.student!==String(group.cells.F)))throw fail('CT nguồn không có luồng Transfer đã xác minh vào CT tổng của học viên.');
    await ensureVouchers([normalized.giftcode??'',...(normalized.inheritedCourses??[]).map(s=>s.giftcode??'')]);
    const key=sourceKey(payload.ct,payload.student),prior=await courseMemory(payload.ct,payload.student);if((prior?.version??0)!==(body.version??0))throw Object.assign(Error('Input đã đổi ở tab khác. Tải lại trước khi ghi.'),{conflict:true});

@@ -1,7 +1,8 @@
 import {courseRequest,coursePayload,COURSE_FIELDS} from './hub-course.mjs';
 import {normalizeHubDiscount} from './hub-discount.mjs';
-import {contractRoot,projectHubContract} from './hub-contract.mjs';
-export {contractRoot,projectContractPayments,projectHubContract,projectHubDisplayedTables,mergeDisplayedHubContract} from './hub-contract.mjs';
+import {contractRoot,projectHubContract,mergeHubFinanceFacts} from './hub-contract.mjs';
+import {hubDocumentId} from './hub-document.mjs';
+export {contractRoot,projectContractPayments,projectHubContract,projectHubDisplayedTables,mergeDisplayedHubContract,hubDisplayedTablesFromDocument} from './hub-contract.mjs';
 export {readHubPolicy} from './hub-policy.mjs';
 export const COURSE_NETWORK_CHANNEL='promotion-hub/course-network/v1';
 const HUB='https://hub24.apollo.vn:7777';
@@ -9,14 +10,14 @@ const text=v=>typeof v==='string'?v.trim().replace(/\s+/g,' '):'';
 const numberId=v=>/^[1-9]\d{0,14}$/.test(String(v??''))?String(v):null;
 export function courseDetailEndpoint(value,detailURL,method='GET'){
  try{
-  const detail=new URL(detailURL),match=/^\/contract\/detail\/([1-9]\d{0,14})\/?$/i.exec(detail.pathname),u=new URL(value,HUB);
-  if(detail.origin!==HUB||detail.search||detail.hash||!match||String(method).toUpperCase()!=='GET'||u.origin!==HUB||u.username||u.password||u.hash||!/\/GetContractDetail\/?$/i.test(u.pathname)||u.searchParams.getAll('contractId').length!==1||u.searchParams.get('contractId')!==match[1])return null;
+  const detail=new URL(detailURL),deposit=/^\/deposit\//i.test(detail.pathname),documentId=hubDocumentId(detailURL,deposit?'QA-DEP-000001':'QA-CT-000001'),parameter=deposit?'depositId':'contractId',u=new URL(value,HUB);
+  if(!documentId||String(method).toUpperCase()!=='GET'||u.origin!==HUB||u.username||u.password||u.hash||!(deposit?/\/GetDepositDetail\/?$/i:/\/GetContractDetail\/?$/i).test(u.pathname)||u.searchParams.getAll(parameter).length!==1||u.searchParams.get(parameter)!==documentId)return null;
   if([...u.searchParams.keys()].some(k=>/token|session|password|secret|credential|authorization|api.?key/i.test(k)))return null;
   const roles=u.searchParams.getAll('userRoleId');
   if(roles.length>1||roles.length&&!/^(?:0|[1-9]\d{0,14})$/.test(roles[0]))return null;
   // Reuse the actual Hub role context, never a guessed/default user ID.
   // Incidental filters/cache parameters and authentication values are discarded.
-  u.search='';u.searchParams.set('contractId',match[1]);if(roles.length)u.searchParams.set('userRoleId',roles[0]);return u.href;
+  u.search='';u.searchParams.set(parameter,documentId);if(roles.length)u.searchParams.set('userRoleId',roles[0]);return u.href;
  }catch{return null;}
 }
 const pick=(obj,names)=>{
@@ -69,7 +70,7 @@ export function projectContractDetail(value,sourceURL,detailURL){
  const root=contractRoot(value);
  if(root){
    const lists=['ListCourseInfo','CourseInfos'].map(k=>listValue(pick(root,[k]),20)).filter(Boolean),list=lists.find(l=>l.length)??lists[0]??[];
-   const id=pick(root,['ContractId','Id']),ct=scalar(root,['ContractNo','ContractCode','ContractNumber']),student=scalar(root,['StudentCode','StudentNo','StudentNumber','KidCode']);
+   const id=pick(root,['ContractId','DepositId','Id']),ct=scalar(root,['ContractNo','ContractCode','ContractNumber','DepositNo','DepositCode']),student=scalar(root,['StudentCode','StudentNo','StudentNumber','KidCode']);
    if(id!=null&&!numberId(id))return null;
    const facts=projectHubContract(root),rootFields=fields(root),discountPending=['ListDiscount','Discounts'].some(k=>root[k]!=null)&&rootFields.discount==null;
    return {source,contractId:id==null?null:numberId(id),ct:ct?.toUpperCase()??null,student,fields:rootFields,courses:list.map(row=>fields(row)),...(discountPending?{discountPending:true}:{}),...(facts?{hubContract:facts}:{})};
@@ -78,8 +79,13 @@ export function projectContractDetail(value,sourceURL,detailURL){
 }
 export function parseContractDetailProjection(projection,expected,domPayload=null){
  const request=courseRequest(expected);if(!request||!projection||!courseDetailEndpoint(projection.source,request.url))return {error:'identity'};
- const detailId=/\/([1-9]\d*)\/?$/.exec(request.url)[1];
+ const detailId=hubDocumentId(request.url,request.ct);
  if(projection.contractId!=null&&projection.contractId!==detailId||projection.ct&&projection.ct!==request.ct)return {error:'identity'};
+ if(request.readFinance===true){
+  if(projection.contractId!==detailId||projection.ct!==request.ct)return {error:'identity'};
+  const payload=coursePayload({...request,hubContract:domPayload?.hubContract?mergeHubFinanceFacts(projection.hubContract,domPayload.hubContract):projection.hubContract},request);
+  return payload?{payload,via:'finance'}:{error:'format'};
+ }
  if(projection.student&&projection.student!==request.student)return {error:'student'};
  if(!projection.ct&&!coursePayload(domPayload,request))return {error:'identity'};
  if(!Array.isArray(projection.courses)||projection.courses.length>1)return {error:projection.courses?.length?'conflict':'empty',fields:['courseFee','hoursPerWeek','package']};

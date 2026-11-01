@@ -1,4 +1,5 @@
 import {pricingIdentity,priceText,weeklyHours} from './pricing-key.mjs';
+import {renewalWeekGift} from './promotions.mjs';
 export const HUB_POLICY_SCHEMA='apollo-hub-policy/v1';
 export const HUB_POLICY_ERRORS=['context','price','groups','timeout','permission','unsupported','format'];
 const num=x=>typeof x==='number'&&Number.isFinite(x),id=x=>Number.isSafeInteger(Number(x))&&Number(x)>0&&Number(x)<1e15?Number(x):null;
@@ -96,7 +97,7 @@ export function calculateHubPolicy(v,cells,context={},voucher=null){
  for(const label of labels){const matches=v.groups.flatMap(g=>g.discounts.filter(d=>fold(g.name+' - '+d.name)===fold(label)).map(d=>({g,d})));if(matches.length!==1)return {error:'CHECK - HUB KHÔNG CÓ ƯU ĐÃI DUY NHẤT: '+label};if(selected.some(s=>s.g.id===matches[0].g.id))return {error:'CHECK - HUB CHỌN NHIỀU ƯU ĐÃI TRONG MỘT NHÓM'};selected.push(matches[0]);}
  if(selected.length>1){const first=selected.find(s=>s.g.id===v.firstGroupId);if(!first)return {error:'CHECK - HUB CHƯA XÁC ĐỊNH NHÓM ƯU ĐÃI CHỌN ĐẦU'};if(first.g.with&&selected.some(s=>s.g.id!==first.g.id&&!first.g.with.includes(s.g.id)))return {error:'CHECK - HUB NHÓM KHUYẾN MÃI KHÔNG ĐƯỢC CỘNG CHUNG'};}
  selected.sort((a,b)=>a.g.priority-b.g.priority||a.g.sort-b.g.sort);
- const components=[],checks=[];let discount=0,giftMonths=0,last=0;
+ const components=[],checks=[];let discount=0,giftMonths=0,giftWeeks=0,last=0;
  const fixed=voucher?.type==='amount'&&num(voucher.amount)?roundHubMoney(voucher.amount):0;
  if(fixed>0&&v.context.giftCodeTypeId===null&&selected.some(s=>s.g.type===1))return {error:'CHECK - HUB THIẾU LOẠI GIFTCODE ĐỂ XÁC ĐỊNH THỨ TỰ GIẢM'};
  for(const rule of ['default','last'])for(const {g,d}of selected){
@@ -108,14 +109,16 @@ export function calculateHubPolicy(v,cells,context={},voucher=null){
   if(g.type===1&&!num(rate)||g.type===2&&!num(amount)||g.type===3&&!num(months))return {error:'CHECK - HUB THIẾU MỨC ƯU ĐÃI'};
   let value=0;
   if(g.type!==3){const voucherFirst=rule==='last'||![7,8].includes(v.context.giftCodeTypeId);const base=Math.max(0,gross-discount-(voucherFirst?fixed:0));value=Math.min(g.max/100*gross,g.type===1?rate/100*base:amount);discount+=value;if(rule==='last')last+=value;}
-  else giftMonths+=months;
-  components.push({label:g.name+' - '+d.name,kind:g.type===3?'months':'cash',amount:value,months:g.type===3?months:0,rule,groupId:g.id,discountId:d.id});
+  const weeks=g.type===3?renewalWeekGift(g.name+' - '+d.name):null;
+  if(g.type===3){if(weeks!==null)giftWeeks+=weeks;else giftMonths+=months;}
+  components.push({label:g.name+' - '+d.name,kind:g.type===3?(weeks!==null?'weeks':'months'):'cash',amount:value,months:g.type===3&&weeks===null?months:0,...(weeks!==null?{weeks}:{}),rule,groupId:g.id,discountId:d.id});
  }
  discount=roundHubMoney(discount);
  const max=selected.length?Math.min(...selected.map(s=>s.g.max)):100;if(discount>gross*max/100)checks.push('CHECK - HUB TỔNG KHUYẾN MÃI VƯỢT TRẦN NHÓM');
  let monthHours=p.monthHours,baseHours=null,extraHours=null;
  if(p.typeId===1){const h=weeklyHours(p.hourWeekName),special=[367,368].includes(p.priceId),adjust=h===3?(special?p.units+giftMonths>=12:[9,12,18].includes(p.units)):h===4?(special?p.units+giftMonths>=8:[9,12,18].includes(p.units)):false;if(adjust)monthHours=h===3?12.5:16.6666;if(num(monthHours)){baseHours=p.units*monthHours;extraHours=giftMonths*monthHours;}}
  else if(num(p.weekHours)){baseHours=p.units*p.weekHours;if(giftMonths===0)extraHours=0;else checks.push('XÁC MINH - HUB GÓI TUẦN CÓ THÁNG TẶNG: cần căn cứ quy đổi giờ');}
+ if(extraHours!==null&&giftWeeks)extraHours+=giftWeeks*weeklyHours(p.hourWeekName);
  for(const {g,d}of selected)if([83,248,261].includes(g.id)&&baseHours!==null)baseHours-=[1525,1527].includes(d.id)?16:[1526,1528].includes(d.id)?12:20;
  let giftcode=0;
  if(String(cells.K??'').trim()&&String(cells.K).trim()!=='0'){
@@ -125,7 +128,7 @@ export function calculateHubPolicy(v,cells,context={},voucher=null){
   else giftcode=null;
  }
  if(discount+(giftcode??0)>gross)checks.push('CHECK - HUB TỔNG GIẢM VƯỢT GIÁ GỐC');
- return {gross,discount,giftcode,giftMonths,monthHours,baseHours,extraHours,totalHours:baseHours!==null&&extraHours!==null?Math.round(baseHours+extraHours):null,components,checks,lastDiscount:last};
+ return {gross,discount,giftcode,giftMonths,giftWeeks,monthHours,baseHours,extraHours,totalHours:baseHours!==null&&extraHours!==null?Math.round(baseHours+extraHours):null,components,checks,lastDiscount:last};
 }
 
 // This bounded lookup uses only the named read services already shipped by Hub.

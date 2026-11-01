@@ -102,7 +102,7 @@ export function verificationMetadata(data,group,input,packageValue,patches=new M
 }
 export function calculationIssues(row,verification){
  const issues=[],c=row.cells,add=(code,columns,message,action)=>issues.push({code,columns,message,action});
- if(row.courseHours?.pending?.length)add('gift-hours',['R','extraHours'],row.courseHours.pending.join(' '),'Đối chiếu điều kiện tháng tặng và chứng từ; không xem dữ liệu thiếu là 0.');
+ if(row.courseHours?.pending?.length)add('gift-hours',['R','extraHours'],row.courseHours.pending.join(' '),'Đối chiếu điều kiện tháng/tuần tặng và chứng từ; không xem dữ liệu thiếu là 0.');
  const inputs=[['H','Course fee KOC'],['I','Hour/week'],['J','Package']].filter(([col])=>!String(c[col]??'').trim());
  if(inputs.length)add('inputs',['M','N','Q','R','extraHours','S'],`Thiếu ${inputs.map(([,label])=>label).join(', ')}.`, 'Bổ sung tại Course info; đối chiếu thông tin khóa học với hợp đồng / Export.');
  if(String(c.BD).includes('CHƯA CÓ RULE')&&!inputs.length)add('rule',['M','N','Q','R','extraHours','S'],'Chưa tìm được quy tắc đúng loại giá, giờ và gói.','Kiểm tra ba trường đầu vào và bảng RULE đúng thời kỳ.');
@@ -110,6 +110,7 @@ export function calculationIssues(row,verification){
  if(verification.siblingRequired&&!verification.siblingVerified)add('sibling',['R','extraHours'],verification.siblingRelationshipConfirmed?'Sibling đã xác nhận; còn điều kiện gói học.':'Gói sibling còn điều kiện cần xác minh.',verification.siblingRelationshipConfirmed?'Đối chiếu ngày full rồi tích cột Gói sibling · Duyệt.':'Đối chiếu CT/học viên đối ứng, quan hệ và ngày full cùng ngày rồi tích cột Gói sibling · Duyệt.');
  if(c.CI&&c.CI!=='OK'&&c.CI!=='NO GIFTCODE')add('giftcode',['O','Q'],String(c.CI),'Kiểm tra mã, học viên, thời hạn và phê duyệt giftcode.');
  if(c.AL==='OTHER')add('discount',['N','Q'],'Discount apply chưa có công thức được xác minh.','Đối chiếu đúng tên chương trình và điều kiện trong bộ nguồn.');
+ else if(c.N==null&&String(c.BO).includes('DISCOUNT CHƯA CÓ RULE'))add('discount',['N','Q'],'Còn ưu đãi chưa có công thức tính trong Discount apply.','Bổ sung quy tắc giá trị của ưu đãi; duyệt điều kiện không cung cấp số tiền hoặc công thức còn thiếu.');
  for(const col of ['M','N','O','P','Q','R','extraHours','S'])if((c[col]==null||c[col]==='')&&!issues.some(i=>i.columns.includes(col)))add('missing-'+col,[col],'Chưa đủ dữ liệu để tính chỉ tiêu này.',String(c.BD??'Xem ghi chú kiểm tra và nguồn tham chiếu.'));
  return issues;
 }
