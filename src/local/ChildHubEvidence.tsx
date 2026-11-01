@@ -1,6 +1,7 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {localFetch} from './api.mjs';
 import {compareChildFacts} from '../core/child-hub-evidence.mjs';
+import UpstreamHubOrigins from './UpstreamHubOrigins.tsx';
 
 const money=(n:any)=>typeof n==='number'&&Number.isFinite(n)?n.toLocaleString('vi-VN')+' đ':'—';
 const date=(d:any)=>typeof d==='number'?new Date(Date.UTC(1899,11,30)+d*86400000).toLocaleDateString('vi-VN',{timeZone:'UTC'}):d?String(d).split('-').reverse().join('/'):'—';
@@ -9,7 +10,7 @@ const request=async(path:string,init:any={})=>{
  if(!res.ok)throw Error(body.error||'Chưa đọc hoặc lưu được chứng từ Hub.');
  return body;
 };
-export default function ChildHubEvidence({row,ct,datasetId,link,onRead,disabled}:any){
+export default function ChildHubEvidence({row,ct,datasetId,link,hubLinks,onHubSaved,onRead,disabled}:any){
  const student=String(row?.cells?.F??''),masterCt=String(row?.ct||row?.cells?.contractTotal||'');
  const child=!!ct&&ct!==masterCt&&(row?.sourceContracts??[]).includes(ct)&&ct.includes('-CT-');
  const url=link?.url||'',[fact,setFact]=useState<any>(null),[message,setMessage]=useState(''),
@@ -27,7 +28,7 @@ export default function ChildHubEvidence({row,ct,datasetId,link,onRead,disabled}
    if(!force&&current.fact?.url===url&&current.fact?.hubContract?.payments?.state==='read'){
     setFact(current.fact);setMessage('Đã có dữ liệu Hub của đúng CT, không đọc lại.');return;
    }
-   const payload=await onRead({ct,student,url},(text:string)=>setMessage(String(text).slice(0,450)),task.signal);
+   const payload=await onRead({ct,student,url,readFinance:true},(text:string)=>setMessage(String(text).slice(0,450)),task.signal);
    if(task.signal.aborted)return;
    if(!payload?.hubContract)throw Error('Hub chưa trả về Payment Info có định danh CT rõ ràng. Không tự ghi tiền từ trang không đủ căn cứ.');
    setMessage('Đã đọc Hub; đang lưu chứng cứ cho đúng CT con…');
@@ -65,5 +66,6 @@ export default function ChildHubEvidence({row,ct,datasetId,link,onRead,disabled}
    {!comparisons.transfers.length&&<p className="child-hub-warning">Chưa thấy Transfer tương ứng trong bộ nguồn đang mở; không suy từ số tiền Hub.</p>}
    <small className="child-hub-source">Cập nhật Hub: {new Date(fact.capturedAt).toLocaleString('vi-VN')}. Các khoản Moving lấy từ Hub chỉ để đối chiếu; chỉ chuyển thành tiền thu sau khi có hóa đơn Paid gốc trong PaymentList và Transfer khớp.</small>
   </div>}
+  {url&&<UpstreamHubOrigins row={row} parentCt={ct} parentFact={fact} datasetId={datasetId} hubLinks={hubLinks} onHubSaved={onHubSaved} onRead={onRead} disabled={disabled} path={[ct]} />}
  </section>;
 }

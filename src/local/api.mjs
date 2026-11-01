@@ -15,6 +15,7 @@ import {validInputTargets,newInputRun,completeInputRun} from '../core/hub-input-
 import {buildPriceCatalogue,policyRuleCatalogue,hubPriceCatalogue} from '../core/price-catalog.mjs';
 import {POLICY_SCHEMA,normalizePolicyRow,validatePolicyRows,stagePolicyUpdate,mergePolicyPack} from '../core/policy-pack.mjs';
 import {childFactInput,childFactKey} from '../core/child-hub-evidence.mjs';
+import {ctCode,ancestryKey} from '../core/hub-upstream.mjs';
 let policies;
 let resolvedPolicy;
 // Course inputs and review patches never change membership of a source bundle.
@@ -105,19 +106,42 @@ export async function localFetch(input,options={}){
    if((prior?.version??0)!==(body.version||0))throw Object.assign(Error('Voucher đã được thay đổi ở tab khác. Tải lại trước khi ghi.'),{conflict:true});
    const saved=await versioned('vouchers',key,exact?.version??0,()=>voucher);return response({voucher:saved,vouchers:await all('vouchers')});
   }
+  if(path==='/api/hub-upstreams'){
+    const q=method==='GET'?Object.fromEntries(url.searchParams):body;
+    const datasetId=String(q?.datasetId??''),masterCt=ctCode(q?.masterCt),student=String(q?.student??''),parentCt=ctCode(q?.parentCt);
+    if(!masterCt||!parentCt||!student||!datasetId)throw fail('Thiếu định danh CT tổng, CT nhận hoặc học viên.');
+    const {group}=await recordFor(datasetId,'CT::'+masterCt);
+    if(group.ct!==masterCt||String(group.cells.F)!==student)throw fail('Hồ sơ đang mở không khớp học viên.');
+    const parentKnown=parentCt===masterCt||(group.sourceContracts??[]).includes(parentCt)||
+     (group.account?.movementHistory??[]).some(e=>e.from===parentCt||e.to===parentCt)||
+     (await all('settings')).some(record=>record.id.startsWith('hub-upstream|'+datasetId+'|'+masterCt+'|'+student+'|')&&(record.codes??[]).includes(parentCt));
+    if(!parentKnown)throw fail('CT nhận chưa thuộc luồng chuyển tiền của hồ sơ.');
+    const key=ancestryKey({datasetId,masterCt,student,parentCt}),stored=await get('settings',key);
+    if(method==='GET')return response({codes:stored?.codes??[],version:stored?.version??0});
+    if(method!=='PATCH'||!ctCode(body.upstreamCt)||body.upstreamCt===parentCt||body.upstreamCt===masterCt)throw fail('Mã CT nguồn không hợp lệ.');
+    const list=[...new Set([...(stored?.codes??[]),ctCode(body.upstreamCt)])];
+    if(list.length>20)throw fail('Quá nhiều CT nguồn. Chỉ đọc các CT có căn cứ.');
+    const saved=await versioned('settings',key,body.version??0,()=>({datasetId,masterCt,student,parentCt,codes:list}));
+    return response({codes:saved.codes,version:saved.version});
+  }
   if(path==='/api/hub-child-facts'){
     const query=method==='GET'?Object.fromEntries(url.searchParams):body;
     const datasetId=String(query?.datasetId??''),masterCt=String(query?.masterCt??'').toUpperCase(),ct=String(query?.ct??'').toUpperCase(),student=String(query?.student??'');
     if(!/^[A-Z0-9]+-CT-\d{4,20}$/.test(masterCt)||!/^[A-Z0-9]+-CT-\d{4,20}$/.test(ct)||masterCt===ct||!student)throw fail('Yêu cầu CT con không hợp lệ.');
     const {group}=await recordFor(datasetId,'CT::'+masterCt);
-    if(group.ct!==masterCt||String(group.cells.F)!==student||!(group.sourceContracts??[]).includes(ct))throw fail('CT con không có luồng Transfer đã xác minh về CT tổng / học viên này.');
+    if(group.ct!==masterCt||String(group.cells.F)!==student)throw fail('CT/học viên không khớp.');
+    const inSource=(group.sourceContracts??[]).includes(ct)||
+      (group.account?.movementHistory??[]).some(e=>e.from===ct||e.to===ct);
+    const parentCt=ctCode(query?.parentCt),chain=parentCt&&await get('settings',ancestryKey({datasetId,masterCt,student,parentCt}));
+    if(!inSource&&!(chain?.codes??[]).includes(ct))throw fail('CT nguồn chưa có trong Transfer hoặc chưa được gắn với CT chuyển tiếp.');
+    
     const link=await get('links',ct);
     if(!link?.url||!validHubURL(link.url,ct))throw fail('CT con chưa có link Hub hợp lệ.');
     const key=childFactKey({datasetId,masterCt,ct,student}),prior=await get('settings',key);
     if(method==='GET')return response({fact:prior?.url===link.url?prior:null,version:prior?.version??0});
     if(method!=='PATCH')throw fail('Yêu cầu không được hỗ trợ.');
     if(body.url!==link.url)throw fail('Link Hub đã thay đổi. Đọc lại từ link hiện tại.');
-    const fact=childFactInput({datasetId,masterCt,ct,student,url:link.url,payload:body.payload});
+    const fact=childFactInput({datasetId,masterCt,ct,student,url:link.url,payload:body.payload,parentCt:parentCt??null});
     if(!fact)throw fail('Hub chưa trả dữ liệu tài chính đúng CT / học viên / link, không thể lưu.');
     const result=await versioned('settings',key,body.version??0,()=>fact);
     return response({fact:result});

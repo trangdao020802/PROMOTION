@@ -1,7 +1,7 @@
 import {courseRequest,coursePayload,COURSE_FIELDS} from './hub-course.mjs';
 import {normalizeHubDiscount} from './hub-discount.mjs';
 import {contractRoot,projectHubContract} from './hub-contract.mjs';
-export {contractRoot,projectContractPayments,projectHubContract} from './hub-contract.mjs';
+export {contractRoot,projectContractPayments,projectHubContract,projectHubDisplayedTables,mergeDisplayedHubContract} from './hub-contract.mjs';
 export {readHubPolicy} from './hub-policy.mjs';
 export const COURSE_NETWORK_CHANNEL='promotion-hub/course-network/v1';
 const HUB='https://hub24.apollo.vn:7777';

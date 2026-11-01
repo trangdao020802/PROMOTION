@@ -4,13 +4,13 @@ import {validateHubContract} from './hub-contract.mjs';
 const code=v=>typeof v==='string'&&/^[A-Z0-9]+-CT-\d{4,20}$/.test(v.trim().toUpperCase())?v.trim().toUpperCase():null;
 export const childFactKey=({datasetId,masterCt,ct,student})=>
  'hub-child-fact:'+String(datasetId)+':'+String(masterCt)+':'+String(ct)+':'+String(student);
-export function childFactInput({datasetId,masterCt,ct,student,url,payload}){
+export function childFactInput({datasetId,masterCt,ct,student,url,payload,parentCt=null}){
  const main=code(masterCt),child=code(ct);
  if(!datasetId||typeof datasetId!=='string'||datasetId.length>150||!main||!child||main===child||
     !student||typeof student!=='string'||student.length>150)return null;
  const course=coursePayload(payload,{ct:child,student,url});
  if(!course||!course.hubContract||!validateHubContract(course.hubContract)||course.hubContract.ct!==child)return null;
- const facts={ct:child,student,url,hubContract:course.hubContract,
+ const facts={ct:child,student,url,parentCt:parentCt&&code(parentCt)!==child?code(parentCt):null,hubContract:course.hubContract,
   courseSummary:{courseFee:course.courseFee,package:course.package,hoursPerWeek:course.hoursPerWeek},
   capturedAt:course.hubContract.capturedAt};
  return {id:childFactKey({datasetId,masterCt:main,ct:child,student}),datasetId,masterCt:main,...facts};
