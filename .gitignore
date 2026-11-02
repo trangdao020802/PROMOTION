@@ -4,3 +4,7 @@ dist/
 .env.*
 *.log
 .DS_Store
+.sites-runtime/
+.sites-preview/
+*.tgz
+reference/hub/invoice-pdf.mjs

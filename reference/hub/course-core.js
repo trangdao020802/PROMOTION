@@ -211,6 +211,64 @@ var PromotionHubCourse = (() => {
     }
   }
 
+  // src/core/hub-invoice.mjs
+  var clean2 = (v) => typeof v === "string" ? v.trim().replace(/\s+/g, " ") : "";
+  var invoiceNumber = (v) => {
+    const s = typeof v === "number" && Number.isSafeInteger(v) ? String(v) : clean2(v);
+    return /^\d{1,20}$/.test(s) && /[1-9]/.test(s) ? s : null;
+  };
+  var eInvoiceKey = (v) => {
+    const s = clean2(v);
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s) ? s : null;
+  };
+  var invoiceReference = (v) => invoiceNumber(v) ?? eInvoiceKey(v);
+  function invoiceDay(v) {
+    const s = clean2(v);
+    let day2 = /^(\d{4}-\d{2}-\d{2})(?:$|T| )/.exec(s)?.[1];
+    const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(s);
+    if (!day2 && m) day2 = m[3] + "-" + m[2].padStart(2, "0") + "-" + m[1].padStart(2, "0");
+    return day2 && Number.isFinite(Date.parse(day2)) && (/* @__PURE__ */ new Date(day2 + "T00:00:00Z")).toISOString().slice(0, 10) === day2 ? day2 : null;
+  }
+  var money = (v) => typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= 1e13 ? v : null;
+  function validateInvoice(v) {
+    return !!v && typeof v === "object" && !Array.isArray(v) && Object.keys(v).every((k) => ["number", "date", "amount", "source", "conflicts"].includes(k)) && invoiceNumber(v.number) === v.number && (v.date === null || invoiceDay(v.date) === v.date) && (v.amount === null || money(v.amount) === v.amount) && ["payment-api", "learner-payments", "e-invoice-pdf"].includes(v.source) && Array.isArray(v.conflicts) && v.conflicts.length <= 4 && v.conflicts.every((k) => ["number", "date", "amount", "key"].includes(k));
+  }
+  function projectPaymentInvoice(raw, source = "payment-api") {
+    const key = eInvoiceKey(raw?.EInvoiceFKey ?? raw?.EInvoiceGuid ?? raw?.EInvoiceId ?? raw?.EInvoice);
+    let number2 = invoiceNumber(raw?.InvoiceNo ?? raw?.InvoiceNumber);
+    if (!number2 && key && typeof raw.EInvoiceCode === "string") {
+      const suffix = raw.EInvoiceCode.split(key + "_");
+      if (suffix.length === 2) number2 = invoiceNumber(suffix[1]);
+    }
+    const ref = number2 ?? key ?? invoiceReference(raw?.EInvoiceId ?? raw?.EInvoice);
+    return {
+      ...ref ? { invoiceRef: ref } : {},
+      ...key ? { eInvoiceKey: key } : {},
+      ...[1, 2].includes(raw?.EInvoiceVersion) ? { eInvoiceVersion: raw.EInvoiceVersion } : {},
+      ...number2 ? { invoice: { number: number2, date: invoiceDay(raw.InvoiceDate ?? raw.EInvoiceDate ?? raw.IssueDate), amount: money(raw.InvoiceAmount ?? raw.InvoiceTotal), source, conflicts: [] } } : {}
+    };
+  }
+  function mergePaymentInvoice(row, extra) {
+    const a = row.invoice, b = extra?.invoice;
+    let invoice = a ?? b;
+    const conflicts = [...a?.conflicts ?? [], ...b?.conflicts ?? []];
+    if (a && b) {
+      if (a.number.replace(/^0+/, "") !== b.number.replace(/^0+/, "")) conflicts.push("number");
+      if (a.date && b.date && a.date !== b.date) conflicts.push("date");
+      if (a.amount !== null && b.amount !== null && Math.abs(a.amount - b.amount) > 1) conflicts.push("amount");
+      invoice = { ...a, number: b.source === "e-invoice-pdf" ? b.number : a.number, date: a.date ?? b.date, amount: a.amount ?? b.amount, source: b.source === "e-invoice-pdf" ? b.source : a.source };
+    }
+    if (row.eInvoiceKey && extra?.eInvoiceKey && row.eInvoiceKey !== extra.eInvoiceKey) conflicts.push("key");
+    if (invoice) invoice = { ...invoice, conflicts: [...new Set(conflicts)] };
+    return {
+      ...row,
+      ...!row.invoiceRef && extra?.invoiceRef ? { invoiceRef: extra.invoiceRef } : {},
+      ...!row.eInvoiceKey && extra?.eInvoiceKey ? { eInvoiceKey: extra.eInvoiceKey } : {},
+      ...!row.eInvoiceVersion && extra?.eInvoiceVersion ? { eInvoiceVersion: extra.eInvoiceVersion } : {},
+      ...invoice ? { invoice } : {}
+    };
+  }
+
   // src/core/hub-contract.mjs
   var HUB_CONTRACT_SCHEMA = "apollo-hub-contract/v1";
   var plain2 = (v) => !!v && typeof v === "object" && !Array.isArray(v);
@@ -243,11 +301,7 @@ var PromotionHubCourse = (() => {
     }
     return result;
   }
-  var invoiceEvidence = (value) => {
-    const v = text2(value);
-    if (!v) return null;
-    return /^\d{4,15}$/.test(v) || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v) ? v : null;
-  };
+  var invoiceEvidence = invoiceReference;
   function projectContractPayments(value, contractId) {
     let list2 = hubList(value, 500);
     if (!list2 && plain2(value)) {
@@ -263,8 +317,7 @@ var PromotionHubCourse = (() => {
       if (!plain2(r) || (r.ContractId ?? r.DepositId) != null && id2(r.ContractId ?? r.DepositId) !== String(contractId) || !id2(r.PaymentId) || number(r.Amount) === null) return null;
       const code = text2(r.PaymentCode);
       if (code.length > 150 || code && !/^[A-Za-z0-9][A-Za-z0-9_.:/-]*$/.test(code)) return null;
-      const invoiceRef = invoiceEvidence(r.InvoiceNo ?? r.InvoiceNumber ?? r.EInvoiceId ?? r.EInvoiceGuid ?? r.EInvoice);
-      rows.push({ id: id2(r.PaymentId), code, amount: number(r.Amount), totalAmount: number(r.TotalAmount), remaining: number(r.RemainAmount), typeId: id2(r.PaymentTypeId), type: text2(r.PaymentTypeName).slice(0, 200), method: text2(r.PaymentMethodTypeName ?? r.PaymentMethodName).slice(0, 200), scheduledDate: date(r.ScheduledDate), completeDate: date(r.CompleteDate), complete: typeof r.IsComplete === "boolean" ? r.IsComplete : null, ...invoiceRef ? { invoiceRef } : {} });
+      rows.push({ id: id2(r.PaymentId), code, amount: number(r.Amount), totalAmount: number(r.TotalAmount), remaining: number(r.RemainAmount), typeId: id2(r.PaymentTypeId), type: text2(r.PaymentTypeName).slice(0, 200), method: text2(r.PaymentMethodTypeName ?? r.PaymentMethodName).slice(0, 200), scheduledDate: date(r.ScheduledDate), completeDate: date(r.CompleteDate), complete: typeof r.IsComplete === "boolean" ? r.IsComplete : null, ...projectPaymentInvoice(r) });
     }
     return new Set(rows.map((r) => r.id)).size === rows.length ? rows : null;
   }
@@ -303,14 +356,34 @@ var PromotionHubCourse = (() => {
         rows.push({ from, to, amount, date: day2, reference, direction });
       }
     }
+    const explicitIncoming = rows.filter((m) => m.direction === "in");
+    for (const p of hubList(root.ListPayment, 500) ?? []) {
+      const from = contractCode(p?.RelatedContractDepositNo), amount = number(p?.Amount), day2 = moveDay(p?.CompleteDate), reference = text2(p?.PaymentCode);
+      if (!from || from === ct || p.IsComplete !== true || !amount || !day2 || /refund|moving[ -]?out|transfer[ -]?out/i.test(text2(p.PaymentTypeName))) continue;
+      if (p.PaymentTypeId !== 10 && !/transfer|deposit to contract/i.test(text2(p.PaymentMethodTypeName) + " " + text2(p.PaymentTypeName))) continue;
+      if (reference && !/^[A-Za-z0-9][A-Za-z0-9_.:/-]*$/.test(reference)) continue;
+      if (!explicitIncoming.some((m) => m.from === from && m.to === ct && m.date === day2) && !rows.some((m) => m.direction === "in" && m.reference === reference && m.from === from && m.to === ct && m.amount === amount && m.date === day2)) rows.push({ from, to: ct, amount, date: day2, reference, direction: "in" });
+      hasList = true;
+    }
     return hasList ? rows : null;
+  }
+  function projectHubLearner(root) {
+    const leadId = id2(root?.LeadId), kidId = id2(root?.KidId);
+    return leadId && kidId ? { leadId, kidId, url: "https://hub24.apollo.vn:7777/lead/detail/" + leadId + "?s=" + kidId } : null;
   }
   function projectHubContract(root, { payments = null, paymentState = "pending", capturedAt = (/* @__PURE__ */ new Date()).toISOString() } = {}) {
     const result = { schema: HUB_CONTRACT_SCHEMA, ct: text2(root?.ContractNo ?? root?.ContractCode ?? root?.DepositNo ?? root?.DepositCode).toUpperCase(), contractId: id2(root?.ContractId ?? root?.DepositId ?? root?.Id), capturedAt, discounts: contractDiscountFacts(root), payments: { state: paymentState === "pending" && (projectContractPayments(root, id2(root?.ContractId ?? root?.DepositId ?? root?.Id))?.length ?? 0) > 0 ? "read" : paymentState, rows: payments ?? ((projectContractPayments(root, id2(root?.ContractId ?? root?.DepositId ?? root?.Id))?.length ?? 0) > 0 ? projectContractPayments(root, id2(root?.ContractId ?? root?.DepositId ?? root?.Id)) : []) }, ...projectHubMovements(root) !== null ? { movements: { state: "read", rows: projectHubMovements(root) } } : { movements: { state: "pending", rows: [] } } };
+    const learner = projectHubLearner(root);
+    if (learner) result.learner = learner;
     return validateHubContract(result) ? result : null;
   }
-  function validateHubContract(v) {
-    if (!exact(v, ["schema", "ct", "contractId", "capturedAt", "discounts", "payments"]) && !exact(v, ["schema", "ct", "contractId", "capturedAt", "discounts", "payments", "movements"]) || v.schema !== HUB_CONTRACT_SCHEMA || hubDocumentCode(v.ct) !== v.ct || id2(v.contractId) !== v.contractId || typeof v.capturedAt !== "string" || !Number.isFinite(Date.parse(v.capturedAt))) return false;
+  function validateHubContract(v, depth = 0) {
+    if (!exact(v, ["schema", "ct", "contractId", "capturedAt", "discounts", "payments", "movements", "learner", "relatedFinance"]) || v.schema !== HUB_CONTRACT_SCHEMA || hubDocumentCode(v.ct) !== v.ct || id2(v.contractId) !== v.contractId || typeof v.capturedAt !== "string" || !Number.isFinite(Date.parse(v.capturedAt))) return false;
+    if (v.learner !== void 0) {
+      const l = v.learner;
+      if (!exact(l, ["leadId", "kidId", "url"]) || id2(l.leadId) !== l.leadId || id2(l.kidId) !== l.kidId || l.url !== "https://hub24.apollo.vn:7777/lead/detail/" + l.leadId + "?s=" + l.kidId) return false;
+    }
+    if (v.relatedFinance !== void 0 && (depth > 0 || !v.learner || !hubList(v.relatedFinance, 32) || new Set(v.relatedFinance.map((f) => f?.ct)).size !== v.relatedFinance.length || !v.relatedFinance.every((f) => f.ct !== v.ct && f.discounts === null && f.relatedFinance === void 0 && f.learner?.kidId === v.learner.kidId && validateHubContract(f, depth + 1)))) return false;
     if (v.discounts !== null && (!hubList(v.discounts, 100) || !v.discounts.every((d) => exact(d, ["label", "groupId", "discountId", "type", "percent", "amount", "months"]) && !!text2(d.label) && d.label.length <= 2e3 && ["groupId", "discountId"].every((k) => d[k] === null || id2(d[k]) === d[k]) && (d.type === null || [1, 2, 3].includes(d.type)) && ["percent", "amount", "months"].every((k) => d[k] === null || number(d[k]) === d[k] && d[k] >= 0 && d[k] <= (k === "percent" ? 100 : k === "months" ? 120 : 1e13))))) return false;
     if (v.movements !== void 0) {
       const m = v.movements;
@@ -319,7 +392,7 @@ var PromotionHubCourse = (() => {
     }
     const p = v.payments;
     if (!exact(p, ["state", "rows"]) || !["read", "pending", "unavailable"].includes(p.state) || !hubList(p.rows, 500) || p.state !== "read" && p.rows.length || new Set(p.rows.map((r) => r.id ?? r.code)).size !== p.rows.length) return false;
-    return p.rows.every((r) => (exact(r, ["id", "code", "amount", "totalAmount", "remaining", "typeId", "type", "method", "scheduledDate", "completeDate", "complete"]) || exact(r, ["id", "code", "amount", "totalAmount", "remaining", "typeId", "type", "method", "scheduledDate", "completeDate", "complete", "invoiceRef"])) && (r.id === null && !!r.code || id2(r.id) === r.id) && typeof r.code === "string" && r.code.length <= 150 && (!r.code || /^[A-Za-z0-9][A-Za-z0-9_.:/-]*$/.test(r.code)) && number(r.amount) === r.amount && ["totalAmount", "remaining"].every((k) => r[k] === null || number(r[k]) === r[k]) && (r.typeId === null || id2(r.typeId) === r.typeId) && ["type", "method"].every((k) => typeof r[k] === "string" && r[k].length <= 200) && ["scheduledDate", "completeDate"].every((k) => r[k] === null || date(r[k]) === r[k]) && (r.complete === null || typeof r.complete === "boolean") && (r.invoiceRef === void 0 || invoiceEvidence(r.invoiceRef) === r.invoiceRef)) && JSON.stringify(v).length <= 3e5;
+    return p.rows.every((r) => exact(r, ["id", "code", "amount", "totalAmount", "remaining", "typeId", "type", "method", "scheduledDate", "completeDate", "complete", "invoiceRef", "eInvoiceKey", "eInvoiceVersion", "invoice"]) && (r.id === null && !!r.code || id2(r.id) === r.id) && typeof r.code === "string" && r.code.length <= 150 && (!r.code || /^[A-Za-z0-9][A-Za-z0-9_.:/-]*$/.test(r.code)) && number(r.amount) === r.amount && ["totalAmount", "remaining"].every((k) => r[k] === null || number(r[k]) === r[k]) && (r.typeId === null || id2(r.typeId) === r.typeId) && ["type", "method"].every((k) => typeof r[k] === "string" && r[k].length <= 200) && ["scheduledDate", "completeDate"].every((k) => r[k] === null || date(r[k]) === r[k]) && (r.complete === null || typeof r.complete === "boolean") && (r.invoiceRef === void 0 || invoiceEvidence(r.invoiceRef) === r.invoiceRef) && (r.eInvoiceKey === void 0 || eInvoiceKey(r.eInvoiceKey) === r.eInvoiceKey) && (r.eInvoiceVersion === void 0 || [1, 2].includes(r.eInvoiceVersion)) && (r.invoice === void 0 || validateInvoice(r.invoice))) && JSON.stringify(v).length <= 12e5;
   }
   var line = (v) => String(v ?? "").replace(/\s+/g, " ").trim();
   var vnd = (v) => {
@@ -387,7 +460,7 @@ var PromotionHubCourse = (() => {
       ...facts.payments,
       rows: facts.payments.rows.map((row) => {
         const match = extra.payments?.find((item) => item.code === row.code && Math.abs(item.amount - row.amount) <= 1);
-        return match?.invoiceRef && !row.invoiceRef ? { ...row, invoiceRef: match.invoiceRef } : row;
+        return match ? mergePaymentInvoice(row, match) : row;
       })
     } : extra.payments !== null ? { state: "read", rows: extra.payments } : facts.payments;
     const moves = [...facts.movements?.rows ?? [], ...extra.movements ?? []];
@@ -507,15 +580,15 @@ var PromotionHubCourse = (() => {
     if (!(v.readFinance === true ? hubDocumentCode(ct) : /^[A-Z0-9]+-CT-\d{4,20}$/.test(ct)) || !/^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,149}$/.test(student) || Object.hasOwn(Object.prototype, student)) return null;
     try {
       const u = new URL(v.url);
-      if (u.origin !== HUB2 || u.username || u.password || u.hash || !(v.readFinance === true ? hubDocumentId(u.href, ct) : !u.search && /^\/contract\/detail\/[1-9]\d{0,14}\/?$/i.test(u.pathname)) || v.readPolicy !== void 0 && typeof v.readPolicy !== "boolean" || v.readFinance !== void 0 && typeof v.readFinance !== "boolean") return null;
-      return { ct, student, url: u.href, ...v.readPolicy !== void 0 ? { readPolicy: v.readPolicy } : {}, ...v.readFinance !== void 0 ? { readFinance: v.readFinance } : {} };
+      if (u.origin !== HUB2 || u.username || u.password || u.hash || !(v.readFinance === true ? hubDocumentId(u.href, ct) : !u.search && /^\/contract\/detail\/[1-9]\d{0,14}\/?$/i.test(u.pathname)) || v.readPolicy !== void 0 && typeof v.readPolicy !== "boolean" || v.readFinance !== void 0 && typeof v.readFinance !== "boolean" || v.refreshFinance !== void 0 && typeof v.refreshFinance !== "boolean") return null;
+      return { ct, student, url: u.href, ...v.readPolicy !== void 0 ? { readPolicy: v.readPolicy } : {}, ...v.readFinance !== void 0 ? { readFinance: v.readFinance } : {}, ...v.refreshFinance !== void 0 ? { refreshFinance: v.refreshFinance } : {} };
     } catch {
       return null;
     }
   }
   function coursePayload(v, expected) {
     const request = courseRequest(expected);
-    if (!request || !v || typeof v !== "object" || Object.keys(v).some((k) => !["ct", "student", "url", "readPolicy", "readFinance", "courseState", "inheritedCourses", "hubContract", "hubPolicy", "hubPolicyError", ...COURSE_FIELDS].includes(k)) || v.ct !== request.ct || v.student !== request.student || v.url !== request.url) return null;
+    if (!request || !v || typeof v !== "object" || Object.keys(v).some((k) => !["ct", "student", "url", "readPolicy", "readFinance", "refreshFinance", "courseState", "inheritedCourses", "hubContract", "hubPolicy", "hubPolicyError", ...COURSE_FIELDS].includes(k)) || v.ct !== request.ct || v.student !== request.student || v.url !== request.url) return null;
     const result = { ct: request.ct, student: request.student, url: request.url };
     if (request.readFinance === true) {
       if (!validateHubContract(v.hubContract) || v.hubContract.ct !== request.ct || v.hubContract.contractId !== hubDocumentId(request.url, request.ct)) return null;

@@ -9,14 +9,15 @@ if parts.scheme!='https' or not parts.netloc or parts.path or parts.query or par
 known_sites=['https://promotion-hub-2026.quanghuym24.chatgpt.site','https://promotion-hub-2026.roundskunk11.chatgpt.site','https://promotion-hub-2026.vercel.app']
 sites=list(dict.fromkeys([site,*known_sites])) if site in known_sites else [site]
 site_matches=[origin+os.environ.get('BASE_PATH','/')+'*' for origin in sites]
-files=['background.js','core.js','course-core.js','course-network-core.js','course-bootstrap.js','course-tap.js','voucher-core.js','report-core.js','index-core.js','promotion.js','hub.js','hub-course.js','hub-voucher.js','hub-index.js','hub-reports.js','index-bootstrap.js','index-tap.js','reuse-agent.js','reuse-agent-main.js']
-manifest={'manifest_version':3,'name':'Promotion Studio · Apollo HUB Bridge','version':'1.6.18','minimum_chrome_version':'111','description':'Đọc Voucher, danh sách CT/DEP, Course info và báo cáo được yêu cầu trên Apollo HUB.','permissions':['storage','tabs'],'host_permissions':[*(origin+'/*' for origin in sites),'https://hub24.apollo.vn/*'],'background':{'service_worker':'background.js'},'content_scripts':[
+files=['background.js','core.js','course-core.js','course-network-core.js','course-bootstrap.js','course-tap.js','voucher-core.js','report-core.js','index-core.js','promotion.js','hub.js','hub-course.js','hub-voucher.js','hub-index.js','hub-reports.js','index-bootstrap.js','index-tap.js','reuse-agent.js','reuse-agent-main.js','invoice-pdf.mjs']
+manifest={'manifest_version':3,'name':'Promotion Studio · Apollo HUB Bridge','version':'1.6.19','minimum_chrome_version':'111','description':'Đọc Voucher, danh sách CT/DEP, Course info và báo cáo được yêu cầu trên Apollo HUB.','permissions':['storage','tabs'],'host_permissions':[*(origin+'/*' for origin in sites),'https://hub24.apollo.vn/*'],'background':{'service_worker':'background.js'},'content_scripts':[
  {'matches':site_matches,'js':['core.js','report-core.js','index-core.js','course-core.js','voucher-core.js','promotion.js'],'run_at':'document_start','all_frames':False},
  {'matches':['https://hub24.apollo.vn/*'],'js':['core.js','report-core.js','index-core.js','course-core.js','course-network-core.js','voucher-core.js','reuse-agent.js'],'run_at':'document_start','all_frames':False},
  {'matches':['https://hub24.apollo.vn/*'],'js':['hub.js','hub-course.js','hub-index.js'],'run_at':'document_idle','all_frames':False},
  {'matches':['https://hub24.apollo.vn/*'],'js':['core.js','report-core.js','voucher-core.js','hub-voucher.js','hub-reports.js'],'run_at':'document_idle','all_frames':True},
  {'matches':['https://hub24.apollo.vn/*'],'js':['core.js','index-core.js','course-core.js','course-network-core.js','reuse-agent-main.js'],'run_at':'document_start','world':'MAIN','all_frames':True}]}
-readme='''CẦU NỐI PROMOTION STUDIO 1.6.18
+manifest['web_accessible_resources']=[{'resources':['invoice-pdf.mjs'],'matches':['https://hub24.apollo.vn/*']}]
+readme='''CẦU NỐI PROMOTION STUDIO 1.6.19
 
 Chỉ dùng cho website https://promotion-hub-2026.roundskunk11.chatgpt.site và Apollo HUB https://hub24.apollo.vn:7777.
 
@@ -29,7 +30,7 @@ Chỉ dùng cho website https://promotion-hub-2026.roundskunk11.chatgpt.site và
 7. Đơn vị % hoặc VND/VNĐ/đ/₫ lấy cạnh Discount amount. Center lấy từ cột Center code, đọc tiếp khi bảng có phân trang. Thiếu đơn vị hoặc chưa đủ danh sách center thì dừng, không đoán kiểu giảm hay phạm vi.
 8. Kiểm tra các ô tự điền, trạng thái duyệt và bấm Lưu voucher & tính lại. Cầu nối không tự duyệt ngoại lệ và không bấm Create/Update trên Hub.
 
-Không nhập tài khoản/mật khẩu vào Promotion Studio. Mã nguồn giữ các kiểm tra origin, document, mã CT/DEP, ngày tháng và URL chi tiết. Không đoán ID hợp đồng; trường hợp không có kết quả vẫn cần xác minh thủ công.
+9. Hóa đơn: đọc Learner Payments của đúng KidId trước; với khoản chuyển từ học sinh khác, gắn link CT/DEP nguồn trong chi tiết hồ sơ và bấm Đọc lại hóa đơn. E-Invoice PDF được đọc trong nền để lấy số hóa đơn, ngày phát hành và tổng tiền; UUID lưu riêng. Thiếu PDF hoặc hết thời gian chờ giữ dữ liệu đã có để thử lại. Không cộng tiền transfer thành khoản thu mới.\n\nKhông nhập tài khoản/mật khẩu vào Promotion Studio. Mã nguồn giữ các kiểm tra origin, document, mã CT/DEP, ngày tháng và URL chi tiết. Không đoán ID hợp đồng; trường hợp không có kết quả vẫn cần xác minh thủ công.
 
 Dữ liệu nhận được được lưu tại trình duyệt Promotion Studio. Tiện ích không tự đồng bộ nội dung các hợp đồng và không sửa dữ liệu trên HUB.
 '''
@@ -38,6 +39,7 @@ target=root/'dist/downloads/promotion-hub-bridge.zip'
 with zipfile.ZipFile(target,'w',zipfile.ZIP_DEFLATED) as z:
  z.writestr('manifest.json',json.dumps(manifest,ensure_ascii=False,indent=2))
  z.writestr('HUONG_DAN.txt',readme)
+ z.writestr('PDFJS-LICENSE.txt',(root/'node_modules/pdfjs-dist/LICENSE').read_text())
  for name in files:
   content=(root/'reference/hub'/name).read_text().replace('https://promotion-installment.trangdao2802.chatgpt.site',site)
   if name=='core.js':content=content.replace('const SITES = [SITE];','const SITES = '+json.dumps(sites)+';')

@@ -18,6 +18,8 @@ import {childFactInput,childFactKey,mergeChildFinancialFact} from '../core/child
 import {ctCode,ancestryKey,knownFinanceDocuments,upstreamCandidates} from '../core/hub-upstream.mjs';
 import {attachHubFunding} from '../core/hub-proven-funding.mjs';
 import {validateHubContract} from '../core/hub-contract.mjs';
+import {financeBundle} from '../core/hub-finance-bundle.mjs';
+import {hubDocumentId} from '../core/hub-document.mjs';
 let policies;
 let resolvedPolicy;
 // Course inputs and review patches never change membership of a source bundle.
@@ -40,6 +42,22 @@ async function financeSettings(context){
  const [settings,source]=await Promise.all([all('settings'),courseMemory(context.masterCt,context.student)]);
  if(validateHubContract(source?.hubContract)&&source.hubContract.ct===context.masterCt)settings.push({...context,ct:context.masterCt,hubContract:source.hubContract});
  return settings;
+}
+async function rememberLearnerFinance(hubContract,context){
+ const links=[];
+ for(const doc of financeBundle(hubContract)){
+  if(doc.ct===context.masterCt)continue;
+  const current=await get('links',doc.ct);
+  if(current&&hubDocumentId(current.url,doc.ct)!==doc.hubContract.contractId)continue;
+  let link=current;
+  if(!link)try{link=await versioned('links',doc.ct,0,()=>({ct:doc.ct,url:doc.url,source:'learner-payments'}));}catch{continue;}
+  links.push(link);
+  const key=childFactKey({...context,ct:doc.ct}),prior=await get('settings',key);
+  const parent=[hubContract,...(hubContract.relatedFinance??[])].find(f=>f.movements?.rows?.some(m=>m.from===doc.ct&&m.to===f.ct))?.ct;
+  const fact=childFactInput({...context,ct:doc.ct,url:link.url,parentCt:parent,payload:{ct:doc.ct,student:context.student,url:link.url,hubContract:doc.hubContract}});
+  if(fact)try{await versioned('settings',key,prior?.version??0,old=>mergeChildFinancialFact(old,fact));}catch{/* Another reader already saved this scoped document. */}
+ }
+ return links;
 }
 async function attachVerifiedHubFunding(model,sources=[]){
  const [settings,links]=await Promise.all([all('settings'),all('links')]);
@@ -154,7 +172,8 @@ export async function localFetch(input,options={}){
     const fact=childFactInput({datasetId,masterCt,ct,student,url:link.url,payload:body.payload,parentCt:parentCt??null});
     if(!fact)throw fail('Hub chưa trả dữ liệu tài chính đúng mã CT / DEP và link, không thể lưu.');
     const result=await versioned('settings',key,body.version??0,old=>mergeChildFinancialFact(old,fact));
-    return response({fact:result});
+    const relatedLinks=await rememberLearnerFinance(result.hubContract,{datasetId,masterCt,student});
+    return response({fact:result,relatedLinks});
    }
   if(path==='/api/hub-links'&&method==='GET'){
    const links=await all('links'),ct=url.searchParams.get('ct');return response({link:ct?links.find(l=>l.ct===ct)||null:null,links:ct?links.filter(l=>l.ct===ct):links});
@@ -191,7 +210,8 @@ export async function localFetch(input,options={}){
    if(normalized.inheritedCourses?.some(s=>!group.sourceContracts.includes(s.ct)||s.student!==String(group.cells.F)))throw fail('CT nguồn không có luồng Transfer đã xác minh vào CT tổng của học viên.');
    await ensureVouchers([normalized.giftcode??'',...(normalized.inheritedCourses??[]).map(s=>s.giftcode??'')]);
    const key=sourceKey(payload.ct,payload.student),prior=await courseMemory(payload.ct,payload.student);if((prior?.version??0)!==(body.version??0))throw Object.assign(Error('Input đã đổi ở tab khác. Tải lại trước khi ghi.'),{conflict:true});
-   const saved=await versioned('courseSources',key,prior?.id===key?prior.version:0,stored=>{const old=stored??prior;return ({...((old?.student===normalized.student&&old?.url===normalized.url&&old?.hubPolicy)?{hubPolicy:old.hubPolicy}:{}),...normalized,...(normalized.inheritedCourses?{inheritedCourses:[...new Map([...(old?.url===normalized.url?old.inheritedCourses??[]:[]),...normalized.inheritedCourses].filter(s=>group.sourceContracts.includes(s.ct)&&s.student===String(group.cells.F)).map(s=>[s.ct,s])).values()],inheritedReadComplete:group.sourceContracts.every(ct=>normalized.inheritedCourses.some(s=>s.ct===ct))}:{}),profile:{studentName:String(group.cells.G??''),centerCode:String(group.cells.B??''),centerName:String(group.cells.A??'')},lastReadMissing:[...COURSE_FIELDS.filter(k=>normalized[k]==null)],...Object.fromEntries(COURSE_FIELDS.map(k=>[k,normalized[k]??(old?.student===normalized.student&&old?.url===normalized.url?old[k]:null)??null]))});});return response({source:saved,vouchers:await all('vouchers')});
+   if(prior?.url===normalized.url&&prior.hubContract&&normalized.hubContract)normalized.hubContract=mergeChildFinancialFact({id:key,url:prior.url,hubContract:prior.hubContract},{id:key,url:normalized.url,hubContract:normalized.hubContract}).hubContract;
+   const saved=await versioned('courseSources',key,prior?.id===key?prior.version:0,stored=>{const old=stored??prior;return ({...((old?.student===normalized.student&&old?.url===normalized.url&&old?.hubPolicy)?{hubPolicy:old.hubPolicy}:{}),...normalized,...(normalized.inheritedCourses?{inheritedCourses:[...new Map([...(old?.url===normalized.url?old.inheritedCourses??[]:[]),...normalized.inheritedCourses].filter(s=>group.sourceContracts.includes(s.ct)&&s.student===String(group.cells.F)).map(s=>[s.ct,s])).values()],inheritedReadComplete:group.sourceContracts.every(ct=>normalized.inheritedCourses.some(s=>s.ct===ct))}:{}),profile:{studentName:String(group.cells.G??''),centerCode:String(group.cells.B??''),centerName:String(group.cells.A??'')},lastReadMissing:[...COURSE_FIELDS.filter(k=>normalized[k]==null)],...Object.fromEntries(COURSE_FIELDS.map(k=>[k,normalized[k]??(old?.student===normalized.student&&old?.url===normalized.url?old[k]:null)??null]))});});const relatedLinks=await rememberLearnerFinance(saved.hubContract,{datasetId:body.datasetId,masterCt:payload.ct,student:payload.student});return response({source:saved,relatedLinks,vouchers:await all('vouchers')});
   }
   if(path==='/api/evidence'&&method==='GET'){
    const {key}=await recordFor(url.searchParams.get('dataset'),url.searchParams.get('record'));const files=(await all('evidence')).filter(e=>e.recordKey===key).map(({blob,...e})=>e);return response({files});

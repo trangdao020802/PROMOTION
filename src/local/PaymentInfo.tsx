@@ -1,6 +1,8 @@
 import React,{useId,useState} from 'react';
 import {paymentAllocations} from '../core/payment-allocations.mjs';
 import HubContractEvidence from './HubContractEvidence';
+import InvoiceEvidence from './InvoiceEvidence.tsx';
+import {invoiceLabel} from '../core/hub-invoice.mjs';
 
 function FlowIcon({kind='in'}:{kind?:string}){
  const paths:Record<string,React.ReactNode>={
@@ -20,7 +22,7 @@ function TraceEvidence({refs=[]}:{refs?:any[]}){
 export default function PaymentInfo({row,doc,SourceRefs,date,money}:any){
  const [expanded,setExpanded]=useState<Record<string,boolean>>({}),prefix=useId().replace(/[^a-z0-9]/gi,'');
  const data=paymentAllocations(row),total=String(row.cells.contractTotal??'');
- const originalCells=(r:any)=><><td>{date(r.date)}</td><td><strong>{r.vat||'Chưa có số VAT'}</strong></td><td><strong>{r.payment}</strong><small>{r.method??'Chưa rõ phương thức'}{r.term?` · ${r.term}`:''}</small></td><td>{doc(r.contract)}<small>{r.contract===total?'Thu trực tiếp · Contract tổng':'Hóa đơn gốc'}</small>{!r.verified&&<small className="invoice-pending">Thiếu VAT / trạng thái Paid hoặc dữ liệu mâu thuẫn · chưa gộp CT</small>}</td><td className="numeric">{r.amount==null?'Chưa tính':money(r.amount)}</td></>;
+ const originalCells=(r:any)=><><td>{date(r.date)}</td><td><InvoiceEvidence payment={r}/></td><td><strong>{r.payment}</strong><small>{r.method??'Chưa rõ phương thức'}{r.term?` · ${r.term}`:''}</small></td><td>{doc(r.contract)}<small>{r.contract===total?'Thu trực tiếp · Contract tổng':'Hóa đơn gốc'}</small>{!r.verified&&<small className="invoice-pending">Thiếu VAT / trạng thái Paid hoặc dữ liệu mâu thuẫn · chưa gộp CT</small>}</td><td className="numeric">{r.amount==null?'Chưa tính':money(r.amount)}</td></>;
  const path=(invoice:any,steps:any[],index:number)=>{
   const nodes=[{code:invoice.receipt.contract,date:invoice.receipt.date,refs:invoice.receipt.refs,label:'Nguồn thu ban đầu',kind:'source'},...steps.map((step:any)=>({code:step.to,date:step.date,refs:step.refs,label:step.to===data.ct?'Vào hợp đồng nhận tiền':'Qua hợp đồng trung gian',kind:step.to===data.ct?'done':'in'}))];
   return <div className="moving-path" key={index}>
@@ -40,12 +42,12 @@ export default function PaymentInfo({row,doc,SourceRefs,date,money}:any){
    <div className="ledger-scroll"><table className="payment-table"><thead><tr><th>CT phát sinh</th><th>Payment code</th><th>E-Invoice ID / Số hóa đơn</th><th>Số tiền phân bổ</th><th>Đường Transfer đã đối chiếu</th></tr></thead>
    <tbody>{data.hubReceipts.map((r:any)=><tr key={r.origin+'|'+r.paymentCode}>
     <td>{doc(r.origin,true)}</td><td><strong>{r.paymentCode}</strong><small>Paid · {r.completeDate}</small></td>
-    <td>{r.invoiceRef}</td><td className="numeric"><strong>{money(r.allocated)}</strong></td>
+    <td><InvoiceEvidence payment={r}/></td><td className="numeric"><strong>{money(r.allocated)}</strong></td>
     <td>{r.path.map((step:any)=>step.from+' → '+step.to).join(' · ')}</td>
    </tr>)}</tbody></table></div>
    <p className="evidence-caption"><strong>Tổng bổ sung có căn cứ từ Hub: {money(row.reconciliation?.hubSupplement?.amount??0)} ₫</strong>. Không tự coi E-Invoice ID là số VAT; xem chứng từ gốc trên Hub để xác nhận khi cần.</p>
   </div>}
-  {data.originals.length>0&&<div className="payment-invoices"><h4>Hóa đơn gốc · PaymentList / Hub</h4><div className="ledger-scroll"><table className="payment-table"><thead><tr><th>Ngày hóa đơn gốc</th><th>VAT Invoice No. / E-Invoice</th><th>Payment code / Thanh toán</th><th>Nguồn tiền · CT / DEP</th><th>Số tiền hóa đơn</th><th>Truy vết / căn cứ</th></tr></thead><tbody>{data.originals.map((r:any)=><tr className="payment-original" key={r.id} data-invoice={r.id}>{originalCells(r)}<td><SourceRefs refs={r.refs??[]}/></td></tr>)}</tbody></table></div></div>}
+  {data.originals.length>0&&<div className="payment-invoices"><h4>Hóa đơn gốc · PaymentList / Hub</h4><div className="ledger-scroll"><table className="payment-table"><thead><tr><th>Ngày thu gốc</th><th>Số hóa đơn / E-Invoice</th><th>Payment code / Thanh toán</th><th>Nguồn tiền · CT / DEP</th><th>Số tiền hóa đơn</th><th>Truy vết / căn cứ</th></tr></thead><tbody>{data.originals.map((r:any)=><tr className="payment-original" key={r.id} data-invoice={r.id}>{originalCells(r)}<td><SourceRefs refs={r.refs??[]}/></td></tr>)}</tbody></table></div></div>}
   {!row.receipts?.length&&<p className="evidence-caption">Chưa tìm thấy hóa đơn thu gốc trong bộ nguồn.</p>}
   {row.kind==='contract'?<>
    <section className="moving-card moving-in" aria-label="Moving-in · Phân bổ vào hợp đồng">
@@ -57,10 +59,10 @@ export default function PaymentInfo({row,doc,SourceRefs,date,money}:any){
     {data.invoices.length>0&&<div className="moving-scroll"><table className="moving-table"><colgroup><col className="moving-col-invoice"/><col className="moving-col-source"/><col className="moving-col-amount"/><col className="moving-col-trace"/></colgroup><thead><tr><th>Hóa đơn gốc</th><th>Nguồn tiền / Thanh toán</th><th className="moving-amount">Số tiền (₫)</th><th className="moving-trace-heading">Truy vết</th></tr></thead>{data.invoices.map((invoice:any,index:number)=>{
      const r=invoice.receipt,isOpen=expanded[invoice.id]??index===0,pathId=`moving-${prefix}-${index}`;
      return <tbody className={isOpen?'moving-invoice is-open':'moving-invoice'} key={invoice.id}>
-      <tr data-invoice={invoice.id}><td><strong>{r.vat||'Chưa có số VAT'}</strong><time>{date(r.date)}</time></td><td>{doc(r.contract,true)}<small>{r.payment}</small><small>{r.method||'Chưa rõ phương thức'}{r.term?` · ${r.term}`:''}</small>{!r.verified&&<small className="moving-warning">Hóa đơn chưa xác minh</small>}</td><td className="moving-amount"><strong>{invoice.amount==null?'Chưa tính':money(invoice.amount)}</strong></td><td className="moving-trace-cell"><button type="button" className="moving-toggle" aria-label={`Luồng phân bổ hóa đơn ${r.vat||r.payment}`} aria-expanded={isOpen} aria-controls={pathId} onClick={()=>setExpanded(value=>({...value,[invoice.id]:!isOpen}))}>Luồng<FlowIcon kind="chevron"/></button></td></tr>
+      <tr data-invoice={invoice.id}><td><InvoiceEvidence payment={r}/><time>Ngày thu: {date(r.date)}</time></td><td>{doc(r.contract,true)}<small>{r.payment}</small><small>{r.method||'Chưa rõ phương thức'}{r.term?` · ${r.term}`:''}</small>{!r.verified&&<small className="moving-warning">Hóa đơn chưa xác minh</small>}</td><td className="moving-amount"><strong>{invoice.amount==null?'Chưa tính':money(invoice.amount)}</strong></td><td className="moving-trace-cell"><button type="button" className="moving-toggle" aria-label={`Luồng phân bổ hóa đơn ${invoiceLabel(r)||r.payment}`} aria-expanded={isOpen} aria-controls={pathId} onClick={()=>setExpanded(value=>({...value,[invoice.id]:!isOpen}))}>Luồng<FlowIcon kind="chevron"/></button></td></tr>
       <tr className="moving-history-row" hidden={!isOpen}><td colSpan={4}>
        <div className="moving-history" id={pathId}>
-        <p className="moving-history-title"><strong>Lịch sử phân bổ</strong><span> · Hóa đơn {r.vat||r.payment}</span></p>
+        <p className="moving-history-title"><strong>Lịch sử phân bổ</strong><span> · Hóa đơn {invoiceLabel(r)||r.payment}</span></p>
         {invoice.amount!==null&&Math.abs(invoice.amount-r.amount)>1&&<p className="moving-partial">Giá trị hóa đơn gốc: {money(r.amount)} ₫ · Phân bổ vào CT này: {money(invoice.amount)} ₫</p>}
         {invoice.paths.map((steps:any[],i:number)=>path(invoice,steps,i))}
         {invoice.warnings.map((warning:string)=><p className="moving-warning" key={warning}>{warning}</p>)}

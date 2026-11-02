@@ -94,6 +94,7 @@ export function buildContractGroups(data,input,{paymentTrace=false}={}){
    }
    const r=rawByPayment.get(d.payment);
    return {id:d.id,payment:d.payment,contract:d.contract,ct,date:d.date,vat:d.vat,amount:d.amount,allocated,
+    ...Object.fromEntries(['invoiceNumber','invoiceDate','invoiceAmount','eInvoiceKey','invoiceSource','hubURL'].filter(k=>data.receiptMeta?.[d.payment]?.[k]!=null).map(k=>[k,data.receiptMeta[d.payment][k]])),
     method:r?raw['AH'+r]??null:data.receiptMeta?.[d.payment]?.method??null,term:r?raw['AJ'+r]??null:data.receiptMeta?.[d.payment]?.term??null,refs:d.refs,
     cells:{H:null,I:null,J:null},verified:invoiceEligible(d)};
   });

@@ -4,6 +4,8 @@ import {contractRoot,projectHubContract,mergeHubFinanceFacts} from './hub-contra
 import {hubDocumentId} from './hub-document.mjs';
 export {contractRoot,projectContractPayments,projectHubContract,projectHubDisplayedTables,mergeDisplayedHubContract,hubDisplayedTablesFromDocument} from './hub-contract.mjs';
 export {readHubPolicy} from './hub-policy.mjs';
+export {projectLearnerPaymentPage,mergeLearnerFinance} from './hub-learner-payments.mjs';
+export {projectPaymentInvoice,mergePaymentInvoice,paymentInvoiceNumber,parseInvoiceText,validateInvoice,invoiceReadsComplete,eInvoiceKey} from './hub-invoice.mjs';
 export const COURSE_NETWORK_CHANNEL='promotion-hub/course-network/v1';
 const HUB='https://hub24.apollo.vn:7777';
 const text=v=>typeof v==='string'?v.trim().replace(/\s+/g,' '):'';

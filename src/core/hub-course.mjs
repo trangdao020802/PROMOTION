@@ -63,11 +63,11 @@ export function courseRequest(v){
  if(!v||typeof v!=='object'||typeof v.ct!=='string'||typeof v.student!=='string'||typeof v.url!=='string')return null;
  const ct=v.ct.trim().toUpperCase(),student=v.student.trim();
  if(!(v.readFinance===true?hubDocumentCode(ct):/^[A-Z0-9]+-CT-\d{4,20}$/.test(ct))||!/^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,149}$/.test(student)||Object.hasOwn(Object.prototype,student))return null;
- try{const u=new URL(v.url);if(u.origin!==HUB||u.username||u.password||u.hash||!(v.readFinance===true?hubDocumentId(u.href,ct):!u.search&&/^\/contract\/detail\/[1-9]\d{0,14}\/?$/i.test(u.pathname))||v.readPolicy!==undefined&&typeof v.readPolicy!=='boolean'||v.readFinance!==undefined&&typeof v.readFinance!=='boolean')return null;return {ct,student,url:u.href,...(v.readPolicy!==undefined?{readPolicy:v.readPolicy}:{}),...(v.readFinance!==undefined?{readFinance:v.readFinance}:{})};}catch{return null;}
+ try{const u=new URL(v.url);if(u.origin!==HUB||u.username||u.password||u.hash||!(v.readFinance===true?hubDocumentId(u.href,ct):!u.search&&/^\/contract\/detail\/[1-9]\d{0,14}\/?$/i.test(u.pathname))||v.readPolicy!==undefined&&typeof v.readPolicy!=='boolean'||v.readFinance!==undefined&&typeof v.readFinance!=='boolean'||v.refreshFinance!==undefined&&typeof v.refreshFinance!=='boolean')return null;return {ct,student,url:u.href,...(v.readPolicy!==undefined?{readPolicy:v.readPolicy}:{}),...(v.readFinance!==undefined?{readFinance:v.readFinance}:{}),...(v.refreshFinance!==undefined?{refreshFinance:v.refreshFinance}:{})};}catch{return null;}
 }
 export function coursePayload(v,expected){
  const request=courseRequest(expected);
- if(!request||!v||typeof v!=='object'||Object.keys(v).some(k=>!['ct','student','url','readPolicy','readFinance','courseState','inheritedCourses','hubContract','hubPolicy','hubPolicyError',...COURSE_FIELDS].includes(k))||v.ct!==request.ct||v.student!==request.student||v.url!==request.url)return null;
+ if(!request||!v||typeof v!=='object'||Object.keys(v).some(k=>!['ct','student','url','readPolicy','readFinance','refreshFinance','courseState','inheritedCourses','hubContract','hubPolicy','hubPolicyError',...COURSE_FIELDS].includes(k))||v.ct!==request.ct||v.student!==request.student||v.url!==request.url)return null;
  const result={ct:request.ct,student:request.student,url:request.url};
  if(request.readFinance===true){
   if(!validateHubContract(v.hubContract)||v.hubContract.ct!==request.ct||v.hubContract.contractId!==hubDocumentId(request.url,request.ct))return null;

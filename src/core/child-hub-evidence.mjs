@@ -1,6 +1,7 @@
 import {hubDocumentCode} from './hub-document.mjs';
 import {coursePayload} from './hub-course.mjs';
 import {validateHubContract} from './hub-contract.mjs';
+import {mergePaymentInvoice,paymentInvoiceNumber,eInvoiceKey} from './hub-invoice.mjs';
 
 const code=hubDocumentCode;
 export const childFactKey=({datasetId,masterCt,ct,student})=>
@@ -10,6 +11,11 @@ export function mergeChildFinancialFact(prior,next){
  const missing=['payments','movements'].filter(k=>next.hubContract[k]?.state!=='read');
  const hubContract={...next.hubContract};
  for(const k of missing)if(prior.hubContract[k]?.state==='read')hubContract[k]=prior.hubContract[k];
+ if(hubContract.payments.state==='read')hubContract.payments={...hubContract.payments,rows:hubContract.payments.rows.map(p=>{
+  const old=prior.hubContract.payments.rows.find(q=>q.code===p.code&&Math.abs(q.amount-p.amount)<=1);
+  return old?mergePaymentInvoice(p,old):p;
+ })};
+ if(!hubContract.relatedFinance&&prior.hubContract.relatedFinance)hubContract.relatedFinance=prior.hubContract.relatedFinance;
  return {...next,hubContract,lastReadMissing:missing};
 }
 export function childFactInput({datasetId,masterCt,ct,student,url,payload,parentCt=null}){
@@ -35,7 +41,7 @@ export function compareChildFacts(fact,row){
   const candidates=original.filter(r=>equal(r.payment,p.code));
   const receipt=candidates.length===1?candidates[0]:null;
   return {code:p.code,amount:p.amount,method:p.method,completeDate:p.completeDate,complete:p.complete,
-   invoice:receipt?.vat??null,sourceAmount:amount(receipt?.amount),
+   invoice:paymentInvoiceNumber(p)??receipt?.vat??null,invoiceDate:p.invoice?.date??null,invoiceAmount:p.invoice?.amount??null,eInvoiceKey:p.eInvoiceKey??eInvoiceKey(p.invoiceRef),invoiceConflicts:p.invoice?.conflicts??[],sourceAmount:amount(receipt?.amount),
    status:receipt&&Math.abs((amount(receipt.amount)??0)-p.amount)<=1?'matched':receipt?'conflict':'missing-source'};
  });
  const transfers=movement.filter(e=>equal(e.from,fact.ct)||equal(e.to,fact.ct)).map(e=>({

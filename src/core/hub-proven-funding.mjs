@@ -6,15 +6,23 @@ import {childFactKey} from './child-hub-evidence.mjs';
 import {buildAccounts,unionReceipts,unionTransfers} from './reconcile.mjs';
 import {buildContractGroups} from './contracts.mjs';
 import {paymentAllocations} from './payment-allocations.mjs';
+import {financeBundle} from './hub-finance-bundle.mjs';
+import {paymentInvoiceNumber,eInvoiceKey} from './hub-invoice.mjs';
 const day=value=>typeof value==='number'?value:(Date.parse(String(value)+'T00:00:00Z')-Date.UTC(1899,11,30))/86400000;
 const positive=value=>typeof value==='number'&&Number.isFinite(value)&&value>0;
 const signature=m=>JSON.stringify([m.from,m.to,Math.floor(m.date)]);
 const unique=a=>[...new Set(a)];
 export function hubFundingSources(input,{datasetId,facts=[],links=[]}={}){
  const urls=new Map(links.map(l=>[l.ct,l.url]));
- const valid=facts.filter(f=>f.datasetId===datasetId&&code(f.masterCt)?.includes('-CT-')&&f.student&&code(f.ct)&&
+ const parents=facts.filter(f=>f.datasetId===datasetId&&code(f.masterCt)?.includes('-CT-')&&f.student&&code(f.ct)&&
   f.id===childFactKey(f)&&urls.get(f.ct)===f.url&&hubDocumentId(f.url,f.ct)===f.hubContract?.contractId&&
   validateHubContract(f.hubContract)&&f.hubContract.ct===f.ct);
+ const valid=[...parents];
+ for(const parent of parents)for(const doc of financeBundle(parent.hubContract)){
+  if(urls.has(doc.ct)&&urls.get(doc.ct)!==doc.url)continue;
+  if(valid.some(f=>f.masterCt===parent.masterCt&&f.student===parent.student&&f.ct===doc.ct))continue;
+  const f={...parent,...doc};f.id=childFactKey(f);valid.push(f);
+ }
  const rawMoves=unionTransfers(input.transferSources??[]).rows,rawCash=unionReceipts(input.cashSources??[]).rows;
  const existingCodes=new Set(rawCash.map(p=>p.payment.toUpperCase())),rawByPair=new Map(),hubByPair=new Map(),pending=[];
  for(const m of rawMoves){const k=signature(m),list=rawByPair.get(k)??[];list.push(m);rawByPair.set(k,list);}
@@ -54,13 +62,14 @@ export function hubFundingSources(input,{datasetId,facts=[],links=[]}={}){
   if(f.hubContract.payments.state!=='read')continue;
   for(const [i,p]of f.hubContract.payments.rows.entries()){
    if(!p.code||existingCodes.has(p.code.toUpperCase()))continue;
-   if(!p.invoiceRef||p.complete!==true||!p.completeDate||!positive(p.amount)||/transfer|moving/i.test(p.method+' '+p.type)){
+   if(!p.invoiceRef||p.invoice?.conflicts?.length||p.invoice?.amount!=null&&Math.abs(p.invoice.amount-p.amount)>1||p.complete!==true||!p.completeDate||!positive(p.amount)||p.typeId==='10'||/transfer|moving|deposit to contract|^other$/i.test((p.method+' '+p.type).trim())){
     pending.push({origin:f.ct,paymentCode:p.code,reason:'Thiếu hóa đơn Paid gốc, ngày hoặc mã E-Invoice / VAT'});continue;
    }
    if(!reaches(f.ct,f.masterCt)){pending.push({origin:f.ct,paymentCode:p.code,reason:'Chưa có đường Moving / Transfer về CT tổng'});continue;}
-   addedCash.push({payment:p.code,contract:f.ct,student:'',vat:p.invoiceRef,date:day(p.completeDate),amount:p.amount,paid:true,cancelled:false,
+   const invoiceNo=paymentInvoiceNumber(p);
+   addedCash.push({payment:p.code,contract:f.ct,student:'',vat:invoiceNo??p.invoiceRef,date:day(p.completeDate),amount:p.amount,paid:true,cancelled:false,
     ref:{file:'Hub · '+f.ct,sheet:'Payment Info · Paid',row:i+1,url:f.url}});
-   meta[p.code]={method:p.method||null,term:null};
+   meta[p.code]={method:p.method||null,term:null,invoiceNumber:invoiceNo,invoiceDate:p.invoice?.date??null,invoiceAmount:p.invoice?.amount??null,eInvoiceKey:p.eInvoiceKey??eInvoiceKey(p.invoiceRef),invoiceSource:p.invoice?.source??null,hubURL:f.url};
   }
  }
  return {input:{...input,cashSources:[...(input.cashSources??[]),{rows:addedCash}],transferSources:[...transfers,{rows:addedMoves}]},cash:addedCash,moves:addedMoves,pending,meta,changed:!!(addedCash.length||addedMoves.length||blocked.size)};
@@ -79,7 +88,7 @@ export function attachHubFunding(model,{datasetId,facts,links}){
   group.account=fresh.account;group.receipts=fresh.receipts;group.raw=fresh.raw;
   group.warnings=unique([...group.warnings.filter(w=>!w.includes('chưa có phương thức thanh toán')), ...fresh.warnings]);
   const codesInPath=new Set([group.ct,...(group.account.movementHistory??[]).flatMap(m=>[m.from,m.to])]);
-  group.warnings=unique([...group.warnings,...extra.pending.filter(p=>p.from&&codesInPath.has(p.from)&&codesInPath.has(p.to)).map(p=>p.reason)]);
+  group.warnings=unique([...group.warnings,...extra.pending.filter(p=>p.from&&codesInPath.has(p.from)&&codesInPath.has(p.to)||p.origin&&codesInPath.has(p.origin)).map(p=>p.reason)]);
   const allocations=paymentAllocations({...group,cells:{...group.cells,contractTotal:group.ct},reconciliation:group.account});
   const receipts=allocations.invoices.filter(r=>codes.has(r.receipt.payment)).map(r=>({origin:r.receipt.contract,paymentCode:r.receipt.payment,invoiceRef:r.receipt.vat,paid:r.receipt.amount,allocated:r.amount,
    completeDate:new Date(Date.UTC(1899,11,30)+r.receipt.date*86400000).toISOString().slice(0,10),path:r.paths[0]??[]}));

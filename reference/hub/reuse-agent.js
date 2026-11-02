@@ -105,6 +105,11 @@
  window.addEventListener('message',event=>{
   const j=job,m=event.data;if(!j||event.origin!==P.HUB||m?.channel!==channel||m.id!==j.id)return;
   const child=j.frame&&event.source===j.frame.contentWindow;if(event.source!==window&&!child)return;
+  if(m.type==='invoice-pdf'&&!child&&j.course?.readFinance===true&&m.ct===j.course.ct&&typeof m.ticket==='string'&&/^[\w-]{1,80}$/.test(m.ticket)&&N.eInvoiceKey(m.key)&&m.bytes instanceof ArrayBuffer&&m.bytes.byteLength<=8*1024*1024){
+   void (async()=>{let invoice=null;try{const reader=await import(chrome.runtime.getURL('invoice-pdf.mjs'));invoice=await reader.readInvoicePDF(new Uint8Array(m.bytes));}catch{}
+    if(job===j)post(j,'invoice-pdf-result',{ticket:m.ticket,key:m.key,invoice:N.validateInvoice(invoice)?invoice:null});
+   })();return;
+  }
   if(m.type==='route-missing'&&!child&&j.course){clearTimeout(j.routeTimer);readPage(j);return;}
   if(m.type==='course-fetch'&&!child&&j.course){clearTimeout(j.routeTimer);j.routeTimer=setTimeout(()=>readPage(j),Math.min(8000,Math.max(0,j.deadline-Date.now())));return;}
   if(m.type==='course'&&j.course){

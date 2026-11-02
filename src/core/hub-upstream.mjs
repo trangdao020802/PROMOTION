@@ -1,4 +1,5 @@
 import {hubDocumentCode} from './hub-document.mjs';
+import {financeBundle} from './hub-finance-bundle.mjs';
 export const ctCode=hubDocumentCode;
 export const ancestryKey=({datasetId,masterCt,student,parentCt})=>
  ['hub-upstream',String(datasetId),String(masterCt),String(student),String(parentCt)].join('|');
@@ -6,6 +7,7 @@ const unique=items=>[...new Set(items.map(ctCode).filter(Boolean))];
 export function knownFinanceDocuments(row,settings=[],{datasetId,masterCt,student}){
  const known=new Set([masterCt,...(row.sourceContracts??[])]),moves=row.account?.movementHistory??row.reconciliation?.movementHistory??[];
  const related=settings.filter(s=>s.datasetId===datasetId&&s.masterCt===masterCt&&s.student===student);
+ for(const s of [...related])for(const d of financeBundle(s.hubContract))related.push({...s,...d});
  for(let depth=0;depth<16;depth++){
   const before=known.size;
   for(const m of moves)if(known.has(m.to)&&Number(m.amount)>0&&ctCode(m.from))known.add(m.from);

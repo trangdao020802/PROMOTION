@@ -10,6 +10,7 @@ await fs.mkdir('dist',{recursive:true});
 for(const name of await fs.readdir('dist'))await fs.rm('dist/'+name,{recursive:true,force:true});
 await fs.mkdir('dist/assets',{recursive:true});
 await fs.mkdir('dist/downloads',{recursive:true});
+await build({entryPoints:['src/bridge/invoice-pdf.mjs'],bundle:true,minify:true,format:'esm',target:'es2022',outfile:'reference/hub/invoice-pdf.mjs'});
 await build({entryPoints:['src/core/hub-voucher.mjs'],bundle:true,format:'iife',globalName:'PromotionHubVoucher',target:'es2022',outfile:'reference/hub/voucher-core.js'});
 await build({entryPoints:['src/core/hub-course.mjs'],bundle:true,format:'iife',globalName:'PromotionHubCourse',target:'es2022',outfile:'reference/hub/course-core.js'});
 await build({entryPoints:['src/core/hub-course-network.mjs'],bundle:true,format:'iife',globalName:'PromotionHubCourseNetwork',target:'es2022',outfile:'reference/hub/course-network-core.js'});

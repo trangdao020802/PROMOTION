@@ -8,6 +8,7 @@
  if(window.top!==window&&!managed)return;
  const frameId=managed?window.name.slice('promotion-hub-read:'.length):null;
  let route=null,active=null,buffer=null,controller=null,serviceCapture=null;
+ const learnerCache=new Map(),pdfPending=new Map();
  const originalFetch=window.fetch,proto=window.XMLHttpRequest?.prototype,originalOpen=proto?.open;
  const publish=data=>(managed?window.parent:window).postMessage({channel,...data},P.HUB);
  function endpoint(value,method='GET'){
@@ -30,7 +31,10 @@
    if(!/^(?:0|[1-9]\d{0,14})$/.test(String(role??'')))continue;
    const deposit=request?.readFinance&&request.ct.includes('-DEP-'),service=injector.get(deposit?'depositService':'contractService');if(typeof service?.[deposit?'getDepositDetail':'getContractDetail']!=='function')continue;
    const invoke=name=>typeof service[name]==='function'?params=>service[name](params):undefined;
-   return {role:String(role),deposit,read:id=>deposit?service.getDepositDetail({depositId:id,userRoleId:role}):service.getContractDetail({contractId:id,userRoleId:role}),payments:invoke(deposit?'getDepositPayment':'getContractPayment'),policy:{info:invoke('getContractInfoForUpdate'),prices:invoke('getCoursePrice'),groups:invoke('getApplicableGroupDiscount'),voucher:invoke('checkContractGiftCode')}};
+   const optional=name=>{try{return injector.get(name);}catch{return null;}},lead=optional('leadService'),invoice=optional('depositService');
+   return {role:String(role),deposit,read:id=>deposit?service.getDepositDetail({depositId:id,userRoleId:role}):service.getContractDetail({contractId:id,userRoleId:role}),payments:invoke(deposit?'getDepositPayment':'getContractPayment'),
+    learnerPayments:typeof lead?.getKidPayments==='function'?params=>lead.getKidPayments(params):null,invoice:typeof invoice?.printEInvoice==='function'?params=>invoice.printEInvoice(params):null,
+    policy:{info:invoke('getContractInfoForUpdate'),prices:invoke('getCoursePrice'),groups:invoke('getApplicableGroupDiscount'),voucher:invoke('checkContractGiftCode')}};
   }catch{}
   return null;
  }
@@ -43,6 +47,59 @@
   return body+decoder.decode();
  }
  const fetchJSON=async(url,signal)=>JSON.parse(await fetchBody(url,signal));
+ async function addLearnerFinance(projection,root,client,signal,request){
+  const learner=projection?.hubContract?.learner;if(!learner||!client?.learnerPayments||signal.aborted)return;
+  const key=client.role+'|'+learner.leadId+'|'+learner.kidId;
+  if(request?.refreshFinance)learnerCache.delete(key);
+  const old=learnerCache.get(key);
+  let pending=old&&Date.now()-old.time<60000?old.pending:null;
+  if(!pending){
+   pending=(async()=>{const pages=[];let count=0;
+    for(let p=1;p<=10;p++){
+     if(signal.aborted)break;
+     let value;try{value=await bounded(client.learnerPayments({kidId:learner.kidId,p,ps:100}),1200);}catch{break;}
+     const page=N.projectLearnerPaymentPage(value,root);if(!page)break;pages.push(page);count+=page.count;
+     if(!page.count||page.total===null||count>=page.total)break;
+    }return pages;
+   })();
+   learnerCache.set(key,{time:Date.now(),pending});if(learnerCache.size>40)learnerCache.delete(learnerCache.keys().next().value);
+  }
+  const pages=await bounded(pending,1800);
+  if(!pages?.length||pages.at(-1).total===null||pages.reduce((n,p)=>n+p.count,0)<pages.at(-1).total)learnerCache.delete(key);
+  if(pages&&!signal.aborted)projection.hubContract=N.mergeLearnerFinance(projection.hubContract,pages);
+ }
+ async function invoiceBytes(value,signal){
+  const url=new URL(value,P.HUB);
+  if(url.protocol!=='https:'||url.username||url.password||url.hash||/^(?:localhost|127\.|0\.|\[::1\])/.test(url.hostname))return null;
+  const r=await originalFetch.call(window,url.href,{method:'GET',credentials:url.origin===P.HUB?'same-origin':'omit',cache:'no-store',redirect:'error',referrerPolicy:'no-referrer',signal});
+  if(!r.ok||!/application\/pdf|application\/octet-stream/i.test(r.headers.get('content-type')??''))return null;
+  const reader=r.body?.getReader();if(!reader)return null;let size=0;const chunks=[];
+  try{for(;;){const part=await reader.read();if(part.done)break;size+=part.value.byteLength;if(size>8*1024*1024||signal.aborted){await reader.cancel();return null;}chunks.push(part.value);}}catch{try{await reader.cancel();}catch{}return null;}
+  const bytes=new Uint8Array(size);let offset=0;for(const part of chunks){bytes.set(part,offset);offset+=part.length;}
+  return String.fromCharCode(...bytes.slice(0,5))==='%PDF-'?bytes.buffer:null;
+ }
+ async function addInvoicePDF(projection,root,client,request,signal,jobId){
+  if(!request.readFinance||!projection?.hubContract||!client?.invoice||!root?.CenterId||signal.aborted)return;
+  const started=Date.now();let tried=0;
+  for(const row of projection.hubContract.payments.rows){
+   if(signal.aborted||Date.now()-started>5000||tried>=4)break;
+   const key=N.eInvoiceKey(row.eInvoiceKey??row.invoiceRef);
+   if(!key||row.complete!==true||row.amount<=0||row.invoice?.date&&row.invoice?.amount!==null)continue;
+   tried++;const ctrl=new AbortController(),stop=()=>ctrl.abort(),timer=setTimeout(stop,4000);signal.addEventListener('abort',stop,{once:true});
+   try{
+    const result=await bounded(client.invoice({key,centerId:root.CenterId,...(row.eInvoiceVersion?{version:row.eInvoiceVersion}:{})}),1300);
+    if(!result||result.Error||typeof result.PdfUrl!=='string'||ctrl.signal.aborted)continue;
+    const bytes=await invoiceBytes(result.PdfUrl,ctrl.signal);if(!bytes)continue;
+    const ticket=crypto.randomUUID();
+    const parsed=new Promise(resolve=>{pdfPending.set(ticket,{jobId,key,resolve});});
+    publish({type:'invoice-pdf',id:jobId,ct:request.ct,ticket,key,bytes});
+    const invoice=await bounded(parsed,2300);pdfPending.delete(ticket);
+    if(signal.aborted||ctrl.signal.aborted||!N.validateInvoice(invoice))continue;
+    const merged=N.mergePaymentInvoice(row,{invoice});if(invoice.amount!==null&&Math.abs(invoice.amount-row.amount)>1)merged.invoice.conflicts=[...new Set([...merged.invoice.conflicts,'amount'])];
+    Object.assign(row,merged);
+   }catch{}finally{clearTimeout(timer);signal.removeEventListener('abort',stop);}
+  }
+ }
  async function addDisplayedFinance(projection,request,signal){
   if(!request.readFinance||!projection?.hubContract||typeof DOMParser!=='function')return;
   if(projection.hubContract.payments?.rows?.every(p=>p.invoiceRef)&&projection.hubContract.payments.rows.length&&projection.hubContract.movements?.state==='read')return;
@@ -100,6 +157,9 @@
    if(m.type==='activate'&&m.id===frameId&&((m.course&&globalThis.PromotionHubCourse?.courseRequest(m.course)?.url===location.origin+location.pathname.replace(/\/$/,''))||(m.codes&&I.indexURLMatches(location.href,m.codes,m.id,m.fields)))){active={id:m.id};if(buffer)publish({id:m.id,...buffer});}
    return;
   }
+  if(m.type==='invoice-pdf-result'){
+   const pending=pdfPending.get(m.ticket);if(pending&&pending.jobId===m.id&&pending.key===m.key&&active?.id===m.id){pdfPending.delete(m.ticket);pending.resolve(N.validateInvoice(m.invoice)?m.invoice:null);}return;
+  }
   if(m.type==='stop'&&active?.id===m.id){controller?.abort();active=null;return;}
   if(m.type==='learn-route'){
    const request=globalThis.PromotionHubCourse?.courseRequest(m.course);
@@ -125,8 +185,10 @@
     // comes exclusively from its live session, including an existing frame.
     const source=capture.url||N.courseDetailEndpoint(P.HUB+(client.deposit?'/api/Deposit/GetDepositDetail?depositId=':'/api/Contract/GetContractDetail?contractId=')+contractId+'&userRoleId='+client.role,request.url);
     const projection=source&&N.projectContractDetail(value,source,request.url),root=N.contractRoot(value);
-    if(projection&&root){const payments=N.projectContractPayments(await paymentRead,contractId),facts=N.projectHubContract(root,{payments,paymentState:payments?'read':'unavailable'});if(facts)projection.hubContract=facts;}
+    if(projection&&root){const rawPayments=await paymentRead,payments=N.projectContractPayments(rawPayments,contractId),facts=N.projectHubContract({...root,...(Array.isArray(rawPayments)?{ListPayment:rawPayments}:{})},{payments,paymentState:payments?'read':'unavailable'});if(facts)projection.hubContract=facts;}
     await addDisplayedFinance(projection,request,signal);
+    await addLearnerFinance(projection,root,client,signal,request);
+    await addInvoicePDF(projection,root,client,request,signal,m.id);
     if(projection&&!request.readFinance&&request.readPolicy!==false&&client.policy.prices&&client.policy.groups&&!signal.aborted){
      const rules=await N.readHubPolicy(root,client.policy,{signal,budgetMs:5000});
      if(rules.policy)projection.hubPolicy=rules.policy;else projection.hubPolicyError=rules.policyError;

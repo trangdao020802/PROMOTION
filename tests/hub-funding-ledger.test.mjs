@@ -10,6 +10,7 @@ import {projectContractDetail,parseContractDetailProjection} from '../src/core/h
 import {childFactInput,childFactKey,mergeChildFinancialFact} from '../src/core/child-hub-evidence.mjs';
 import {paymentAllocations} from '../src/core/payment-allocations.mjs';
 import {knownFinanceDocuments} from '../src/core/hub-upstream.mjs';
+import {projectLearnerPaymentPage,mergeLearnerFinance} from '../src/core/hub-learner-payments.mjs';
 const master='QA2610-CT-000900',mids=['QA2610-CT-000901','QA2610-CT-000902'],roots=['QA2506-CT-000801','QA2506-DEP-000802'],student='QA-RECEIVER',datasetId='qa-history';
 const invoiceRefs=['0000801','0000802'];
 const move=(from,to,amount=4725000)=>({sourceKey:'t',sourceRow:2,type:'Transfer',date:parseDate('2026-10-31'),from,to,fromStudent:student,toStudent:student,out:amount,amount});
@@ -66,4 +67,24 @@ test('a partial retry preserves prior financial evidence; an explicitly read emp
  const prior=fact(0),next=structuredClone(prior);next.hubContract.payments={state:'unavailable',rows:[]};next.hubContract.movements={state:'pending',rows:[]};
  const merged=mergeChildFinancialFact(prior,next);assert.equal(merged.hubContract.payments.rows.length,1);assert.equal(merged.hubContract.movements.rows.length,1);assert.deepEqual(merged.lastReadMissing,['payments','movements']);
  next.hubContract.payments={state:'read',rows:[]};assert.equal(mergeChildFinancialFact(prior,next).hubContract.payments.rows.length,0);
+});
+test('printed invoice no, issue date and amount survive funding, recalculation and a later incomplete read',()=>{
+ const saved=facts(),p=saved[0].hubContract.payments.rows[0];p.invoiceRef='12345678-1234-4567-89ab-123456789abc';p.eInvoiceKey=p.invoiceRef;
+ p.invoice={number:'0000424',date:'2025-06-27',amount:4725000,source:'e-invoice-pdf',conflicts:[]};
+ const retry=structuredClone(saved[0]);delete retry.hubContract.payments.rows[0].invoice;const merged=mergeChildFinancialFact(saved[0],retry);assert.equal(merged.hubContract.payments.rows[0].invoice.number,'0000424');
+ const f=fixture();attachHubFunding(f.model,{datasetId,facts:saved,links:links(saved)});const after=row(f.model),receipt=after.receipts.find(r=>r.contract===roots[0]);
+ assert.equal(after.cells.W,10800000);assert.equal(receipt.vat,'0000424');assert.equal(receipt.invoiceDate,'2025-06-27');assert.equal(receipt.invoiceAmount,4725000);assert.equal(receipt.eInvoiceKey,p.invoiceRef);
+ const bad=structuredClone(saved);bad[0].hubContract.payments.rows[0].invoice.amount=5000000;const check=fixture();attachHubFunding(check.model,{datasetId,facts:bad,links:links(bad)});assert.equal(row(check.model).cells.W,6075000);
+});
+test('one learner history read funds both multi-hop branches without reading unrelated learner courses',()=>{
+ const f=fixture(),group=(ct,id,ListPayment)=>({ContractDepositNo:ct,ContractDepositId:id,ListPayment}),incoming=(code,from)=>({PaymentCode:code,Amount:4725000,PaymentDate:'2026-10-31',Status:'Paid',PaymentType:'Transfer fee',RelatedContractDepositNo:from});
+ const root={ContractId:990,ContractNo:master,LeadId:90,KidId:91,ListCourseInfo:[],ListMovingIn:[]};
+ const page=projectLearnerPaymentPage({TotalCount:5,ListData:[group(master,990,mids.map((ct,i)=>incoming('QA2610-PAY-00090'+i,ct))),
+  ...mids.map((ct,i)=>group(ct,901+i,[incoming('QA2610-PAY-00091'+i,roots[i])])),
+  ...roots.map((ct,i)=>group(ct,8800+i,[{PaymentCode:'QA2506-PAY-00080'+i,Amount:4725000,PaymentDate:'2025-06-27',Status:'Paid',PaymentType:'Payment',InvoiceNo:'000042'+(4+i),InvoiceDate:'2025-06-27',InvoiceAmount:4725000}]))]},root);
+ const hubContract=mergeLearnerFinance(projectHubContract(root),[page]),url='https://hub24.apollo.vn:7777/contract/detail/990';
+ const main={datasetId,masterCt:master,ct:master,student,url,hubContract,id:childFactKey({datasetId,masterCt:master,ct:master,student})};
+ attachHubFunding(f.model,{datasetId,facts:[main],links:[{ct:master,url}]});const after=row(f.model);
+ assert.equal(after.cells.W,10800000);assert.equal(after.receipts.length,3);assert.equal(after.cells.ctCheck,'OK');assert.equal(paymentAllocations(after).pending.length,0);
+ assert.deepEqual(after.receipts.filter(r=>roots.includes(r.contract)).map(r=>r.vat).sort(),['0000424','0000425']);
 });

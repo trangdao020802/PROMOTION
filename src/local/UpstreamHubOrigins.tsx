@@ -3,6 +3,8 @@ import {localFetch} from './api.mjs';
 import {ctCode,upstreamCandidates,originPaymentSummary} from '../core/hub-upstream.mjs';
 import {compareChildFacts} from '../core/child-hub-evidence.mjs';
 import {hubDocumentId} from '../core/hub-document.mjs';
+import {invoiceReadsComplete} from '../core/hub-invoice.mjs';
+import InvoiceEvidence from './InvoiceEvidence.tsx';
 
 const read=async(path:string,options:any={})=>{
  const response=await localFetch(path,options),json=await response.json();
@@ -15,6 +17,7 @@ function OriginNode({row,ct,parentCt,datasetId,hubLinks,onHubSaved,onRead,onFact
  const [url,setUrl]=useState(link?.url||''),[fact,setFact]=useState<any>(null),[busy,setBusy]=useState(false),
  [error,setError]=useState(''),[status,setStatus]=useState('');
  const task=useRef<AbortController|null>(null);
+ const attempted=useRef(new Set<string>());
  const params=new URLSearchParams({datasetId,masterCt,student,ct,parentCt});
  const scan=async(nextLink:string,signal?:AbortSignal,force=false)=>{
   if(!nextLink||disabled||task.current)return;
@@ -24,14 +27,17 @@ function OriginNode({row,ct,parentCt,datasetId,hubLinks,onHubSaved,onRead,onFact
    setStatus('Đang đọc hóa đơn gốc và Moving-out: '+ct);
    const current=await read('/api/hub-child-facts?'+params,{signal:ctrl.signal});
    if(ctrl.signal.aborted)return;
-   if(!force&&current.fact?.url===nextLink&&current.fact.hubContract?.payments?.state==='read'&&current.fact.hubContract?.movements?.state==='read'){
+   const scope=[datasetId,masterCt,ct,student,nextLink].join('|');
+   if(!force&&current.fact?.url===nextLink&&(invoiceReadsComplete(current.fact.hubContract)&&current.fact.hubContract?.movements?.state==='read'||attempted.current.has(scope))){
     setFact(current.fact);setStatus('Đã có chứng cứ Hub lưu trước đó.');return;
    }
-   const payload=await onRead({ct,student,url:nextLink,readFinance:true},(v:string)=>setStatus(v),ctrl.signal);
+   attempted.current.add(scope);
+   const payload=await onRead({ct,student,url:nextLink,readFinance:true,refreshFinance:force},(v:string)=>setStatus(v),ctrl.signal);
    if(ctrl.signal.aborted)return;
    if(!payload?.hubContract)throw Error('Chưa lấy được Payment Info của CT gốc. Kiểm tra link, phiên Hub và bấm Đọc lại.');
    const saved=await read('/api/hub-child-facts',{method:'PATCH',headers:{'Content-Type':'application/json'},
      body:JSON.stringify({datasetId,masterCt,student,ct,parentCt,url:nextLink,payload,version:current.version}),signal:ctrl.signal});
+   for(const related of saved.relatedLinks??[])onHubSaved?.(related);
    setFact(saved.fact);await onFactsSaved?.();setStatus('Đã lưu chứng từ và tính lại đường chuyển tiền về CT tổng.');
   }catch(e:any){if(!ctrl.signal.aborted)setError(e?.message||'Hub chưa trả thông tin.');}
   finally{if(task.current===ctrl)task.current=null;if(!ctrl.signal.aborted)setBusy(false);}
@@ -72,7 +78,7 @@ function OriginNode({row,ct,parentCt,datasetId,hubLinks,onHubSaved,onRead,onFact
    <p><strong>Chứng từ tại CT gốc:</strong> {fact.hubContract.payments.state==='read'?(summary?.payments.length+' Payment · '+V(summary?.hubPaid)):'Chưa đọc được hóa đơn/Payment Info đầy đủ'}.</p>
    {summary?.payments.map((p:any,i:number)=><p key={i}>
     <strong>{p.paymentCode}</strong> · {V(p.amount)} · {p.complete?'Đã thanh toán trên Hub':'Chưa xác minh Paid'}.
-    <span> E-Invoice ID / Số hóa đơn: {fact.hubContract.payments.rows[i]?.invoiceRef??'Chưa đọc được từ Hub'}</span> ·
+    <InvoiceEvidence payment={fact.hubContract.payments.rows[i]}/> ·
     {counted(p)?'Đã phân bổ có căn cứ trong tổng thu':audit?.payments[i]?.status==='matched'?'Đã có trong PaymentList (không cộng lại)':'CHECK · chờ E-Invoice và đường Transfer đủ căn cứ'}
    </p>)}
    <p><strong>Chặng {ct} → {parentCt}:</strong> {related?'Có Moving-out trên Hub':matchingTransfer?'Có trong Transfer đã nhập':'CHECK · chưa chứng minh được mối liên kết Transfer'}.</p>

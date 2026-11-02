@@ -47,11 +47,11 @@ test('a result requires the current Hub document agent, job, top frame and exact
  ]){await r.send({type:'agent-complete',id:'qa-bound',agentKey:'qa-agent',payload,...m},tab,url,extra);assert.ok(r.store.job);}
  await r.send({type:'agent-complete',id:'qa-bound',agentKey:'qa-agent',payload},20,origin+'/home');assert.equal(r.store.job,undefined);assert.deepEqual(r.mutations,[]);
 });
-function mainRuntime({managed=false}={}){
+function mainRuntime({managed=false,fetcher=null}={}){
  const messages=[],listeners=[],calls=[],xhrLoads=[],pathname=managed?'/contract/detail/12345':'/home';
  class XHR{open(method,url){this.method=method;this.url=url;}addEventListener(type,fn){xhrLoads.push({xhr:this,fn});}}
  const response=(url,value)=>{const bytes=new TextEncoder().encode(JSON.stringify(value));return {ok:true,url,body:{getReader:()=>{let read=false;return {read:async()=>read?{done:true}:(read=true,{done:false,value:bytes}),cancel:async()=>{}};}},clone(){return response(url,value);}};};
- const originalFetch=async(url,options)=>{calls.push({url,options});return response(url,raw());};
+ const originalFetch=async(url,options)=>{calls.push({url,options});return fetcher?fetcher(url,options):response(url,raw());};
  const context=vm.createContext({URL,Date,Promise,WeakMap,TextDecoder,AbortController,console,setTimeout,clearTimeout,location:{origin,pathname,href:origin+pathname}});
  context.window={name:managed?'promotion-hub-read:qa-main':'',fetch:originalFetch,XMLHttpRequest:XHR,addEventListener:(type,fn)=>{if(type==='message')listeners.push(fn);},postMessage:m=>messages.push(m)};
  context.window.parent=managed?{postMessage:m=>messages.push(m)}:context.window;context.window.top=managed?{}:context.window;
@@ -120,6 +120,35 @@ test('an existing application frame supplies its authenticated client and both c
  assert.equal(result.projection.hubContract.payments.rows[0].amount,64260000);assert.equal(result.projection.hubContract.payments.state,'read');
  assert.equal(calls.find(c=>c[0]==='detail')[1].userRoleId,51);assert.equal(calls.find(c=>c[0]==='payments')[1].contractId,'12345');
  assert.equal(r.calls.length,0);assert.ok(!JSON.stringify(result).includes('PRIVATE-DO-NOT-COPY'));assert.equal(r.context.location.href,origin+'/home');
+});
+test('Learner Payments is read by the exact source KidId, cached per learner, and only connected documents leave Hub',async()=>{
+ const r=mainRuntime(),calls=[],detail={...raw(),LeadId:90,KidId:91,CenterId:3};
+ const deposit='QA2610-DEP-000071';
+ const service={getContractDetail:()=>Promise.resolve(detail),getContractPayment:()=>Promise.resolve([]),getKidPayments:params=>{
+  calls.push(params);return Promise.resolve({KidId:91,TotalCount:2,ListData:[
+   {ContractDepositId:12345,ContractDepositNo:course.ct,ListPayment:[{PaymentCode:'QA2610-PAY-000071',Amount:1350000,PaymentDate:'2026-10-31',Status:'Paid',PaymentType:'Deposit to contract',RelatedContractDepositNo:deposit}]},
+   {ContractDepositId:71,ContractDepositNo:deposit,ListPayment:[{PaymentCode:'QA2610-PAY-000072',Amount:1350000,PaymentDate:'2026-10-31',Status:'Paid',PaymentType:'Deposit',InvoiceNo:'0000514',Address:'PRIVATE-DO-NOT-COPY'}]}
+  ]});}};
+ r.context.document={querySelector:()=>({})};r.context.window.angular={element:()=>({injector:()=>({get:name=>name==='$rootScope'?{sessionInfo:{UserRoleId:51}}:service})})};
+ for(let n=0;n<2;n++){r.send({type:'read-course',course:{...course,readPolicy:false}});await drain();}
+ assert.equal(calls.length,1);assert.equal(calls[0].kidId,'91');assert.equal(calls[0].p,1);
+ const result=r.messages.filter(m=>m.type==='course').at(-1);assert.ok(result);assert.equal(result.projection.hubContract.relatedFinance[0].payments.rows[0].invoice.number,'0000514');
+ assert.ok(!JSON.stringify(result).includes('PRIVATE-DO-NOT-COPY'));assert.equal(r.calls.length,0);assert.equal(r.context.location.href,origin+'/home');
+});
+test('a source E-Invoice is read through the existing GET service and its PDF result is bound to job and FKey',async()=>{
+ const bytes=new TextEncoder().encode('%PDF-qa-protocol-fixture');
+ const r=mainRuntime({fetcher:async()=>({ok:true,headers:{get:()=> 'application/pdf'},body:{getReader:()=>{let done=false;return {read:async()=>done?{done:true}:(done=true,{done:false,value:bytes}),cancel:async()=>{}};}}})});
+ const key='12345678-1234-4567-89ab-123456789abc',calls=[],root={...raw(),StudentCode:'QA-OTHER-PAYER',CenterId:3};
+ const service={getContractDetail:()=>Promise.resolve(root),getContractPayment:()=>Promise.resolve([{PaymentId:17,PaymentCode:'QA2506-PAY-000071',Amount:4725000,TotalAmount:4725000,IsComplete:true,CompleteDate:'2025-06-27',EInvoiceFKey:key,EInvoiceVersion:2}]),printEInvoice:params=>{calls.push(params);return Promise.resolve({PdfUrl:origin+'/Content/qa.pdf'});}};
+ r.context.crypto={randomUUID:()=> 'qa-pdf-ticket'};r.context.document={querySelector:()=>({})};r.context.window.angular={element:()=>({injector:()=>({get:name=>name==='$rootScope'?{sessionInfo:{UserRoleId:51},$apply:()=>assert.fail('No model writes')}:service})})};
+ r.send({type:'read-course',course:{...course,readFinance:true,readPolicy:false}});await drain();
+ const packet=r.messages.find(m=>m.type==='invoice-pdf');assert.ok(packet);assert.equal(calls[0].key,key);assert.equal(calls[0].centerId,3);assert.equal(calls[0].version,2);
+ const invoice={number:'0000424',date:'2025-06-27',amount:4725000,source:'e-invoice-pdf',conflicts:[]};
+ r.send({type:'invoice-pdf-result',ticket:packet.ticket,key:'wrong-key',invoice});await drain();assert.ok(!r.messages.some(m=>m.type==='course'));
+ r.send({type:'invoice-pdf-result',ticket:packet.ticket,key,invoice});await drain();
+ const result=r.messages.find(m=>m.type==='course');assert.equal(result.projection.hubContract.payments.rows[0].invoice.number,'0000424');
+ assert.equal(result.projection.hubContract.payments.rows[0].invoice.date,'2025-06-27');assert.equal(result.projection.hubContract.payments.rows[0].invoice.amount,4725000);
+ assert.equal(r.calls.length,1);assert.equal(r.calls[0].options.credentials,'same-origin');assert.ok(!JSON.stringify(result).includes('/Content/qa.pdf'));assert.ok(!JSON.stringify(result).includes('PRIVATE-DO-NOT-COPY'));assert.equal(r.context.location.href,origin+'/home');
 });
 test('a payment lookup timeout preserves course/discount input and ignores a late payment response',async()=>{
  const r=mainRuntime(),timers=[],doc={querySelector:()=>({})};let resolvePayment;

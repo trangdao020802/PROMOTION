@@ -1,3 +1,7 @@
+## Cập nhật 1.6.19 · Số hóa đơn và Learner Payments
+
+Đọc lịch sử Payments theo Lead/Kid của CT, truy CT/DEP nguồn khác học sinh và đọc số hóa đơn, ngày phát hành, tổng tiền từ E-Invoice PDF trong nền. Giữ riêng UUID, không cộng lại transfer; dữ liệu đã lưu được giữ khi đọc thiếu. Cập nhật cầu nối 1.6.19, tải lại Promotion và tab Hub. Xem [hướng dẫn chứng từ](docs/invoice-evidence.md).
+
 # Promotion Studio · Apollo 2026
 
 Web đối chiếu học phí, khuyến mãi và trả góp từ Export Payment ByCourse, PaymentList và Transfer. Mã nguồn chạy độc lập trên hosting tĩnh, không cần ChatGPT Sites hoặc máy chủ API.

@@ -116,3 +116,5 @@
 .hub-origin-link input{flex:1 1 280px;min-width:160px;padding:8px 10px;border:1px solid #cddcd0;border-radius:6px;font-size:12px;color:#1c3429}
 .hub-origin-link button{padding:8px 12px;border:1px solid #9fbaae;border-radius:6px;background:#fff;color:#245344;cursor:pointer;font-size:11px;font-weight:600}
 .hub-origin-link button:disabled{opacity:.5;cursor:not-allowed}
+
+.invoice-evidence{display:inline-flex;flex-direction:column;gap:4px;max-width:100%;vertical-align:top}.invoice-evidence small,.invoice-key{overflow-wrap:anywhere;white-space:normal;font-size:11px;line-height:1.45}.invoice-evidence strong{overflow-wrap:anywhere}.hub-origin-node .invoice-evidence{display:flex;margin-top:6px}

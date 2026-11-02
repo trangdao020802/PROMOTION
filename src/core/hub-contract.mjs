@@ -2,6 +2,7 @@
 // prices or a second set of receipts to add to Export/PaymentList/Transfer.
 import {normalizeHubDiscount} from './hub-discount.mjs';
 import {hubDocumentCode} from './hub-document.mjs';
+import {invoiceReference,projectPaymentInvoice,validateInvoice,eInvoiceKey,mergePaymentInvoice} from './hub-invoice.mjs';
 export const HUB_CONTRACT_SCHEMA='apollo-hub-contract/v1';
 const plain=v=>!!v&&typeof v==='object'&&!Array.isArray(v);
 const text=v=>typeof v==='string'?v.trim().replace(/\s+/g,' '):'';
@@ -32,10 +33,7 @@ export function contractDiscountFacts(root){
  }
  return result;
 }
-const invoiceEvidence=value=>{
- const v=text(value);if(!v)return null;
- return /^\d{4,15}$/.test(v)||/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v)?v:null;
-};
+const invoiceEvidence=invoiceReference;
 export function projectContractPayments(value,contractId){
  let list=hubList(value,500);
  if(!list&&plain(value)){
@@ -47,8 +45,7 @@ export function projectContractPayments(value,contractId){
  for(const r of list){
   if(!plain(r)||(r.ContractId??r.DepositId)!=null&&id(r.ContractId??r.DepositId)!==String(contractId)||!id(r.PaymentId)||number(r.Amount)===null)return null;
   const code=text(r.PaymentCode);if(code.length>150||code&&!/^[A-Za-z0-9][A-Za-z0-9_.:/-]*$/.test(code))return null;
-  const invoiceRef=invoiceEvidence(r.InvoiceNo??r.InvoiceNumber??r.EInvoiceId??r.EInvoiceGuid??r.EInvoice);
-  rows.push({id:id(r.PaymentId),code,amount:number(r.Amount),totalAmount:number(r.TotalAmount),remaining:number(r.RemainAmount),typeId:id(r.PaymentTypeId),type:text(r.PaymentTypeName).slice(0,200),method:text(r.PaymentMethodTypeName??r.PaymentMethodName).slice(0,200),scheduledDate:date(r.ScheduledDate),completeDate:date(r.CompleteDate),complete:typeof r.IsComplete==='boolean'?r.IsComplete:null,...(invoiceRef?{invoiceRef}:{})});
+  rows.push({id:id(r.PaymentId),code,amount:number(r.Amount),totalAmount:number(r.TotalAmount),remaining:number(r.RemainAmount),typeId:id(r.PaymentTypeId),type:text(r.PaymentTypeName).slice(0,200),method:text(r.PaymentMethodTypeName??r.PaymentMethodName).slice(0,200),scheduledDate:date(r.ScheduledDate),completeDate:date(r.CompleteDate),complete:typeof r.IsComplete==='boolean'?r.IsComplete:null,...projectPaymentInvoice(r)});
  }
  return new Set(rows.map(r=>r.id)).size===rows.length?rows:null;
 }
@@ -82,15 +79,33 @@ export function projectHubMovements(root){
    rows.push({from,to,amount,date:day,reference,direction});
   }
  }
+ // Completed transfer rows identify their original CT/DEP, not new cash.
+ const explicitIncoming=rows.filter(m=>m.direction==='in');
+ for(const p of hubList(root.ListPayment,500)??[]){
+  const from=contractCode(p?.RelatedContractDepositNo),amount=number(p?.Amount),day=moveDay(p?.CompleteDate),reference=text(p?.PaymentCode);
+  if(!from||from===ct||p.IsComplete!==true||!amount||!day||/refund|moving[ -]?out|transfer[ -]?out/i.test(text(p.PaymentTypeName)))continue;
+  if(p.PaymentTypeId!==10&&!/transfer|deposit to contract/i.test(text(p.PaymentMethodTypeName)+' '+text(p.PaymentTypeName)))continue;
+  if(reference&&!/^[A-Za-z0-9][A-Za-z0-9_.:/-]*$/.test(reference))continue;
+  if(!explicitIncoming.some(m=>m.from===from&&m.to===ct&&m.date===day)&&!rows.some(m=>m.direction==='in'&&m.reference===reference&&m.from===from&&m.to===ct&&m.amount===amount&&m.date===day))rows.push({from,to:ct,amount,date:day,reference,direction:'in'});
+  hasList=true;
+ }
  return hasList?rows:null;
+}
+
+export function projectHubLearner(root){
+ const leadId=id(root?.LeadId),kidId=id(root?.KidId);
+ return leadId&&kidId?{leadId,kidId,url:'https://hub24.apollo.vn:7777/lead/detail/'+leadId+'?s='+kidId}:null;
 }
 
 export function projectHubContract(root,{payments=null,paymentState='pending',capturedAt=new Date().toISOString()}={}){
  const result={schema:HUB_CONTRACT_SCHEMA,ct:text(root?.ContractNo??root?.ContractCode??root?.DepositNo??root?.DepositCode).toUpperCase(),contractId:id(root?.ContractId??root?.DepositId??root?.Id),capturedAt,discounts:contractDiscountFacts(root),payments:{state:paymentState==='pending'&&(projectContractPayments(root,id(root?.ContractId??root?.DepositId??root?.Id))?.length??0)>0?'read':paymentState,rows:payments??((projectContractPayments(root,id(root?.ContractId??root?.DepositId??root?.Id))?.length??0)>0?projectContractPayments(root,id(root?.ContractId??root?.DepositId??root?.Id)):[])},...(projectHubMovements(root)!==null?{movements:{state:'read',rows:projectHubMovements(root)}}:{movements:{state:'pending',rows:[]}})};
+ const learner=projectHubLearner(root);if(learner)result.learner=learner;
  return validateHubContract(result)?result:null;
 }
-export function validateHubContract(v){
- if(!exact(v,['schema','ct','contractId','capturedAt','discounts','payments'])&&!exact(v,['schema','ct','contractId','capturedAt','discounts','payments','movements'])||v.schema!==HUB_CONTRACT_SCHEMA||hubDocumentCode(v.ct)!==v.ct||id(v.contractId)!==v.contractId||typeof v.capturedAt!=='string'||!Number.isFinite(Date.parse(v.capturedAt)))return false;
+export function validateHubContract(v,depth=0){
+ if(!exact(v,['schema','ct','contractId','capturedAt','discounts','payments','movements','learner','relatedFinance'])||v.schema!==HUB_CONTRACT_SCHEMA||hubDocumentCode(v.ct)!==v.ct||id(v.contractId)!==v.contractId||typeof v.capturedAt!=='string'||!Number.isFinite(Date.parse(v.capturedAt)))return false;
+ if(v.learner!==undefined){const l=v.learner;if(!exact(l,['leadId','kidId','url'])||id(l.leadId)!==l.leadId||id(l.kidId)!==l.kidId||l.url!=='https://hub24.apollo.vn:7777/lead/detail/'+l.leadId+'?s='+l.kidId)return false;}
+ if(v.relatedFinance!==undefined&&(depth>0||!v.learner||!hubList(v.relatedFinance,32)||new Set(v.relatedFinance.map(f=>f?.ct)).size!==v.relatedFinance.length||!v.relatedFinance.every(f=>f.ct!==v.ct&&f.discounts===null&&f.relatedFinance===undefined&&f.learner?.kidId===v.learner.kidId&&validateHubContract(f,depth+1))))return false;
  if(v.discounts!==null&&(!hubList(v.discounts,100)||!v.discounts.every(d=>exact(d,['label','groupId','discountId','type','percent','amount','months'])&&!!text(d.label)&&d.label.length<=2000&&['groupId','discountId'].every(k=>d[k]===null||id(d[k])===d[k])&&(d.type===null||[1,2,3].includes(d.type))&&['percent','amount','months'].every(k=>d[k]===null||number(d[k])===d[k]&&d[k]>=0&&d[k]<=(k==='percent'?100:k==='months'?120:1e13)))))return false;
  if(v.movements!==undefined){
   const m=v.movements;
@@ -99,7 +114,7 @@ export function validateHubContract(v){
  }
  const p=v.payments;
  if(!exact(p,['state','rows'])||!['read','pending','unavailable'].includes(p.state)||!hubList(p.rows,500)||p.state!=='read'&&p.rows.length||new Set(p.rows.map(r=>r.id??r.code)).size!==p.rows.length)return false;
- return p.rows.every(r=>(exact(r,['id','code','amount','totalAmount','remaining','typeId','type','method','scheduledDate','completeDate','complete'])||exact(r,['id','code','amount','totalAmount','remaining','typeId','type','method','scheduledDate','completeDate','complete','invoiceRef']))&&(r.id===null&&!!r.code||id(r.id)===r.id)&&typeof r.code==='string'&&r.code.length<=150&&(!r.code||/^[A-Za-z0-9][A-Za-z0-9_.:/-]*$/.test(r.code))&&number(r.amount)===r.amount&&['totalAmount','remaining'].every(k=>r[k]===null||number(r[k])===r[k])&&(r.typeId===null||id(r.typeId)===r.typeId)&&['type','method'].every(k=>typeof r[k]==='string'&&r[k].length<=200)&&['scheduledDate','completeDate'].every(k=>r[k]===null||date(r[k])===r[k])&&(r.complete===null||typeof r.complete==='boolean')&&(r.invoiceRef===undefined||invoiceEvidence(r.invoiceRef)===r.invoiceRef))&&JSON.stringify(v).length<=300000;
+ return p.rows.every(r=>exact(r,['id','code','amount','totalAmount','remaining','typeId','type','method','scheduledDate','completeDate','complete','invoiceRef','eInvoiceKey','eInvoiceVersion','invoice'])&&(r.id===null&&!!r.code||id(r.id)===r.id)&&typeof r.code==='string'&&r.code.length<=150&&(!r.code||/^[A-Za-z0-9][A-Za-z0-9_.:/-]*$/.test(r.code))&&number(r.amount)===r.amount&&['totalAmount','remaining'].every(k=>r[k]===null||number(r[k])===r[k])&&(r.typeId===null||id(r.typeId)===r.typeId)&&['type','method'].every(k=>typeof r[k]==='string'&&r[k].length<=200)&&['scheduledDate','completeDate'].every(k=>r[k]===null||date(r[k])===r[k])&&(r.complete===null||typeof r.complete==='boolean')&&(r.invoiceRef===undefined||invoiceEvidence(r.invoiceRef)===r.invoiceRef)&&(r.eInvoiceKey===undefined||eInvoiceKey(r.eInvoiceKey)===r.eInvoiceKey)&&(r.eInvoiceVersion===undefined||[1,2].includes(r.eInvoiceVersion))&&(r.invoice===undefined||validateInvoice(r.invoice)))&&JSON.stringify(v).length<=1200000;
 }
 
 /**
@@ -165,7 +180,7 @@ export function mergeDisplayedHubContract(facts,tables,ct){
  const payments=facts.payments.state==='read'&&facts.payments.rows.length?{...facts.payments,
   rows:facts.payments.rows.map(row=>{
    const match=extra.payments?.find(item=>item.code===row.code&&Math.abs(item.amount-row.amount)<=1);
-   return match?.invoiceRef&&!row.invoiceRef?{...row,invoiceRef:match.invoiceRef}:row;
+   return match?mergePaymentInvoice(row,match):row;
   })}:extra.payments!==null?{state:'read',rows:extra.payments}:facts.payments;
  const moves=[...(facts.movements?.rows??[]),...(extra.movements??[])];
  const distinct=[...new Map(moves.map(m=>[JSON.stringify([m.from,m.to,m.amount,m.date,m.reference,m.direction]),m])).values()];
@@ -178,7 +193,7 @@ export function mergeHubFinanceFacts(first,second){
  if(payments.state!=='read'||!payments.rows.length)payments=second.payments.state==='read'?second.payments:payments;
  else if(second.payments.state==='read'){
   const conflicts=second.payments.rows.some(p=>payments.rows.some(q=>p.code===q.code&&Math.abs(p.amount-q.amount)>1));
-  payments=conflicts?{state:'unavailable',rows:[]}:{...payments,rows:payments.rows.map(p=>{const match=second.payments.rows.find(q=>q.code===p.code&&Math.abs(q.amount-p.amount)<=1);return !p.invoiceRef&&match?.invoiceRef?{...p,invoiceRef:match.invoiceRef}:p;})};
+  payments=conflicts?{state:'unavailable',rows:[]}:{...payments,rows:payments.rows.map(p=>{const match=second.payments.rows.find(q=>q.code===p.code&&Math.abs(q.amount-p.amount)<=1);return match?mergePaymentInvoice(p,match):p;})};
  }
  const values=[...(first.movements?.rows??[]),...(second.movements?.rows??[])],rows=[...new Map(values.map(m=>[JSON.stringify(m),m])).values()];
  const movements={state:first.movements?.state==='read'||second.movements?.state==='read'?'read':'pending',rows};
