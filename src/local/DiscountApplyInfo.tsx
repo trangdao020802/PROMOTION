@@ -15,6 +15,6 @@ export default function DiscountApplyInfo({value,date,components=[],checks=[],pr
    return <span className="discount-offer" role="listitem" key={label}><span className="discount-offer-label">{index+1}. {label}</span><span className="discount-offer-detail">{detail}{amount!==null&&(septemberStraight||!['months','straight','weeks'].includes(kind))?' · '+amount.toLocaleString('vi-VN')+' ₫':''}</span></span>;
   })}
   {validBasis&&<span className="discount-offer-detail">Giá gốc: {units} {unit} × {money(unitPrice)}/{unit} = {money(pricing.gross)}.{pricing.from&&pricing.to?' Kỳ chính sách: '+day(pricing.from)+'–'+day(pricing.to)+'.':''}</span>}
-  {checks.filter((message:string)=>/^CHECK - (?:SIBLINGS|SỐ TIỀN SIBLINGS|NHIỀU MỨC GIẢM SIBLINGS|NHIỀU ƯU ĐÃI|LAYER TRONG|GIỜ TRONG|GÓI TRONG|LOẠI GÓI TRONG|GÓI VTDH TRONG|SPECIAL30)/.test(message)).map((message:string)=><span className="discount-offer-warning" key={message}>{message}</span>)}
+  {checks.filter((message:string)=>/^CHECK - (?:SIBLINGS|SỐ TIỀN SIBLINGS|NHIỀU MỨC GIẢM SIBLINGS|NHIỀU ƯU ĐÃI|KEY DISCOUNT MÂU THUẪN|QUÁ 4 ƯU ĐÃI|SỐ THÁNG TẶNG KHÁC RULE|LAYER TRONG|GIỜ TRONG|GÓI TRONG|LOẠI GÓI TRONG|GÓI VTDH TRONG|SPECIAL30)/.test(message)).map((message:string)=><span className="discount-offer-warning" key={message}>{message}</span>)}
  </span>;
 }

@@ -24,7 +24,7 @@ export function discountPolicyMatch(label,date,regime){
  const offers=discountOffers(label);
  if(offers.length>1){
   const matches=offers.map(offer=>discountPolicyMatch(offer,date,regime)),primary=matches.find(m=>m.kind==='cash')??matches.find(m=>m.kind==='months')??matches.find(m=>m.kind==='straight')??matches[0];
-  const issues=[...new Set(matches.flatMap(m=>m.issues))],periods=new Set(matches.filter(m=>m.kind==='cash').map(m=>m.period).filter(Boolean));
+  const issues=[...new Set(matches.flatMap(m=>m.issues))],periods=new Set(matches.filter(m=>m.kind==='cash').map(m=>m.period==='october'&&m.ruleKey==='BBQ426_CASH'?'q4':m.period).filter(Boolean));
   if(periods.size>1)issues.push('CHECK - KEY DISCOUNT MÂU THUẪN: nhiều kỳ giảm tiền trong cùng Discount apply.');
   return {...primary,keys:[...new Set(matches.flatMap(m=>m.keys))],programIds:[...new Set(matches.flatMap(m=>m.programIds))],issues,siblings:matches.some(m=>m.siblings),siblingAddon:matches.some(m=>m.siblingAddon),offers};
  }

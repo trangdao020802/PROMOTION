@@ -9,6 +9,7 @@ import {parseDate} from '../src/core/source-parser.mjs';
 import {referenceRows} from '../src/core/reference-data.mjs';
 import {EMPTY_VOUCHER,VOUCHER_POLICIES,validateVoucher} from '../src/core/vouchers.mjs';
 import {reviewScope} from '../src/core/reviews.mjs';
+import {discountPolicyMatch} from '../src/core/promotions.mjs';
 const p=policyData(),day=parseDate;
 function fixture({policy=p,pkg='12 months',hours=3,layer=1,label='Q4 2026 Promotion Discount - 12 months',center='QA1',type='New',method='Online Payments',term='',date='2026-10-10',gross=38700000,discount=3870000,gift=0,net=gross-discount-gift,totalHours=163,code=''}={}){
  const c={B:'CENTER GIẢ',C:center,D:'QA2610-PAY-004',E:'QA2610-CT-004',R:'QA-CONSISTENCY',S:'DỮ LIỆU GIẢ KIỂM THỬ',O:day(date),P:'QA004',I:'Paid',F:'Payment',G:type,X:'ATLS',Z:`ATLS - New Price 2026 - Layer ${layer}`,AA:hours+' hrs/week',AB:pkg,AQ:label,AO:code,AH:method,AJ:term,AC:gross,AD:discount,AE:gift,AF:net,AG:totalHours},r={sourceKey:'p',sourceRow:2,cells:c};
@@ -25,8 +26,13 @@ test('all 192 dated schedule rows reconcile columns and are the exact schedules 
   assert.equal(r.monthly*r.months,r.gross);assert.equal(r.gross-r.discount,r.net);assert.ok(r.group&&r.koc&&r.layer&&r.hours&&r.from&&r.to);assert.ok(r.refs.length);
   const label=r.regime==='september'?`Big Bang Sep 2026 - Giảm Tiền - Layer ${r.layer} - ${r.packageKey==='36 SPLIT'?'36 months (chia đôi)':r.packageKey+' months'} - ${r.hours}hrs/week`:'';
   const result=priceFor({policy:p},{H:r.course,I:r.hours+' hrs/week',J:r.package,D:day(r.from),L:label},{group:'ATLS',contractType:'New'});
-  for(const key of ['gross','discount','months','monthly','maxTerms'])assert.equal(result[key],r[key],r.id+' '+key);
+  for(const key of ['gross','discount','months','monthly','maxTerms','straightWeeks'])assert.equal(result[key],r[key],r.id+' '+key);
  }
+});
+test('Q4 split catalogue and RULE use B25 two-week straight awards instead of the Audit half-month approximation',()=>{
+ const row=buildPriceCatalogue(p).find(r=>r.regime==='q4'&&r.layer===1&&r.hours===3&&r.packageKey==='36 SPLIT');
+ assert.equal(row.straight,0);assert.equal(row.straightWeeks,2);assert.equal(row.loyalty,2);
+ const rule=policyRuleCatalogue(p,[row])[0];assert.match(rule.benefit,/trả thẳng \+2 tuần/);assert.ok(!rule.benefit.includes('0.5 tháng'));
 });
 test('price conflicts and duplicated keys never fall through to Audit, Report or a first-match price',()=>{
  for(const mutate of [q=>q.roadmap.push({...q.roadmap[0]}),q=>q.roadmap[0].G++,q=>q.roadmap[0].U++,q=>q.roadmap[0].B=2,q=>q.roadmap[0].F=1,q=>q.priceEvidence.roadmap[0].values.G++]){
@@ -44,7 +50,17 @@ test('old Report-based prices stay observations, with no transfer to the approve
  const q=structuredClone(p);for(const r of q.priceEvidence.master)r.observedGross=1;assert.equal(roadmapSchedule(q,{layer:1,hours:3,pkg:36,phase:'q4'}).gross,116100000);
 });
 test('two primary cash offers from the same period remain CHECK after every approval',()=>{
- const f=fixture({label:'Q4 2026 Promotion Discount - 12 months;2026 October - Promotion Discount - 12 months - From 06/10'});let r=calculate(f);assert.equal(r.cells.N,3870000);r=calculate(f,approved(r));assert.equal(r.cells.AF,'CHECK');assert.ok(r.promotion.checks.some(s=>s.includes('NHIỀU ƯU ĐÃI GIẢM NỀN')));
+ const f=fixture({label:'Q4 2026 Promotion Discount - 12 months;2026 October - Promotion Discount - 12 months - From 06/10'});let r=calculate(f);assert.equal(r.cells.M,38700000);assert.equal(r.cells.N,null);assert.equal(r.cells.Q,null);assert.equal(r.cells.R,null);assert.ok(r.discountComponents.every(c=>c.amount===null));r=calculate(f,approved(r));assert.equal(r.cells.AF,'CHECK');assert.equal(r.cells.Q,null);assert.ok(r.promotion.checks.some(s=>s.includes('NHIỀU ƯU ĐÃI GIẢM NỀN')));
+});
+test('generic October and explicit Q4 labels use one effective period but still cannot duplicate the cash offer',()=>{
+ const label='2026 October - Promotion Discount - 12 months;Q4 2026 Promotion Discount - 12 months';
+ assert.ok(!discountPolicyMatch(label,day('2026-10-10')).issues.some(s=>s.includes('nhiều kỳ giảm tiền')));
+ const f=fixture({label}),r=calculate(f);assert.equal(r.cells.N,null);assert.ok(r.promotion.checks.some(s=>s.includes('NHIỀU ƯU ĐÃI GIẢM NỀN')));
+});
+test('mixed cash periods cannot select a first amount or duplicate the cash explanation',()=>{
+ for(const labels of [['Big Bang Sep 2026 - Giảm Tiền - Layer 1 - 12 months - 3hrs/week','Q4 2026 Promotion Discount - 12 months'],['Q4 2026 Promotion Discount - 12 months','Big Bang Sep 2026 - Giảm Tiền - Layer 1 - 12 months - 3hrs/week']]){
+  const f=fixture({label:labels.join(';')});let r=calculate(f);r=calculate(f,approved(r));assert.equal(r.cells.M,38700000);assert.equal(r.cells.N,null);assert.equal(r.cells.Q,null);assert.equal(r.cells.AF,'CHECK');assert.ok(r.promotion.checks.some(s=>s.includes('KEY DISCOUNT MÂU THUẪN')));
+ }
 });
 test('explicit Layer, hour and package contradictions remain visible after approvals',()=>{
  for(const label of ['Q4 2026 Promotion Discount - Layer 2 - 12 months','Q4 2026 Promotion Discount - 12 months - 4hrs/week','Q4 2026 Promotion Discount - 24 months','Q4 2026 Promotion Discount - 12 months (chia đôi)','Q4 2026 Promotion Discount - VTDH - 12 months']){

@@ -4,7 +4,7 @@ import {packageKey} from './contracts.mjs';
 import {discountOffers,discountPolicyMatch,regularTwoMonthPrice} from './promotions.mjs';
 import {auditPriceFor,auditPackageKey} from './audit-policy.mjs';
 import {dateSerial} from './verification.mjs';
-import {pricingIdentity,canonicalCourseName,priceText,isWeeklyCourse} from './pricing-key.mjs';
+import {pricingIdentity,canonicalCourseName,priceText,isWeeklyCourse,packageIdentity} from './pricing-key.mjs';
 import {matchTypedPrice} from './policy-pack.mjs';
 import {PRICE_PHASES,roadmapSchedule} from './price-schedule.mjs';
 import {policyMatchesInputs} from './hub-policy.mjs';
@@ -15,7 +15,7 @@ const between=(d,a,b)=>number(d)&&d>=dateSerial(a)&&d<dateSerial(b)+1;
 export function priceFor(data,cells,context={}){
  const selected=selectPrice(data,cells,context)??{issue:'CHECK - CHƯA CÓ RULE / ĐỦ ĐẦU VÀO'};
  const identity=selected.identity??pricingIdentity(cells.H,cells.I,cells.J,context),phase=PRICE_PHASES[selected.regime??selected.phase];
- const result={hours:identity.hours,layer:identity.layer,pkg:identity.packageKey,months:identity.months,monthly:null,gross:null,discount:null,net:null,maxTerms:null,straight:null,loyalty:null,referral:null,from:phase?.from??null,to:phase?.to??null,
+ const result={hours:identity.hours,layer:identity.layer,pkg:identity.packageKey,months:identity.months,monthly:null,gross:null,discount:null,net:null,maxTerms:null,straight:null,straightWeeks:null,loyalty:null,referral:null,from:phase?.from??null,to:phase?.to??null,
   ...selected,identity,key:selected.key??identity.key};
  result.unit=identity.unit;result.weeks=identity.weeks;
  if(identity.variant==='weekly'){result.months=null;result.monthly=null;result.unitPrice=number(result.gross)&&identity.weeks>0?result.gross/identity.weeks:null;}
@@ -45,7 +45,9 @@ export function typedPriceInputs(row){
  if(row.variant==='weekly'&&!isWeeklyCourse(course))course+=' (gói tuần)';
  if(row.variant==='premium')course+=' Group '+String(row.packageKey).split('|')[0]+' persons';
  const edition=/^([^|]+)\|[\d.]+M$/.exec(String(row.packageKey))?.[1];
- const pkg=row.package??(row.variant==='split'?`${row.months} months siblings`:row.variant==='weekly'?String(row.packageKey).replace('WEEKS','weeks'):`${row.months} months${row.variant==='trial'?' trial':row.variant==='upgrade'?' upgrade':row.variant==='summer'?' ('+(edition??'Summer')+')':''}`);
+ const keyedMonths=row.variant==='split'?packageIdentity(row.packageKey).months:row.variant==='summer'||row.variant==='premium'?Number(/\|([\d.]+)M$/.exec(String(row.packageKey))?.[1]):Number(row.packageKey??row.months);
+ const months=keyedMonths>0?keyedMonths:row.months;
+ const pkg=row.package??(row.variant==='split'?`${months} months siblings`:row.variant==='weekly'?String(row.packageKey).replace('WEEKS','weeks'):`${months} months${row.variant==='trial'?' trial':row.variant==='upgrade'?' upgrade':row.variant==='summer'?' ('+(edition??'Summer')+')':''}`);
  return {cells:{H:course,I:row.hours+' hrs/week',J:pkg,D:dateSerial(row.from),L:row.discountLabels?.[0]??'0',B:row.center&&row.center!=='*'?row.center:null},
   context:{group:family,contractType:row.contractType&&row.contractType!=='*'?row.contractType:row.variant==='weekly'?'Renew':'New'}};
 }

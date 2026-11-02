@@ -8,7 +8,7 @@ import {normalizePolicyRow,validatePolicyRows,mergePolicyPack} from '../src/core
 import {dateSerial} from '../src/core/verification.mjs';
 import {AuditEngine} from '../src/local/calculation.mjs';
 import {buildModel} from '../src/local/model.mjs';
-const policy=policyData(),financial=['monthly','months','gross','discount','net','maxTerms','straight','loyalty','referral'];
+const policy=policyData(),financial=['monthly','months','gross','discount','net','maxTerms','straight','straightWeeks','loyalty','referral'];
 const cells=(J='12 months (S26-2)',when='2026-10-10',B='QA1')=>({H:'AGLS - New Price 2026 - Layer 1',I:'3 hrs/week',J,D:dateSerial(when),L:'0',B});
 const select=(p=policy,input=cells())=>priceFor({policy:p},input,{group:'AGLS',contractType:'New'});
 

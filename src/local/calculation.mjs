@@ -105,9 +105,10 @@ class IndependentCalculator{
     }
     const sharedStraight=matches.some(m=>m.sharedSepOct&&m.kind==='straight');
     const straightMonths=sharedStraight&&pricing.regime==='base'?pricing.row?.M??0:pricing.straight||0;
+    const straightWeeks=pricing.straightWeeks??0;
     const hasStraight=['BBQ426_CASH','BBQ426_LOYALTY','OCT26_BASE','BBQ426_STRAIGHT'].includes(cells.AL)||september||typedOffer||matches.some(m=>m.kind==='straight');
-    if(hasStraight&&straightMonths>0&&!/installment/i.test(text(context.method))){
-     if(text(context.method)&&fullPaymentDay(account)!==null)awardMonths('straight',straightMonths);
+    if(hasStraight&&(straightMonths>0||straightWeeks>0)&&!/installment/i.test(text(context.method))){
+     if(text(context.method)&&fullPaymentDay(account)!==null){awardMonths('straight',straightMonths);if(straightWeeks>0)monthComponents.push({kind:'straight',weeks:straightWeeks});}
      else {straightMissing=true;checks.push('XÁC MINH - GIỜ TẶNG TRẢ THẲNG: cần phương thức thanh toán và ngày full từ chứng từ để chốt tháng tặng.');}
     }
    }else {cells.N=null;cells.BO='CHECK - DISCOUNT CHƯA CÓ RULE ĐẦY ĐỦ';checks.push(cells.BO);}
@@ -116,7 +117,9 @@ class IndependentCalculator{
   if(cells.BD!=='OK')checks.push(cells.BD);
   const offerChecks=legacy?[]:offerConsistencyChecks(cells,context,pricing);
   const identityIssues=offerChecks.filter(message=>/^CHECK - (?:LAYER TRONG|GIỜ TRONG|GÓI TRONG|LOẠI GÓI TRONG|GÓI VTDH TRONG)/.test(message));
-  if(identityIssues.length){cells.N=null;cells.BO=identityIssues[0];for(const part of discountComponents)part.amount=null;}
+  const ambiguousCash=!hubActive&&!legacy&&!customOffer?[...offerChecks,...match.issues].filter(message=>/^CHECK - (?:NHIỀU ƯU ĐÃI GIẢM NỀN|KEY DISCOUNT MÂU THUẪN|QUÁ 4 ƯU ĐÃI)/.test(message)):[];
+  const invalidCash=[...identityIssues,...ambiguousCash];
+  if(invalidCash.length){cells.N=null;cells.BO=invalidCash[0];for(const part of discountComponents)part.amount=null;}
   const discountPending=!label&&(group.hubOfferPending?.discount||number(cells.U)&&cells.U>0);
   if(discountPending){cells.N=null;cells.BO='CHECK - CHƯA ĐỌC ĐỦ DISCOUNT APPLY TỪ CT TỔNG';checks.push(cells.BO);}
   const giftcodePending=!code&&(hasDescription||group.hubOfferPending?.giftcode||number(cells.V)&&cells.V>0);
@@ -141,7 +144,7 @@ class IndependentCalculator{
   if(number(cells.M)&&number(cells.N)&&number(cells.O)&&cells.N+cells.O>cells.M)checks.push('CHECK - TỔNG DISCOUNT VÀ GIFTCODE VƯỢT GIÁ GỐC: kiểm tra trùng học bổng hoặc sai cơ sở %.');
   cells.P=number(account.transferIn)?account.transferIn:0;
   cells.Q=number(cells.M)&&number(cells.N)&&number(cells.O)?Math.max(0,cells.M-cells.N-cells.O):null;
-  const hoursPending=[...identityIssues];
+  const hoursPending=[...invalidCash,...offerChecks.filter(message=>/^CHECK - SỐ THÁNG TẶNG KHÁC RULE/.test(message))];
   const weekOffers=discountOffers(label).map(label=>({label,...discountPolicyMatch(label,cells.D)})).filter(m=>m.kind==='weeks');
   if(weekOffers.length){
    // Keep the existing manual-policy id/scope so an approval already saved for

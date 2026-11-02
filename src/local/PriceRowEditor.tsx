@@ -16,7 +16,7 @@ function initial(row:any){
   course:row?.course??'',year:string(row?.year),layer:string(row?.layer),hours:string(row?.hours),
   variant:weekly?'weekly':row?.variant??'standard',months:string(months),weeks:string(weeks),
   packageKey:weekly?'':string(row?.packageKey??''),unitPrice:string(unit),discount:string(row?.discount),
-  maxTerms:string(row?.maxTerms),straight:string(row?.straight??0),loyalty:string(row?.loyalty??0),
+  maxTerms:string(row?.maxTerms),straight:string(row?.straight??0),straightWeeks:string(row?.straightWeeks??0),loyalty:string(row?.loyalty??0),
   referral:string(row?.referral??0),from:row?.from??'',to:row?.to??'',center:row?.center??'*',
   contractType:row?.contractType??'*',discountLabels:Array.isArray(row?.discountLabels)?row.discountLabels.join('; '):'',
   conditions:row?.conditions??'',source:'',approval:''
@@ -36,7 +36,7 @@ export default function PriceRowEditor({row,onCancel}:any){
   group:form.group,course:form.course,year:form.year,layer:form.layer,hours:form.hours,
   variant:form.variant,months:weekly?null:form.months,weeks:weekly?form.weeks:null,
   packageKey:weekly?undefined:form.packageKey||undefined,monthly:weekly?null:unitPrice,
-  gross,discount:form.discount,maxTerms:form.maxTerms,straight:form.straight,
+  gross,discount:form.discount,maxTerms:form.maxTerms,straight:form.straight,straightWeeks:form.straightWeeks,
   loyalty:form.loyalty,referral:form.referral,from:form.from,to:form.to,center:form.center,
   contractType:form.contractType,discountLabels:form.discountLabels,conditions:form.conditions,
   source:form.source,approval:form.approval
@@ -87,6 +87,7 @@ export default function PriceRowEditor({row,onCancel}:any){
     {input('discount','Giảm theo gói (VND, nhập 0 nếu không giảm)','number',true,{min:0,step:1})}
     <label>Sau giảm · chưa voucher<output className="price-edit-output">{money(net)}</output></label>
     {input('straight','Tháng tặng trả thẳng','number',true,{min:0,max:12,step:0.5})}
+    {input('straightWeeks','Tuần tặng trả thẳng','number',true,{min:0,max:52,step:0.5})}
     {input('loyalty','Tháng loyalty tối đa','number',true,{min:0,max:12,step:0.5})}
     {input('referral','Tháng referral','number',true,{min:0,max:12,step:0.5})}
     {input('maxTerms','Kỳ trả góp tối đa (0 = trả thẳng)','number',true,{min:0,max:36,step:1})}

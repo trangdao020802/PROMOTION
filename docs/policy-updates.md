@@ -17,14 +17,16 @@ Các SKU Summer, upsell 15 tháng, VTDH2024 tiếp tục cần bản chính sác
 ## Tự cập nhật trên web
 
 1. Quy tắc & voucher → Bảng giá chung hoặc RULE → Cập nhật chính sách giá trên web.
-2. Tải mẫu CSV; điền đúng chương trình (`ATLS`, `AGLS`, `ATLS/AGLS`, `AHP`, `IELTS`, `PREMIUM`), năm, layer, giờ/tuần, loại gói, số tháng, giá tháng trước giảm, gross, discount, maxTerms, tháng tặng và ngày hiệu lực. `ATLS/AGLS` áp khung dùng chung. Dùng `0` khi mức giảm/kỳ/tháng tặng thực sự bằng không.
+2. Tải mẫu XLSX; điền đúng chương trình (`ATLS`, `AGLS`, `ATLS/AGLS`, `AHP`, `IELTS`, `PREMIUM`), năm, layer, giờ/tuần, loại gói, số tháng/tuần, giá trước giảm, gross, discount, maxTerms và ngày hiệu lực. `ATLS/AGLS` áp khung dùng chung. `straight` là tháng trả thẳng; `straightWeeks` là tuần trả thẳng, nhân trực tiếp Hour/week. Dùng `0` khi mức giảm/kỳ/thời lượng tặng thực sự bằng không.
 3. Điền nguồn, căn cứ duyệt, center (`*` là toàn bộ), đối tượng và nhãn Discount apply được phép. Điều kiện hồ sơ và voucher vẫn kiểm tra riêng.
 4. Có thể nhập XLSX có cột chuẩn hoặc đúng sheet Bảng Tra Cứu Giá Promotion 2026. Các cột Base/Q4 được chọn rõ. Net được tính từ gross − discount, không coi công thức Excel chưa có giá trị lưu là 0. Dòng có nhiều cách hiểu phải sửa hoặc bỏ khỏi bản nháp.
-5. Xem trước & kiểm tra. Thiếu đầu vào, giá âm, discount vượt gross, khóa trùng và thời kỳ/phạm vi chồng lấn sẽ chặn áp dụng.
+5. Xem trước & kiểm tra. Thiếu đầu vào, giá âm, discount vượt gross, khóa trùng và thời kỳ/phạm vi chồng lấn sẽ chặn áp dụng. Khóa Package và số tháng/tuần phải khớp: `36` là 36 tháng; `36 SPLIT` là 18 tháng/học viên; `2 WEEKS` là 2 tuần. Không được lưu khóa 36 nhưng nhân giá 18 tháng, kể cả số tiền tự cân đối. Dữ liệu số nhập sai không được tự biến thành 0.
 6. Áp dụng & tính lại: lưu phiên bản và con trỏ đang dùng trong một giao dịch IndexedDB rồi mở lại bộ tính. Phần thời kỳ cũ ngoài đoạn thay thế được giữ. Tab khác ghi đồng thời sẽ bị phát hiện qua version.
 7. Lịch sử phiên bản & khôi phục chuyển về bản đã lưu hoặc bộ phát hành. Xuất JSON để sao lưu/nhập ở máy khác. Đây là thay đổi trên trình duyệt hiện tại; không tự phát hành bộ giá cho các máy khác.
 
 Không hỗ trợ diễn giải tự động một văn bản Excel/PDF bất kỳ thành quy tắc tài chính. Dùng định dạng chuẩn hoặc chuẩn hóa các cột và phạm vi trước khi áp dụng.
+
+Khi đọc lại một bản đã lưu cũ, bộ tính kiểm lại khóa/thời lượng trước khi dùng. Dòng sai giữ CHECK và Chưa tính ở cả Contract và bảng giá, không tự chuyển sang giá khác để có kết quả. Sửa dòng trong phiên bản mới với căn cứ đúng rồi áp dụng lại.
 
 ## Hiệu năng và phạm vi kiểm thử
 

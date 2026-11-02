@@ -24,9 +24,12 @@ export function roadmapSchedule(policy,{layer,hours,pkg,phase}){
    if(evidence[0].values[col]!==row[col])issues.push('cột '+col+' khác file lộ trình đã đối chiếu');
   if(evidence[0].issues?.length)issues.push(...evidence[0].issues);
  }
- const refs=[{file:'Lo_trinh_san_pham_CTKM_ATLS_2026.xlsx',sheet:'BẢNG GIÁ',row:row.row,cell:spec.discount+row.row},...(evidence[0]?.refs?.[phase]??[])];
+ // Q4 B25/G111 grants two weeks per split Contract. The roadmap's 0.5
+ // month is an approximation and must not enter the 25/6 hour conversion.
+ const splitWeeks=phase==='q4'&&pkg==='36 SPLIT';
+ const refs=[{file:'Lo_trinh_san_pham_CTKM_ATLS_2026.xlsx',sheet:'BẢNG GIÁ',row:row.row,cell:spec.discount+row.row},...(evidence[0]?.refs?.[phase]??[]),...(splitWeeks?[{file:'2026 Price & Promotion - update 10.10.26.xlsx',sheet:'Big bang promotion 6.10 - 31.12',row:25,cell:'B25'}]:[])];
  return {row,layer,hours,pkg,phase:phase==='september'?'base':phase,regime:phase,months:row.E,monthly:row.F,
   gross:issues.length?null:row.G,discount:issues.length?null:discount,net:issues.length?null:net,maxTerms:issues.length?null:terms,
-  straight:spec.straight?row[spec.straight]??0:0,loyalty:phase==='q4'?row.X??0:0,referral:phase==='q4'?row.Y??0:0,
+  straight:issues.length?null:splitWeeks?0:spec.straight?row[spec.straight]??0:0,straightWeeks:issues.length?null:splitWeeks?2:0,loyalty:phase==='q4'?row.X??0:0,referral:phase==='q4'?row.Y??0:0,
   issue:issues.length?'CHECK - BẢNG GIÁ KHÔNG THỐNG NHẤT: '+[...new Set(issues)].join('; '):null,refs};
 }

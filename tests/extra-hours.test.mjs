@@ -37,11 +37,22 @@ test('changing Hour/week recalculates extra and total hours without rewriting so
 test('a month-only straight add-on changes hours without creating a cash discount',()=>{
  const r=fixture({label:addon,discount:0}).read();assert.equal(r.cells.N,0);assert.equal(r.cells.Q,77400000);assert.equal(r.cells.extraHours,12.5);assert.equal(r.cells.R,313);
 });
-test('approved half-course policy grants half a straight month and retains fractions until the final round',()=>{
- for(const [hours,gross,discount,extra,total]of [[3,58050000,17415000,6.25,231],[4,77400000,23220000,25/3,308]]){
+test('Q4 split Contract grants exactly two straight weeks from B25, separately from loyalty months',()=>{
+ for(const [hours,gross,discount,extra,total]of [[3,58050000,17415000,6,231],[4,77400000,23220000,8,308]]){
   const f=fixture({hours,pkg:'18 months siblings',label:'2026 October - Promotion Discount - 36/36 siblings - From 06/10',gross,discount,totalHours:total});let r=f.read();assert.equal(r.cells.R,null);assert.equal(r.cells.extraHours,null);
-  r=f.read(reviews(r));assert.equal(r.courseHours.bonusMonths,.5);assert.ok(Math.abs(r.cells.extraHours-extra)<1e-10);assert.equal(r.cells.R,total);
+  r=f.read(reviews(r));assert.equal(r.courseHours.bonusMonths,0);assert.equal(r.courseHours.bonusWeeks,2);assert.equal(r.cells.extraHours,extra);assert.equal(r.cells.R,total);assert.equal(r.pricing.straightWeeks,2);assert.ok(r.pricing.refs.some(ref=>ref.cell==='B25'));
  }
+});
+test('a Current split Contract gets its own loyalty months and only direct payment adds two weeks',()=>{
+ for(const [method,weeks,extra,total]of [['Online Payments',2,31,256],['Installment',0,25,250]]){
+  const f=fixture({type:'Renew',pkg:'18 months siblings',label:'2026 October - Promotion Discount - 36/36 siblings - From 06/10',method,gross:58050000,discount:17415000,totalHours:total});
+  let r=f.read();r=f.read(reviews(r));assert.equal(r.courseHours.bonusMonths,2);assert.equal(r.courseHours.bonusWeeks,weeks);assert.equal(r.cells.extraHours,extra);assert.equal(r.cells.R,total);assert.equal(r.cells.N,17415000);
+ }
+});
+test('approving an incorrect gift quantity cannot grant hours; correcting the label restores calculation',()=>{
+ const f=fixture({label:cash+';'+addon.replaceAll('1 tháng','2 tháng').replace('1 Months','2 Months')});let r=f.read();const approval=reviews(r);r=f.read(approval);
+ assert.equal(r.cells.N,20898000);assert.equal(r.cells.Q,56502000);assert.equal(r.cells.extraHours,null);assert.equal(r.cells.R,null);assert.equal(r.cells.AF,'CHECK');
+ r=f.read({...approval,L:cash+';'+addon});assert.equal(r.cells.extraHours,12.5);assert.equal(r.cells.R,313);
 });
 test('loyalty and direct months stack once after verification and remain pending before it',()=>{
  const f=fixture({type:'Renew',label:[cash,'2026 October - Promotion Month - 24 months',addon].join(';'),totalHours:350});let r=f.read();assert.equal(r.cells.R,null);assert.equal(r.cells.extraHours,null);
@@ -63,7 +74,7 @@ test('a known zero-award course has numeric zero extra hours and retains its reg
  const r=fixture({label:'',discount:0,totalHours:300}).read();assert.equal(r.cells.extraHours,0);assert.equal(r.cells.R,300);assert.equal(r.courseHours.bonusMonths,0);
 });
 test('unapproved award quantities and expired shared labels keep CHECK instead of granting arbitrary months',()=>{
- const wrong=fixture({label:cash+';'+addon.replaceAll('1 tháng','2 tháng').replace('1 Months','2 Months')}).read();assert.equal(wrong.cells.extraHours,12.5);assert.equal(wrong.cells.R,313);assert.ok(wrong.promotion.checks.some(c=>c.includes('SỐ THÁNG TẶNG KHÁC RULE')));
+ const wrong=fixture({label:cash+';'+addon.replaceAll('1 tháng','2 tháng').replace('1 Months','2 Months')}).read();assert.equal(wrong.cells.N,20898000);assert.equal(wrong.cells.Q,56502000);assert.equal(wrong.cells.extraHours,null);assert.equal(wrong.cells.R,null);assert.ok(wrong.promotion.checks.some(c=>c.includes('SỐ THÁNG TẶNG KHÁC RULE')));
  const expired=fixture({when:'2026-11-10',label:cash+';'+addon}).read();assert.equal(expired.cells.AF,'CHECK');assert.ok(expired.promotion.checks.some(c=>c.includes('SEP/OCT NGOÀI THỜI KỲ')));
  const conflict=fixture({label:cash+';'+addon.replace('Tặng 1 tháng','Tặng 2 tháng')}).read();assert.equal(conflict.cells.extraHours,null);assert.equal(conflict.cells.R,null);
 });

@@ -1,3 +1,7 @@
+## Kiểm tra chính sách cập nhật và giờ tặng · v39
+
+Chặn dòng giá có khóa Package khác số tháng/tuần, gồm cả bản cũ đã lưu; không dùng gói 18 tháng dưới khóa 36. Discount trùng mức nền/trộn kỳ chờ sửa nhãn, số tháng tặng sai chờ tính giờ. Gói 36 chia đôi Q4 tặng đúng 2 tuần trả thẳng theo B25/G111; Bảng giá, RULE, CALC và mẫu XLSX dùng chung đơn vị. Trường `straightWeeks` và ô Tuần tặng trả thẳng cho phép cập nhật chính sách mới ngay trên web. [Cách cập nhật](docs/policy-updates.md) · [Giờ tặng](docs/extra-hours.md).
+
 ## Sửa giá gốc khi thêm Discount · v38
 
 Package quyết định số tháng mua; nhãn `36/36 siblings` không còn tự đổi gói `36 months` thành 18 tháng. Bộ chọn dùng chung cho Bảng giá, RULE và CALC, kiểm riêng gói chia đôi, các mốc 01/10, 06/10, 31/12 và mâu thuẫn Layer/giờ/gói trong Discount. Chi tiết hồ sơ hiện phép nhân giá gốc và kỳ áp dụng. Xem [căn cứ và ví dụ tính](docs/price-package-policy.md).

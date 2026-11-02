@@ -15,6 +15,8 @@ Ví dụ kiểm thử dùng ATLS 2026 Layer 1, 4 giờ/tuần, Package 36 months
 
 Nếu Package thực sự là 18 months siblings thì giá gốc 77.400.000, giảm 23.220.000 và còn 54.180.000 VND. Quan hệ, CT đối ứng và cùng ngày full vẫn được xác minh riêng.
 
+Khi cập nhật giá trên web, khóa Package cũng phải khớp số tháng/tuần nhập vào. Dòng ghi khóa `36` nhưng giá tháng × 18 tháng bị từ chối; bản cũ đã lưu sai cũng bị chặn khi tính lại. Tương tự với khóa chia đôi, Weeks, phiên bản Summer và Premium.
+
 ## Căn cứ nguồn
 
 - `2026 Price & Promotion - update 10.10.26.xlsx`, sheet `Big bang promotion 6.10 - 31.12`: B23 là thời kỳ 06/10–31/12/2026; B25/G111 quy định chia đôi là đơn giá gói 36 × 18 tháng/con. Bảng chuẩn Layer 1, 4 giờ có C32=36, C33=4.300.000, C34=154.800.000, C36=30%, C37=108.360.000.
@@ -36,6 +38,10 @@ Nhãn Q4 / From 06/10 chọn đúng cột Q4 kể cả khi hồ sơ có ngày ng
 
 Nếu Layer, giờ, số tháng hoặc loại gói ghi trong Discount trái với Course fee / Hour/week / Package, giữ giá gốc theo gói mua nhưng để Discount, phải đóng và giờ liên quan ở trạng thái Chưa tính; hiện lý do CHECK. Tích duyệt điều kiện không sửa được mâu thuẫn đầu vào này.
 
+Nhiều mức giảm nền hoặc trộn kỳ September/Q4 cũng không được chọn mức đầu tiên để tính. Discount và phải đóng chờ sửa nhãn; từng dòng căn cứ không lặp cùng một số giảm như đã áp dụng. Với số tháng tặng trái quy tắc, giữ khoản giảm tiền đã xác định nhưng để giờ tặng/tổng giờ Chưa tính.
+
+B25/G111 quy định trả thẳng gói 36 chia đôi Q4 tặng 2 tuần/học viên. Từ v39, Bảng giá, RULE và bộ tính dùng đúng 2 tuần × Hour/week; không quy thành 0,5 tháng như giá trị xấp xỉ trong Audit/lộ trình. Tháng loyalty của Current được xét riêng theo B25/G114.
+
 ## Bảng giá và bộ tính
 
 `priceFor()` là bộ chọn dùng chung cho Contract, Bảng giá chung và RULE. `packageIdentity()` được dùng chung cho khóa gói trong các đường tính, gồm Audit. Chi tiết hồ sơ hiện phép nhân giá gốc và kỳ áp dụng ngay dưới Discount apply.
@@ -45,3 +51,8 @@ Nếu Layer, giờ, số tháng hoặc loại gói ghi trong Discount trái vớ
 Các gói đặc thù vẫn yêu cầu nguồn đúng loại và kỳ; không nội suy từ tiền đã thu.
 
 Khi có chính sách mới, nhập vào **Cập nhật chính sách** với khóa khóa học, giờ, Package, ngày hiệu lực, mức giảm và căn cứ duyệt. Nguồn nhập được dùng chung cho bảng giá và bộ tính; các quy tắc trùng khóa/thời kỳ hoặc thiếu công thức tiếp tục CHECK.
+
+
+## Kiểm chứng v39
+
+362 kiểm thử tự động đạt. Kiểm tra trên giao diện bằng dữ liệu giả xác nhận: duyệt gói chia đôi trả thẳng 3 giờ/tuần cho 6 giờ tặng và tổng 231 giờ; nhiều mức giảm nền chờ tính tiền; nhập dòng khóa 36 với 18 tháng báo lỗi và khóa nút Áp dụng. Phiên bản hợp lệ được xem trước với đúng 36 tháng, 2 tuần tặng và được lưu/mở lại. Kiểm tra này không dùng hoặc xác nhận hồ sơ riêng trong tài khoản Hub thật.

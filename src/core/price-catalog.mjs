@@ -11,14 +11,14 @@ const text=x=>String(x??'').trim();
 const key=x=>text(x).toUpperCase().replace(/\s+/g,' ');
 const metadata=(policy,course,hours,pkg)=>(policy.priceEvidence?.master??[]).filter(r=>key(r.course)===key(course)&&key(r.hours)===key(hours)&&key(r.package)===key(pkg));
 const kocNames=(meta,fallback)=>[...new Set(meta.map(m=>m.koc).filter(Boolean))].join(' / ')||fallback;
-const financial=['monthly','months','gross','discount','net','maxTerms','straight','loyalty','referral'];
+const financial=['monthly','months','gross','discount','net','maxTerms','straight','straightWeeks','loyalty','referral'];
 const iso=serial=>num(serial)?new Date(Date.UTC(1899,11,30)+serial*86400000).toISOString().slice(0,10):null;
 function calculated(policy,inputs){
  const result=priceFor({policy},inputs.cells,inputs.context),identity=result?.identity??pricingIdentity(inputs.cells.H,inputs.cells.I,inputs.cells.J,inputs.context);
  const issue=result?.issue??(result?null:'CHECK - CHƯA CÓ GIÁ CHÍNH SÁCH ĐÃ XÁC MINH');
  return {...Object.fromEntries(financial.map(k=>[k,result?.[k]??(k==='months'?identity.months:null)])),pricingKey:result?.key??identity.key,variant:identity.variant,
   unit:result?.unit??identity.unit,weeks:result?.weeks??identity.weeks,unitPrice:result?.unitPrice??result?.monthly??null,issue,refs:result?.refs??[],resolution:inputs,
-  status:/NHIỀU RULE|MÂU THUẪN|BẢNG GIÁ KHÔNG THỐNG NHẤT/.test(issue??'')?'conflict':!num(result?.gross)?'missing':issue?.startsWith('XÁC MINH')?'manual-policy':issue?'conflict':'ready'};
+  status:/NHIỀU RULE|MÂU THUẪN|(?:BẢNG|DÒNG) GIÁ KHÔNG THỐNG NHẤT/.test(issue??'')?'conflict':!num(result?.gross)?'missing':issue?.startsWith('XÁC MINH')?'manual-policy':issue?'conflict':'ready'};
 }
 export function courseIdentity(course,hours){
  const c=pricingIdentity(course,hours,'');return {...c,group:c.group||text(course).split(' - ')[0]};
@@ -71,7 +71,8 @@ export function buildPriceCatalogue(policy){
 }
 export function policyRuleCatalogue(policy,prices=buildPriceCatalogue(policy)){
  const months=n=>num(n)?'+'+n+' tháng':'chưa xác định';
-  return [...prices.map(r=>({...r,id:'rule-'+r.id,ruleKey:[r.regime,r.pricingKey??[r.layer,r.hours,r.packageKey].join('|')].join('|'),benefit:`Giảm ${num(r.discount)?r.discount.toLocaleString('vi-VN')+' VND':'chưa xác định'}; trả thẳng ${months(r.straight)}; loyalty tối đa ${months(r.loyalty)}; referral ${months(r.referral)} theo điều kiện.`,conditions:r.conditions??r.issue??'Cần chính sách đúng khóa/gói và kỳ hiệu lực.',stacking:r.stacking??policy.policyRegister?.stacking?.[r.regime]??'Theo chính sách của từng kỳ.'})),...(policy.policyRegister?.rules??[])];
+ const straight=r=>r.straightWeeks>0?(r.straight>0?months(r.straight)+' + ':'')+'+'+r.straightWeeks+' tuần':months(r.straight);
+  return [...prices.map(r=>({...r,id:'rule-'+r.id,ruleKey:[r.regime,r.pricingKey??[r.layer,r.hours,r.packageKey].join('|')].join('|'),benefit:`Giảm ${num(r.discount)?r.discount.toLocaleString('vi-VN')+' VND':'chưa xác định'}; trả thẳng ${straight(r)}; loyalty tối đa ${months(r.loyalty)}; referral ${months(r.referral)} theo điều kiện.`,conditions:r.conditions??r.issue??'Cần chính sách đúng khóa/gói và kỳ hiệu lực.',stacking:r.stacking??policy.policyRegister?.stacking?.[r.regime]??'Theo chính sách của từng kỳ.'})),...(policy.policyRegister?.rules??[])];
 }
 export function hubPriceCatalogue(policy,sources=[]){
  return sources.filter(s=>validateHubPolicy(s.hubPolicy)).flatMap(source=>{
