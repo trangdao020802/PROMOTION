@@ -1,6 +1,7 @@
 // Normalized rules from the agreed Audit workbook. No cached transaction
 // result or collected amount supplies a price or a discount.
 import {regularMonthlyPrice} from './monthly-price.mjs';
+import {packageIdentity} from './pricing-key.mjs';
 const text=x=>String(x??'').trim();
 export function auditPriceFor(data,{course,hours,pkg,date,layer,cells,context}){
  const audit=data.policy.auditPolicy;
@@ -52,14 +53,8 @@ export function auditPolicyChecks(data,cells,context,account,receipts=[]){
  return [...new Set(checks)];
 }
 
-// The agreed Audit explicitly maps a 36/36 siblings offer to the split
-// schedule. The original Package text stays visible; sibling approval is still
-// required before confirming its course hours/eligibility.
+// Audit labels describe observed offers, not the purchased duration. Use the
+// same explicit Package key as the catalogue and course identity.
 export function auditPackageKey(value,label,date,base,audit){
- if(!audit||typeof base==='string'&&base.endsWith('SPLIT'))return base;
- const input=text(value),offer=text(label),q4=date>=audit.octoberFrom&&date<audit.q4To+1||/Q4|Quý 4|From 06\/10|6\.10/i.test(offer);
- const explicit=/^(6|9|12|18)\s*(?:months?|tháng)\s+siblings?\b/i.exec(input);if(explicit)return Number(explicit[1])*2+' SPLIT';
- if(q4&&(/chia đôi/i.test(offer)||/siblings/i.test(input)||/36\/36/.test(offer)))return /36\/36/.test(offer)||/36\s*(?:months?|tháng)/i.test(offer+' '+input)?'36 SPLIT':'18 SPLIT';
- if(!q4&&(/chia đôi/i.test(offer)||/siblings/i.test(input)))return '36 SPLIT';
- return base;
+ return packageIdentity(value).key??base;
 }

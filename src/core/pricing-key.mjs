@@ -9,7 +9,7 @@ export function packageIdentity(value,{weekly=false}={}){
  const s=priceText(value).replace(/^[\s;:,.]+/,'').replace(/(\d)[.;:,]\s*(?=[a-z])/g,'$1 '),n=/^(\d+(?:[.,]\d+)?)\s*(?:months?|thang|t)(?:\b|$)/.exec(s),months=n?Number(n[1].replace(',','.')):/^\d+(?:[.,]\d+)?$/.test(s)?Number(s.replace(',','.')):null;
  if(weekly||/\b(?:weeks?|tuan)\b/.test(s)){const w=Number(/^(\d+(?:[.,]\d+)?)/.exec(s)?.[1]?.replace(',','.'));return {months:null,weeks:w>0?w:null,unit:'weeks',key:w>0?w+' WEEKS':null,variant:'weekly'};}
  if(/\bsplit\b|chia doi|siblings?/.test(s)){
-  const total=/^(18|24|36)\s*(?:(?:months?|thang)\s*)?(?:split\b|\(?chia\s*doi\b)/.exec(s)?.[1];
+  const total=/^(\d+(?:[.,]\d+)?)\s*(?:(?:months?|thang)\s*)?(?:split\b|\(?chia\s*doi\b)/.exec(s)?.[1]?.replace(',','.');
   return {months:total?Number(total)/2:months,key:total?`${total} SPLIT`:months?`${months*2} SPLIT`:null,variant:'split'};
  }
  const summer=/\bs\d{2}(?:\s*[-/]\s*\d+)?\b/.exec(s)?.[0]?.replace(/[\s/]/g,c=>c==='/'?'-':'').toUpperCase();

@@ -114,6 +114,9 @@ class IndependentCalculator{
    if(!(match.sharedSepOct&&between(cells.D,'2026-09-01','2026-10-31'))&&(match.period==='september'&&pricing.phase!=='base'||match.period==='q4'&&pricing.phase!=='q4'||match.period==='october'&&!['q4','october'].includes(pricing.phase))){cells.BO='CHECK - NGOÀI THỜI KỲ DISCOUNT';checks.push(cells.BO)}
   }
   if(cells.BD!=='OK')checks.push(cells.BD);
+  const offerChecks=legacy?[]:offerConsistencyChecks(cells,context,pricing);
+  const identityIssues=offerChecks.filter(message=>/^CHECK - (?:LAYER TRONG|GIỜ TRONG|GÓI TRONG|LOẠI GÓI TRONG|GÓI VTDH TRONG)/.test(message));
+  if(identityIssues.length){cells.N=null;cells.BO=identityIssues[0];for(const part of discountComponents)part.amount=null;}
   const discountPending=!label&&(group.hubOfferPending?.discount||number(cells.U)&&cells.U>0);
   if(discountPending){cells.N=null;cells.BO='CHECK - CHƯA ĐỌC ĐỦ DISCOUNT APPLY TỪ CT TỔNG';checks.push(cells.BO);}
   const giftcodePending=!code&&(hasDescription||group.hubOfferPending?.giftcode||number(cells.V)&&cells.V>0);
@@ -134,11 +137,11 @@ class IndependentCalculator{
    }else if(!issue)issue='CHECK - CHƯA CÓ CƠ SỞ TÍNH GIFTCODE';
    if(issue)cells.CI=issue;else if(approvalIssue)cells.CI=approvalIssue;
   }
-  checks.push(...(legacy?[]:offerConsistencyChecks(cells,context,pricing)),...voucherPolicyChecks({cells,context,pricing,patch,account,voucher}));
+  checks.push(...offerChecks,...voucherPolicyChecks({cells,context,pricing,patch,account,voucher}));
   if(number(cells.M)&&number(cells.N)&&number(cells.O)&&cells.N+cells.O>cells.M)checks.push('CHECK - TỔNG DISCOUNT VÀ GIFTCODE VƯỢT GIÁ GỐC: kiểm tra trùng học bổng hoặc sai cơ sở %.');
   cells.P=number(account.transferIn)?account.transferIn:0;
   cells.Q=number(cells.M)&&number(cells.N)&&number(cells.O)?Math.max(0,cells.M-cells.N-cells.O):null;
-  const hoursPending=[];
+  const hoursPending=[...identityIssues];
   const weekOffers=discountOffers(label).map(label=>({label,...discountPolicyMatch(label,cells.D)})).filter(m=>m.kind==='weeks');
   if(weekOffers.length){
    // Keep the existing manual-policy id/scope so an approval already saved for

@@ -7,6 +7,7 @@ import {applyCourseInfo,withCourseSources} from './course-info.mjs';
 import {upstreamTransfers} from './payment-trace.mjs';
 import {contractSettlements} from './contract-settlements.mjs';
 import {auditPackageKey} from './audit-policy.mjs';
+import {packageIdentity} from './pricing-key.mjs';
 
 const fields=['H','I','J','K','L'];
 const rawFields={A:'B',B:'C',C:'E',D:'O',E:'P',F:'R',G:'S',H:'Z',I:'AA',J:'AB',K:'AO',L:'AQ',T:'AC',U:'AD',V:'AE',X:'AG'};
@@ -18,10 +19,7 @@ const own=(obj,key)=>Object.hasOwn(obj,key);
 // Package is the course bought by this CT. A promotion name containing 36/36
 // does not change a plain "36 months" course into half a course.
 export function packageKey(value){
- const text=String(value??'').trim(),match=text.match(/^(\d+(?:\.\d+)?)\b/);
- if(!match)return 0;
- if(/^(?:6|9|12|18)\s+(?:months?|tháng)\s+siblings?\b/i.test(text))return `${Number(match[1])*2} SPLIT`;
- return /SPLIT|chia đôi|siblings/i.test(text)?`${Number(match[1])} SPLIT`:Number(match[1]);
+ return packageIdentity(value).key??0;
 }
 
 export function buildContractGroups(data,input,{paymentTrace=false}={}){

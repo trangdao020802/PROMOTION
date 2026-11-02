@@ -4,7 +4,7 @@ import {priceFor,typedPriceInputs} from './price-resolver.mjs';
 import {dateSerial} from './verification.mjs';
 import {PRICE_PHASES} from './price-schedule.mjs';
 export {PRICE_PHASES,roadmapSchedule} from './price-schedule.mjs';
-import {pricingIdentity} from './pricing-key.mjs';
+import {pricingIdentity,packageIdentity} from './pricing-key.mjs';
 import {calculateHubPolicy,validateHubPolicy} from './hub-policy.mjs';
 const num=x=>typeof x==='number'&&Number.isFinite(x);
 const text=x=>String(x??'').trim();
@@ -24,10 +24,8 @@ export function courseIdentity(course,hours){
  const c=pricingIdentity(course,hours,'');return {...c,group:c.group||text(course).split(' - ')[0]};
 }
 export function explicitPackage(value){
- const s=text(value),m=/^(\d+)\s*(?:months?|tháng)(?:\s+(siblings?))?$/i.exec(s);
- if(m)return m[2]?Number(m[1])===18?'36 SPLIT':null:Number(m[1]);
- if(/^36 SPLIT$/i.test(s))return '36 SPLIT';
- return null; // weeks, trial/upgrade and named products own separate policies
+ const parsed=packageIdentity(value);
+ return ['standard','split'].includes(parsed.variant)?parsed.key:null;
 }
 export function buildPriceCatalogue(policy){
  const rows=[],seen=new Set(),published={...policy,typedPrices:(policy.typedPrices??[]).filter(r=>!r.override)};

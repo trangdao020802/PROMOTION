@@ -72,7 +72,7 @@ export function discountPolicyMatch(label,date,regime){
  if(fromOctober)keys.push('From 06/10');
  const requiresPeriod=siblings&&(cash||months)&&!period;
  if(requiresPeriod&&!issues.length)issues.push('XÁC MINH - KEY DISCOUNT: cần kỳ chính sách cho ưu đãi siblings; không tự coi giảm tiền/tặng tháng là referral.');
- const base=regime==='OCT_BASE'||regime==='OCT_DUYET'||regime===undefined&&typeof date==='number'&&date<serial('2026-10-06');
+ const base=period!=='q4'&&(regime==='OCT_BASE'||regime==='OCT_DUYET'||regime===undefined&&typeof date==='number'&&date<serial('2026-10-06'));
  let ruleKey=null,programIds=[];
  if(period&&kind){
   if(period==='september'){if(kind==='cash')ruleKey='BBSEP26_CASH';else if(kind==='months'||kind==='straight')ruleKey='BBSEP26_STRAIGHT';programIds=['sep-bigbang'];}

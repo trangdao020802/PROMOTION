@@ -14,7 +14,7 @@ Audit chỉ tổng hợp các policy tháng 9–10 và những ca có trong Paym
 | Phải đóng | CHECK Q | max(0, giá gốc − discount − giftcode). Web đối chiếu ở cấp CT tổng: tiền chuyển đã nằm trong tổng thu nên không trừ lần nữa |
 | Tổng giờ | CHECK R; RULE Z113 | ROUND((tháng khóa học + tháng tặng đủ điều kiện) × giờ/tuần × 25/6, 0) |
 | Sai số | HUONG_DAN B9; CHECK AF | Tiền ≤ 1.000 ₫, giờ ≤ 1; phép kiểm ngân sách nguồn và chống tính trùng vẫn dùng 1 ₫ |
-| Gói 36/36 siblings | CHECK AK, M, BD; RULE dòng 40 | Dùng lịch giá chia đôi; vẫn cần duyệt quan hệ, khóa học đối ứng và full cùng ngày |
+| Gói chia đôi | CHECK AK, M, BD; RULE dòng 40; chính sách gốc Q4 dòng 25/111 | Chỉ dùng lịch chia đôi khi Package xác định rõ: 18 months siblings hoặc 36 SPLIT là 18 tháng/con. Nhãn Discount 36/36 siblings không được đổi Package 36 months thành 18 tháng; vẫn cần duyệt quan hệ và full cùng ngày cho gói chia đôi |
 | Loyalty | RULE Z87:Z88; CHECK BB, BD | Đúng 30 triệu cần xác minh; không mặc định 0. Trên ngưỡng và ngừng ≤120 ngày mới chốt tháng tặng |
 | Loại ưu đãi | CHECK AL/N/BA/BB/BC | Tặng tháng/trả thẳng/referral không tự biến thành giảm tiền. Q4 không có On Top 5% |
 | Trả góp | CHECK S/AE | Kỳ là số nguyên dương; trả thẳng không mang kỳ trả góp. Duyệt vượt kỳ không bỏ qua lỗi policy/voucher |
@@ -39,6 +39,8 @@ Times City có mã `HN24.TC` trong PaymentList/Export và `HN24.TCY` ở sổ vo
 
 Các ca tự động dùng dữ liệu giả: CT trung gian, nhiều bước chuyển, nguồn thiếu Export, sai ngày chốt, chuyển một phần, khác học viên, nhiều nhánh, vòng chuyển và giữ đúng khóa học CT cuối; cùng các công thức giá/voucher/giờ/ngưỡng và điều kiện ở bảng trên.
 
-Lần đối chiếu ban đầu chạy trên 95 dòng có giá CALC dạng số của workbook và khớp 95/95 sau khi dùng đúng lịch 36/36 siblings. Đây là kết quả kiểm trước bản sửa đơn giá tháng ngày 27/10, không phải chuẩn để giữ giá trải nghiệm đã giảm trong các gói lẻ. Theo yêu cầu người dùng và bảng giá mới, RULE 51–56 được chuẩn hóa sang giá tháng chưa giảm, lưu giá cũ trong metadata `monthlyPriceSource.corrections`. Xem `monthly-gross-price.md`.
+Lần đối chiếu ban đầu khớp 95/95 dòng có giá CALC dạng số theo ánh xạ của Audit tại thời điểm đó. Kết quả lịch sử này không chứng minh rằng mọi nhãn 36/36 siblings đều là Package chia đôi. Chính sách gốc và Package mua thực tế quyết định số tháng; không sửa giá để khớp tiền quan sát. Xem `price-package-policy.md`.
+
+Kết quả trên cũng có trước bản sửa đơn giá tháng ngày 27/10. RULE 51–56 đã được chuẩn hóa sang giá tháng chưa giảm, lưu giá cũ trong metadata `monthlyPriceSource.corrections`; không giữ giá trải nghiệm đã giảm cho gói lẻ. Xem `monthly-gross-price.md`.
 
 Kiểm tra trên không xác nhận toàn bộ 200 trạng thái AF theo học viên. Bản Excel kiểm theo từng payment, còn web tổng hợp theo CT nhận cuối. Minh chứng, RCM giữ policy cũ, dữ liệu lịch sử thiếu và policy chưa có đủ đầu vào vẫn cần xác minh; không sao chép trạng thái OK của Excel sang web.

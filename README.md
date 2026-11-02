@@ -1,3 +1,7 @@
+## Sửa giá gốc khi thêm Discount · v38
+
+Package quyết định số tháng mua; nhãn `36/36 siblings` không còn tự đổi gói `36 months` thành 18 tháng. Bộ chọn dùng chung cho Bảng giá, RULE và CALC, kiểm riêng gói chia đôi, các mốc 01/10, 06/10, 31/12 và mâu thuẫn Layer/giờ/gói trong Discount. Chi tiết hồ sơ hiện phép nhân giá gốc và kỳ áp dụng. Xem [căn cứ và ví dụ tính](docs/price-package-policy.md).
+
 ## Nguồn tiền Upgrade · cầu nối 1.6.21
 
 Đọc Upgrade from contract / Upgraded to contract từ API và nhãn có link trên Hub, truy CT nguồn trong nền rồi phân bổ số dư có hóa đơn Paid vào CT tổng kể cả không có Moving-in/out. Không cộng trùng PaymentList/Transfer; liên kết vòng, nhiều CT nhận hoặc thiếu ngày/chứng từ giữ CHECK.

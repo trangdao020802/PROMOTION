@@ -60,9 +60,18 @@ test('exactly 30 million requires a loyalty decision instead of silently determi
  const {engine}=fixture({type:'Renew'}),proof={priorFees:30000000,stoppedDays:0,evidenceIds:['00000000-0000-4000-8000-000000000001']};
  const r=calculate(engine,{verification:proof});assert.equal(r.cells.R,null);assert.ok(r.verification.pending.some(s=>s.includes('đúng 30 triệu')));
 });
-test('the agreed 36/36 siblings mapping selects half the price and still requires sibling approval',()=>{
+test('a 36/36 siblings discount label cannot halve an explicit 36-month Contract',()=>{
  const {engine}=fixture({pkg:'36 months',label:'2026 October - Promotion Discount - 36/36 siblings - From 06/10',gross:77400000,discount:23220000,net:54180000,totalHours:300});
- const r=calculate(engine);assert.equal(r.cells.AK,'36 SPLIT');assert.equal(r.cells.M,77400000);assert.equal(r.cells.N,23220000);assert.equal(r.cells.R,null);assert.ok(r.reviewItems.some(i=>i.id==='sibling'&&!i.approved));
+ const before=calculate(engine,{L:'0'}),r=calculate(engine);
+ assert.equal(r.cells.AK,36);assert.equal(r.pricing.months,36);assert.equal(r.pricing.monthly,4300000);
+ assert.equal(r.cells.M,154800000);assert.equal(r.cells.M,before.cells.M);assert.equal(r.cells.N,46440000);assert.equal(r.cells.Q,108360000);assert.equal(r.cells.R,600);
+ assert.equal(r.cells.AF,'CHECK'); // The observed 54.18m cannot supply the calculated price.
+ assert.equal(calculate(engine,{reviews:allReviews(r)}).cells.Q,108360000);
+});
+test('an explicit 18-month siblings Package retains the 36-month split schedule and sibling approval',()=>{
+ const {engine}=fixture({pkg:'18 months siblings',label:'2026 October - Promotion Discount - 36/36 siblings - From 06/10',gross:77400000,discount:23220000,net:54180000,totalHours:300});
+ const r=calculate(engine);assert.equal(r.cells.AK,'36 SPLIT');assert.equal(r.pricing.months,18);assert.equal(r.cells.M,77400000);assert.equal(r.cells.N,23220000);assert.equal(r.cells.Q,54180000);assert.equal(r.cells.R,null);assert.ok(r.reviewItems.some(i=>i.id==='sibling'&&!i.approved));
+ const reviewed=calculate(engine,{reviews:allReviews(r)});assert.equal(reviewed.cells.R,300);assert.equal(reviewed.cells.Q,54180000);
 });
 const septemberSplit='Big Bang Sep 2026 - Giảm Tiền - Layer 1 - 36 months (chia đôi) - 3hrs/week';
 test('Big Bang Sep cash offers use every roadmap fixed-amount cell, including October invoices',()=>{

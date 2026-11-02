@@ -47,8 +47,8 @@ test('two primary cash offers from the same period remain CHECK after every appr
  const f=fixture({label:'Q4 2026 Promotion Discount - 12 months;2026 October - Promotion Discount - 12 months - From 06/10'});let r=calculate(f);assert.equal(r.cells.N,3870000);r=calculate(f,approved(r));assert.equal(r.cells.AF,'CHECK');assert.ok(r.promotion.checks.some(s=>s.includes('NHIỀU ƯU ĐÃI GIẢM NỀN')));
 });
 test('explicit Layer, hour and package contradictions remain visible after approvals',()=>{
- for(const label of ['Q4 2026 Promotion Discount - Layer 2 - 12 months','Q4 2026 Promotion Discount - 12 months - 4hrs/week','Q4 2026 Promotion Discount - 24 months']){
-  const f=fixture({label});let r=calculate(f);r=calculate(f,approved(r));assert.equal(r.cells.AF,'CHECK');assert.ok(r.promotion.checks.some(s=>/LAYER TRONG|GIỜ TRONG|GÓI TRONG/.test(s)));
+ for(const label of ['Q4 2026 Promotion Discount - Layer 2 - 12 months','Q4 2026 Promotion Discount - 12 months - 4hrs/week','Q4 2026 Promotion Discount - 24 months','Q4 2026 Promotion Discount - 12 months (chia đôi)','Q4 2026 Promotion Discount - VTDH - 12 months']){
+  const f=fixture({label});let r=calculate(f);r=calculate(f,approved(r));assert.equal(r.cells.AF,'CHECK');assert.equal(r.cells.M,38700000);assert.equal(r.cells.N,null);assert.equal(r.cells.Q,null);assert.equal(r.cells.R,null);assert.ok(r.discountComponents.every(c=>c.amount===null));assert.ok(r.promotion.checks.some(s=>/LAYER TRONG|GIỜ TRONG|GÓI TRONG|GÓI VTDH TRONG/.test(s)));
  }
  assert.deepEqual(offerConsistencyChecks({L:'2026 October - Promotion Discount - 36/36 siblings - From 06/10',D:day('2026-10-10')},{method:'Online Payments'},{pkg:'36 SPLIT',layer:1,hours:3}),[]);
 });

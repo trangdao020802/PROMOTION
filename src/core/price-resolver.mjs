@@ -51,7 +51,6 @@ export function typedPriceInputs(row){
 }
 function selectPrice(data,cells,context){
  const identity=pricingIdentity(cells.H,cells.I,cells.J,context);
- if(/vtdh|vung tin dong hanh/.test(priceText(cells.L))&&identity.variant==='standard'){identity.variant='vtdh';identity.key=identity.key.replace('|standard|','|vtdh|');}
  const typed=matchTypedPrice(data.policy,identity,cells.D,{...context,center:cells.B});
  if(identity.conflicts.length)return {identity,key:identity.key,gross:null,discount:null,maxTerms:null,refs:[],issue:'CHECK - KHÓA GIÁ MÂU THUẪN: '+identity.conflicts.join(', ')};
  if(typed)return typed;
@@ -82,7 +81,12 @@ function standardPriceFor(data,cells,context){
   const schedule=roadmapSchedule(data.policy,{layer,hours,pkg,phase:'september'});if(!schedule)return null;
   return {...schedule,policyKey:'BBSEP26_CASH',issue:schedule.issue??(between(date,'2026-09-01','2026-09-30')?null:'CHECK - NGOÀI THỜI KỲ DISCOUNT BIG BANG SEP')};
  }
- const separatePolicy=/VTDH|vững tin/i.test([course,cells.J,cells.L].join(' '));
+ const q4Cash=discountOffers(cells.L).some(label=>{const match=discountPolicyMatch(label,date);return match.period==='q4'&&match.kind==='cash';});
+ if(q4Cash){
+  const schedule=roadmapSchedule(data.policy,{layer,hours,pkg,phase:'q4'});
+  if(schedule)return {...schedule,issue:schedule.issue??(between(date,'2026-10-06','2026-12-31')?null:'CHECK - NGOÀI THỜI KỲ DISCOUNT Q4 06/10–31/12/2026')};
+ }
+ const separatePolicy=/VTDH|vững tin/i.test([course,cells.J].join(' '));
  const phase=between(date,'2026-10-06','2026-12-31')?'q4':between(date,'2026-10-01','2026-10-05')?'october':between(date,'2026-03-01','2026-09-30')?'base':null;
  if(phase&&!separatePolicy&&/^ATLS\b/i.test(course)&&text(context.group).toUpperCase()==='ATLS'){
   const schedule=roadmapSchedule(data.policy,{layer,hours,pkg,phase});

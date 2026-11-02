@@ -12,6 +12,9 @@ export function offerConsistencyChecks(cells,context,pricing){
  if(!context.hubRules&&cash.length>1)checks.push('CHECK - NHIỀU ƯU ĐÃI GIẢM NỀN: chỉ một mức giảm theo gói; cần điều chỉnh các nhãn trùng/xung đột.');
  for(const [i,m]of matches.entries()){
   const label=discountLabelKey(offers[i]);if(!context.customPolicy)checks.push(...m.issues);
+  const split=pricing?.identity?.variant==='split'||String(pricing?.pkg).endsWith(' SPLIT');
+  if(/\bchia doi\b|\bsplit\b/.test(label)&&!split)checks.push('CHECK - LOẠI GÓI TRONG DISCOUNT KHÁC PACKAGE: ưu đãi chia đôi cần Package chia đôi rõ ràng; không đổi số tháng từ tên ưu đãi.');
+  if(/\bvtdh\b|\bvung tin dong hanh\b/.test(label)&&pricing?.identity?.variant!=='vtdh')checks.push('CHECK - GÓI VTDH TRONG DISCOUNT KHÁC COURSE FEE KOC / PACKAGE');
   if(m.siblingAddon&&pricing?.pkg==='36 SPLIT')checks.push('XÁC MINH - REFERRAL/SIBLING: gói 36 chia đôi có câu hỏi Sibling New tặng thêm chưa được trả lời tại Q4 dòng 112; cần căn cứ riêng.');
   if(m.monthAddon&&pricing&&!context.customPolicy){
    const expected=m.kind==='months'?pricing.loyalty:m.kind==='referral'?pricing.referral:m.sharedSepOct&&pricing.regime==='base'?pricing.row?.M:pricing.straight;
