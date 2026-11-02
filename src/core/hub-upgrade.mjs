@@ -1,4 +1,5 @@
 import {hubDocumentCode,hubDocumentId} from './hub-document.mjs';
+import {internalHubPayment} from './hub-payment-kind.mjs';
 const HUB='https://hub24.apollo.vn:7777';
 const text=v=>typeof v==='string'?v.trim().replace(/\s+/g,' '):'';
 const id=v=>/^[1-9]\d{0,14}$/.test(String(v??''))?String(v):null;
@@ -66,16 +67,20 @@ export function upgradeEdges(facts){
 }
 export function upgradeAncestors(facts){
  const docs=[facts,...(facts?.relatedFinance??[])],edges=upgradeEdges(docs),known=new Set([facts?.ct]);
- for(let depth=0;depth<16;depth++){const n=known.size;for(const e of edges)if(known.has(e.to))known.add(e.from);if(known.size===n)break;}
+ // The invoice may precede the upgraded CT through a Deposit / Moving chain.
+ for(let depth=0;depth<16;depth++){const n=known.size;for(const e of edges)if(known.has(e.to))known.add(e.from);for(const f of docs)if(known.has(f?.ct)&&f.movements?.state==='read')for(const m of f.movements.rows)if(m.to===f.ct&&m.amount>0)known.add(m.from);if(known.size===n)break;}
  return known;
 }
 export function upgradeSourceMissing(facts){
  const docs=new Map([facts,...(facts?.relatedFinance??[])].filter(Boolean).map(f=>[f.contractId,f])),queue=[facts],seen=new Set();
  for(let i=0;i<queue.length&&seen.size<32;i++){
   const f=queue[i];if(!f||seen.has(f.contractId))continue;seen.add(f.contractId);
+  if(f!==facts){
+   if(f.payments?.state!=='read'||f.payments.rows.some(p=>!internalHubPayment(p)&&p.complete===true&&p.amount>0&&(!p.invoiceRef||p.invoice?.conflicts?.length)))return true;
+   for(const m of f.movements?.rows??[]){if(m.to!==f.ct||!(m.amount>0))continue;const source=[...docs.values()].find(d=>d.ct===m.from);if(!source)return true;queue.push(source);}
+  }
   for(const link of f.upgrades??[]){if(link.direction!=='from')continue;const other=docs.get(link.id);
    if(!other||link.ct&&other.ct!==link.ct||other.payments?.state!=='read')return true;
-   if(other.payments.rows.some(p=>p.complete===true&&p.amount>0&&(!p.invoiceRef||p.invoice?.conflicts?.length)))return true;
    queue.push(other);
   }
  }

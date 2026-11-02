@@ -85,7 +85,7 @@ export function projectHubMovements(root){
  // Completed transfer rows identify their original CT/DEP, not new cash.
  const explicitMoves=[...rows];
  for(const p of hubList(root.ListPayment,500)??[]){
-  const other=contractCode(p?.RelatedContractDepositNo),amount=number(p?.Amount),day=moveDay(p?.TransferDate??p?.CompleteDate),reference=text(p?.PaymentCode),direction=outgoingPayment(p)?'out':'in';
+  const other=contractCode(p?.RelatedContractDepositNo),amount=number(p?.Amount),day=moveDay(p?.TransferDate??p?.CompleteDate),reference=text(p?.PaymentCode),direction=outgoingPayment(p)||ct.includes('-DEP-')&&/deposit[ -]+to[ -]+contract/i.test(text(p?.PaymentTypeName))?'out':'in';
   if(!other||other===ct||p.IsComplete!==true||!(amount>0)||!day||/refund/i.test(text(p.PaymentTypeName)))continue;
   if(direction==='in'&&p.PaymentTypeId!==10&&!/transfer|deposit to contract/i.test(text(p.PaymentMethodTypeName)+' '+text(p.PaymentTypeName)))continue;
   if(reference&&!/^[A-Za-z0-9][A-Za-z0-9_.:/-]*$/.test(reference))continue;

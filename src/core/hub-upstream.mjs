@@ -1,6 +1,7 @@
 import {hubDocumentCode} from './hub-document.mjs';
 import {financeBundle} from './hub-finance-bundle.mjs';
 import {upgradeEdges} from './hub-upgrade.mjs';
+import {internalHubPayment} from './hub-invoice.mjs';
 export const ctCode=hubDocumentCode;
 export const ancestryKey=({datasetId,masterCt,student,parentCt})=>
  ['hub-upstream',String(datasetId),String(masterCt),String(student),String(parentCt)].join('|');
@@ -44,8 +45,9 @@ export function originPaymentSummary(facts){
   for(const p of fact?.hubContract?.payments?.rows??[]){
    const key=String(fact.ct)+'|'+String(p.id??p.code);
    if(seen.has(key))continue;seen.add(key);
-   results.push({ct:fact.ct,paymentCode:p.code,amount:p.complete===true?p.amount:null,complete:p.complete===true});
+   const internal=internalHubPayment(p),original=p.complete===true&&p.amount>0&&p.completeDate&&p.invoiceRef&&!p.invoice?.conflicts?.length&&(p.invoice?.amount==null||Math.abs(p.invoice.amount-p.amount)<=1)&&!internal;
+   results.push({ct:fact.ct,paymentCode:p.code,amount:p.complete===true?p.amount:null,complete:p.complete===true,original:!!original,internal});
   }
  }
- return {payments:results,hubPaid:results.reduce((s,p)=>s+(p.amount??0),0)};
+ return {payments:results,hubPaid:results.reduce((s,p)=>s+(p.amount??0),0),originalCount:results.filter(p=>p.original).length,invoicePaid:results.filter(p=>p.original).reduce((s,p)=>s+p.amount,0)};
 }

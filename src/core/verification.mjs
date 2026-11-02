@@ -12,7 +12,7 @@ export function dateSerial(value){
 }
 export function fullPaymentDay(account){
  const target=account?.paid?.target>0?account.paid.target:account?.snapshot?.target;
- if(!(target>0)||account.warnings?.length)return null;
+ if(!(target>0)||account.warnings?.length||(account.events??[]).some(e=>e.dateBasis==='period-end'))return null;
  const byDay=new Map();for(const e of account.events??[]){const day=Math.floor(e.date);byDay.set(day,(byDay.get(day)??0)+e.amount);}
  let balance=0,full=null;
  for(const [day,amount] of [...byDay].sort((a,b)=>a[0]-b[0])){const before=balance;balance+=amount;if(balance<target-1)full=null;else if(before<target-1)full=day;}

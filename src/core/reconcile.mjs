@@ -118,7 +118,7 @@ export function buildAccounts(input,{contractSummaries=false}={}) {
     if(!invoiceEligible(r))warn(r.contract,`Payment ${r.payment}: thiếu hóa đơn VAT hợp lệ / chưa xác nhận đã thanh toán; chưa gộp số thu vào CT`);
   }
   for (const t of movements) {
-    const proof={invoiceBacked:funded.has(t.id),invoiceIds:funded.get(t.id)??[],...(t.paymentCodes.length?{transferPayments:t.paymentCodes}:{})};
+    const proof={invoiceBacked:funded.has(t.id),invoiceIds:funded.get(t.id)??[],...(t.dateBasis?{dateBasis:t.dateBasis}:{}),...(t.paymentCodes.length?{transferPayments:t.paymentCodes}:{})};
     if (isCT(t.from)) event(t.from, {kind:'Chuyển ra CT', amount:-t.out, date:t.date, payment:t.id, from:t.from, to:t.to, refs:t.refs,...proof});
     if (isCT(t.to)) event(t.to, {kind:isCT(t.from) ? 'Chuyển từ CT khác' : 'Phân bổ cọc vào CT', amount:t.amount, date:t.date, payment:t.id, from:t.from, to:t.to, refs:t.refs,...proof});
     if(!proof.invoiceBacked)for(const ct of [t.from,t.to].filter(isCT))warn(ct,`Chuyển ${t.from} → ${t.to}: chưa đủ hóa đơn thu gốc đã thanh toán tại ngày chuyển; chưa gộp vào tổng CT`);

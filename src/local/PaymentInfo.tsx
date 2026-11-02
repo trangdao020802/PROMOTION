@@ -24,13 +24,13 @@ export default function PaymentInfo({row,doc,SourceRefs,date,money}:any){
  const data=paymentAllocations(row),total=String(row.cells.contractTotal??'');
  const originalCells=(r:any)=><><td>{date(r.date)}</td><td><InvoiceEvidence payment={r}/></td><td><strong>{r.payment}</strong><small>{r.method??'Chưa rõ phương thức'}{r.term?` · ${r.term}`:''}</small></td><td>{doc(r.contract)}<small>{r.contract===total?'Thu trực tiếp · Contract tổng':'Hóa đơn gốc'}</small>{!r.verified&&<small className="invoice-pending">Thiếu VAT / trạng thái Paid hoặc dữ liệu mâu thuẫn · chưa gộp CT</small>}</td><td className="numeric">{r.amount==null?'Chưa tính':money(r.amount)}</td></>;
  const path=(invoice:any,steps:any[],index:number)=>{
-  const nodes=[{code:invoice.receipt.contract,date:invoice.receipt.date,refs:invoice.receipt.refs,label:'Nguồn thu ban đầu',kind:'source'},...steps.map((step:any)=>({code:step.to,date:step.date,refs:step.refs,label:step.to===data.ct?'Vào hợp đồng nhận tiền':'Qua hợp đồng trung gian',kind:step.to===data.ct?'done':'in'}))];
+  const nodes=[{code:invoice.receipt.contract,date:invoice.receipt.date,refs:invoice.receipt.refs,label:'Nguồn thu ban đầu',kind:'source'},...steps.map((step:any)=>({code:step.to,date:step.date,dateBasis:step.dateBasis,refs:step.refs,label:step.to===data.ct?'Vào hợp đồng nhận tiền':'Qua hợp đồng trung gian',kind:step.to===data.ct?'done':'in'}))];
   return <div className="moving-path" key={index}>
    {invoice.paths.length>1&&<p className="moving-path-label">Đường phân bổ {index+1}</p>}
    <ol className="moving-timeline">{nodes.map((node,i)=><li key={i} className={node.kind==='done'?'arrived':''}>
     <span className="moving-step-icon"><FlowIcon kind={node.kind}/></span>
     <div className="moving-step-main"><span>{node.label}</span>{doc(node.code,true)}</div>
-    <div className="moving-step-meta"><time>{date(node.date)}</time><TraceEvidence refs={node.refs}/></div>
+    <div className="moving-step-meta"><time>{node.dateBasis==='period-end'?'Upgrade theo kỳ · chưa có ngày':date(node.date)}</time><TraceEvidence refs={node.refs}/></div>
    </li>)}</ol>
   </div>;
  };
@@ -53,7 +53,7 @@ export default function PaymentInfo({row,doc,SourceRefs,date,money}:any){
    <section className="moving-card moving-in" aria-label="Moving-in · Phân bổ vào hợp đồng">
     <header className="moving-header"><span className="moving-header-icon"><FlowIcon/></span><h4>Phân bổ vào hợp đồng</h4><span className="moving-count">{data.invoices.length} hóa đơn</span></header>
     <div className="moving-summary">
-     <div><span>Hợp đồng nhận tiền</span>{doc(data.ct,true)}<small>Ngày nhận: {data.dates.length?data.dates.map((d:number)=>date(d)).join(' · '):'Chưa có phân bổ'}</small></div>
+     <div><span>Hợp đồng nhận tiền</span>{doc(data.ct,true)}<small>Ngày nhận: {data.dates.length?data.dates.map((d:number)=>date(d)).join(' · '):data.periodAllocated?'Upgrade theo kỳ · chưa có ngày cụ thể':'Chưa có phân bổ'}{data.periodAllocated&&data.dates.length?' · có Upgrade chưa rõ ngày':''}</small></div>
      <div className="moving-summary-total"><span>Tổng tiền phân bổ</span><strong>{money(data.total)} <span>₫</span></strong>{data.pending.length>0&&<small>Chưa tính đủ · {data.pending.length} phân bổ chờ nguồn</small>}</div>
     </div>
     {data.invoices.length>0&&<div className="moving-scroll"><table className="moving-table"><colgroup><col className="moving-col-invoice"/><col className="moving-col-source"/><col className="moving-col-amount"/><col className="moving-col-trace"/></colgroup><thead><tr><th>Hóa đơn gốc</th><th>Nguồn tiền / Thanh toán</th><th className="moving-amount">Số tiền (₫)</th><th className="moving-trace-heading">Truy vết</th></tr></thead>{data.invoices.map((invoice:any,index:number)=>{
@@ -70,13 +70,13 @@ export default function PaymentInfo({row,doc,SourceRefs,date,money}:any){
       </td></tr>
      </tbody>;
     })}</table></div>}
-    {data.pending.length>0&&<div className="moving-pending"><h5>Phân bổ chờ xác minh</h5><p>Chưa đủ hóa đơn gốc · chưa cộng vào tổng có căn cứ.</p><div className="moving-scroll"><table className="moving-table moving-pending-table"><thead><tr><th>Ngày chuyển</th><th>Từ mã CT / DEP</th><th>CT nhận tiền</th><th className="moving-amount">Tiền Transfer</th><th>Căn cứ</th></tr></thead><tbody>{data.pending.map((e:any)=><tr key={JSON.stringify([e.payment,e.from,e.to])}><td>{date(e.date)}</td><td>{doc(e.from,true)}</td><td>{doc(e.to,true)}</td><td className="moving-amount">{money(e.amount)}</td><td><TraceEvidence refs={e.refs}/></td></tr>)}</tbody></table></div></div>}
+    {data.pending.length>0&&<div className="moving-pending"><h5>Phân bổ chờ xác minh</h5><p>Chưa đủ hóa đơn gốc · chưa cộng vào tổng có căn cứ.</p><div className="moving-scroll"><table className="moving-table moving-pending-table"><thead><tr><th>Ngày chuyển</th><th>Từ mã CT / DEP</th><th>CT nhận tiền</th><th className="moving-amount">Tiền Transfer</th><th>Căn cứ</th></tr></thead><tbody>{data.pending.map((e:any)=><tr key={JSON.stringify([e.payment,e.from,e.to])}><td>{e.dateBasis==='period-end'?'Upgrade theo kỳ · chưa có ngày':date(e.date)}</td><td>{doc(e.from,true)}</td><td>{doc(e.to,true)}</td><td className="moving-amount">{money(e.amount)}</td><td><TraceEvidence refs={e.refs}/></td></tr>)}</tbody></table></div></div>}
     {!data.incoming.length&&<p className="moving-empty">Chưa có dòng chuyển vào trong nguồn đang dùng.</p>}
     <footer className="moving-footer"><FlowIcon kind="swap"/><span>Chuyển nội bộ · <strong>Không cộng lại vào tổng thu</strong></span></footer>
    </section>
    <section className="moving-card moving-out" aria-label="Moving-out · Chuyển ra khỏi CT">
     <header className="moving-header"><span className="moving-header-icon"><FlowIcon kind="out"/></span><h4>Chuyển ra khỏi hợp đồng</h4><span className="moving-count">{data.outgoing.length} lần chuyển</span></header>
-    {data.outgoing.length?<div className="moving-scroll"><table className="moving-table moving-out-table"><thead><tr><th>Ngày / Nguồn chuyển</th><th>Hợp đồng nhận tiền</th><th className="moving-amount">Số tiền (₫)</th><th>Truy vết / căn cứ</th></tr></thead><tbody>{data.outgoing.map((e:any)=><tr key={JSON.stringify([e.payment,e.from,e.to])}><td><time>{date(e.date)}</time>{doc(e.from,true)}</td><td>{doc(e.to,true)}<small className={e.invoiceBacked?'':'moving-warning'}>{e.invoiceBacked?'Có hóa đơn đã thanh toán':'Chưa đủ hóa đơn · chưa gộp CT'}</small></td><td className="moving-amount"><strong>{money(Math.abs(e.debit??e.amount))}</strong></td><td><small>{e.kind}</small><TraceEvidence refs={e.refs}/></td></tr>)}</tbody></table></div>:<p className="moving-empty">Chưa có dòng chuyển ra trong nguồn đang dùng.</p>}
+    {data.outgoing.length?<div className="moving-scroll"><table className="moving-table moving-out-table"><thead><tr><th>Ngày / Nguồn chuyển</th><th>Hợp đồng nhận tiền</th><th className="moving-amount">Số tiền (₫)</th><th>Truy vết / căn cứ</th></tr></thead><tbody>{data.outgoing.map((e:any)=><tr key={JSON.stringify([e.payment,e.from,e.to])}><td><time>{e.dateBasis==='period-end'?'Upgrade theo kỳ · chưa có ngày':date(e.date)}</time>{doc(e.from,true)}</td><td>{doc(e.to,true)}<small className={e.invoiceBacked?'':'moving-warning'}>{e.invoiceBacked?'Có hóa đơn đã thanh toán':'Chưa đủ hóa đơn · chưa gộp CT'}</small></td><td className="moving-amount"><strong>{money(Math.abs(e.debit??e.amount))}</strong></td><td><small>{e.kind}</small><TraceEvidence refs={e.refs}/></td></tr>)}</tbody></table></div>:<p className="moving-empty">Chưa có dòng chuyển ra trong nguồn đang dùng.</p>}
     <footer className="moving-footer"><FlowIcon kind="swap"/><span>Chuyển nội bộ · <strong>Không tạo khoản thu mới</strong></span></footer>
    </section>
    <details className="payment-trace-notes"><summary>Cách đọc thanh toán</summary><p>Mỗi hóa đơn gốc hiển thị một lần; ngày và phương thức là của PaymentList gốc. Ngày nhận và tổng phân bổ lấy từ lần vào CT đang xem. Các bước trung gian chỉ để truy vết, không tạo tiền thu mới. Chưa đủ căn cứ tách từng hóa đơn thì hiển thị Chưa tính. Chỉ hiển thị nguồn đến {date(row.reconciliation?.cutoff)}.</p></details>

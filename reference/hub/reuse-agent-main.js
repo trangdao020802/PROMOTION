@@ -138,6 +138,7 @@
     if(!facts||facts.contractId!==link.id||link.ct&&facts.ct!==link.ct)return null;
     const expected={...request,ct:facts.ct,url:link.url,readFinance:true},source={hubContract:facts};
     await addDisplayedFinance(source,expected,ctrl.signal);
+    await addLearnerFinance(source,root,client,ctrl.signal,expected);
     await addUpgradeDate(source,client,ctrl.signal);
     await addInvoicePDF(source,root,client,{...request,readFinance:true},ctrl.signal,jobId);
     return source.hubContract;

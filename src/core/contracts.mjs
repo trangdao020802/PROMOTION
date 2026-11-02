@@ -65,13 +65,13 @@ export function buildContractGroups(data,input,{paymentTrace=false}={}){
    unallocatedDeposit:0}:sourceAccount;
   if(ct)account.cashBefore=sum(cash.filter(r=>invoiceEligible(r)&&r.student===student&&r.date<Math.floor(cells.D)));
   const events=account.events;
-  if(sourceContracts.length){account.sourceContracts=sourceContracts;account.movementHistory=transfers.filter(t=>[ct,...sourceContracts].includes(t.from)||[ct,...sourceContracts].includes(t.to)).map(t=>({kind:t.type,amount:t.amount,date:t.date,payment:t.id,...(t.paymentCodes.length?{transferPayments:t.paymentCodes}:{}),from:t.from,to:t.to,refs:t.refs,invoiceBacked:funded.has(t.id),invoiceIds:funded.get(t.id)??[]}));}
+  if(sourceContracts.length){account.sourceContracts=sourceContracts;account.movementHistory=transfers.filter(t=>[ct,...sourceContracts].includes(t.from)||[ct,...sourceContracts].includes(t.to)).map(t=>({kind:t.type,amount:t.amount,date:t.date,...(t.dateBasis?{dateBasis:t.dateBasis}:{}),payment:t.id,...(t.paymentCodes.length?{transferPayments:t.paymentCodes}:{}),from:t.from,to:t.to,refs:t.refs,invoiceBacked:funded.has(t.id),invoiceIds:funded.get(t.id)??[]}));}
   // A wider read-only lineage must not widen the course-input candidates.
   // In particular, a pending invoice behind an old CT is history for review.
   const courseDepositOrigins=uniq([...(account.movementHistory??[]),...events].filter(e=>e.from&&!isCT(e.from)).map(e=>e.from));
   const courseDocument=d=>ct?(d.contract===ct||sourceContracts.includes(d.contract)||courseDepositOrigins.includes(d.contract)||events.some(e=>e.invoiceIds?.includes(d.id)||e.payment===d.payment&&e.vat===d.vat)):members.some(m=>m.id===d.payment);
   if(ct&&paymentTrace){
-   account.movementHistory=upstreamTransfers(ct,transfers).map(t=>({kind:t.type,amount:t.amount,date:t.date,payment:t.id,...(t.paymentCodes.length?{transferPayments:t.paymentCodes}:{}),from:t.from,to:t.to,refs:t.refs,invoiceBacked:funded.has(t.id),invoiceIds:funded.get(t.id)??[]}));
+   account.movementHistory=upstreamTransfers(ct,transfers).map(t=>({kind:t.type,amount:t.amount,date:t.date,...(t.dateBasis?{dateBasis:t.dateBasis}:{}),payment:t.id,...(t.paymentCodes.length?{transferPayments:t.paymentCodes}:{}),from:t.from,to:t.to,refs:t.refs,invoiceBacked:funded.has(t.id),invoiceIds:funded.get(t.id)??[]}));
    account.transferIn=events.filter(e=>e.to===ct&&e.from&&e.invoiceBacked).reduce((total,event)=>total+event.amount,0);
   }
   const depositOrigins=uniq([...(account.movementHistory??[]),...events].filter(e=>e.from&&!isCT(e.from)).map(e=>e.from));

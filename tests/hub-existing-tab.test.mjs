@@ -169,6 +169,17 @@ test('the existing-tab reader dates Upgrade independently of price lookups and r
  const source=result.projection.hubContract.relatedFinance[0];assert.equal(source.ct,sourceCt);assert.equal(source.payments.rows[0].amount,9600000);assert.equal(source.payments.rows[0].invoice.number,'000018');assert.equal(source.movements.rows.length,0);
  assert.ok(calls.some(([method,id])=>method==='detail'&&id==='71'));assert.equal(r.calls.length,0);assert.equal(r.context.location.href,origin+'/home');assert.ok(!JSON.stringify(result).includes('PRIVATE-DO-NOT-COPY'));
 });
+test('the Upgrade source reads its own learner history and retains the original Deposit invoice without extra tabs',async()=>{
+ const r=mainRuntime(),sourceCt='QA2610-CT-000071',dep='QA2610-DEP-000070',calls=[];
+ const incoming={PaymentId:71,ContractId:71,PaymentCode:'QA2610-PAY-000071',Amount:7200000,IsComplete:true,CompleteDate:'2026-10-08',PaymentTypeId:10,PaymentTypeName:'Deposit to contract',RelatedContractDepositNo:dep};
+ const service={getContractDetail:({contractId})=>Promise.resolve(String(contractId)==='12345'?{...raw(),CreatedDate:'2026-10-31',UpgradeFromContractId:71}:{ContractId:71,ContractNo:sourceCt,LeadId:90,KidId:91,ListCourseInfo:[],ListMovingIn:[],ListMovingOut:[]}),getContractPayment:({contractId})=>Promise.resolve(String(contractId)==='71'?[incoming]:[])};
+ const lead={getKidPayments:args=>{calls.push(args);return Promise.resolve({KidId:91,TotalCount:2,ListData:[{ContractDepositId:71,ContractDepositNo:sourceCt,ListPayment:[incoming]},{ContractDepositId:70,ContractDepositNo:dep,ListPayment:[{PaymentCode:'QA2610-PAY-000070',Amount:7200000,PaymentDate:'2026-10-08',Status:'Paid',PaymentType:'Deposit',InvoiceNo:'0000571'}]}]});}};
+ r.context.document={querySelector:()=>({})};r.context.window.angular={element:()=>({injector:()=>({get:name=>name==='$rootScope'?{sessionInfo:{UserRoleId:51}}:name==='leadService'?lead:service})})};
+ r.send({type:'read-course',course:{...course,readPolicy:false}});await drain();await drain();await drain();
+ const result=r.messages.find(m=>m.type==='course');assert.ok(result);const docs=result.projection.hubContract.relatedFinance;
+ assert.equal(docs.length,2);assert.equal(docs.find(f=>f.ct===dep).payments.rows.length,1);assert.equal(docs.find(f=>f.ct===dep).payments.rows[0].invoice.number,'0000571');
+ assert.equal(calls.length,1);assert.equal(calls[0].kidId,'91');assert.equal(r.context.location.href,origin+'/home');
+});
 test('an Upgrade metadata timeout continues with saved evidence and cannot apply a late date',async()=>{
  const r=mainRuntime(),timers=[];let resolveInfo;
  r.context.setTimeout=(fn,ms)=>(timers.push({fn,ms}),timers.length);r.context.clearTimeout=()=>{};

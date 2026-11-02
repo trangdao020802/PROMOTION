@@ -1,6 +1,7 @@
 import {hubList,projectHubContract,projectContractPayments,projectHubLearner,mergeHubFinanceFacts,validateHubContract} from './hub-contract.mjs';
 import {hubDocumentCode} from './hub-document.mjs';
 import {invoiceDay,projectPaymentInvoice,mergePaymentInvoice} from './hub-invoice.mjs';
+import {upgradeEdges} from './hub-upgrade.mjs';
 const plain=v=>v&&typeof v==='object'&&!Array.isArray(v);
 const id=v=>/^[1-9]\d{0,14}$/.test(String(v??''))?String(v):null;
 const text=v=>typeof v==='string'?v.trim().replace(/\s+/g,' '):'';
@@ -33,7 +34,9 @@ export function projectLearnerPaymentPage(value,root){
    const method=text(raw.PaymentMethodTypeName??raw.PaymentMethodName).slice(0,200),type=text(raw.PaymentTypeName??raw.PaymentType).slice(0,200);
    const p={id:id(raw.PaymentId),code:paymentCode,amount:paidAmount,totalAmount:amount(raw.TotalAmount??raw.Amount),remaining:amount(raw.RemainAmount),typeId:id(raw.PaymentTypeId),type,method,
     scheduledDate:invoiceDay(raw.ScheduledDate),completeDate,complete:paid,...projectPaymentInvoice(raw,'learner-payments')};
-   payments.push(p);
+   const previous=payments.find(q=>q.code===p.code);
+   if(previous){if(Math.abs(previous.amount-p.amount)>1||previous.completeDate!==p.completeDate||previous.complete!==p.complete)return null;Object.assign(previous,mergePaymentInvoice(previous,p));}
+   else payments.push(p);
    const from=code(raw.RelatedContractDepositNo??raw.RelatedContractNo);
    if(from&&from!==ct&&paid&&paidAmount>0&&completeDate&&!/refund|moving[ -]?out|transfer[ -]?out/i.test(type))moves.push({from,to:ct,amount:paidAmount,date:completeDate,reference:paymentCode,direction:'in'});
   }
@@ -43,7 +46,7 @@ export function projectLearnerPaymentPage(value,root){
   const prior=documents.get(ct);
   if(prior){
    if(prior.contractId!==facts.contractId)return null;
-   for(const p of facts.payments.rows){const old=prior.payments.rows.find(x=>x.code===p.code);if(old&&Math.abs(old.amount-p.amount)>1)return null;if(!old)prior.payments.rows.push(p);}
+   for(const p of facts.payments.rows){const old=prior.payments.rows.find(x=>x.code===p.code);if(old&&(Math.abs(old.amount-p.amount)>1||old.completeDate!==p.completeDate||old.complete!==p.complete))return null;if(old)Object.assign(old,mergePaymentInvoice(old,p));else prior.payments.rows.push(p);}
    prior.movements.rows.push(...moves);
   }else documents.set(ct,facts);
  }
@@ -51,12 +54,12 @@ export function projectLearnerPaymentPage(value,root){
 }
 export function mergeLearnerFinance(facts,pages){
  if(!validateHubContract(facts)||!facts.learner||!Array.isArray(pages))return facts;
- const docs=new Map();
+ const docs=new Map((facts.relatedFinance??[]).map(f=>[f.ct,f]));
  for(const page of pages)for(const doc of page?.documents??[]){
   if(!validateHubContract(doc)||doc.learner?.kidId!==facts.learner.kidId)continue;
   const prior=docs.get(doc.ct);
   if(prior){
-   if(prior.contractId!==doc.contractId)return facts;
+   if(prior.contractId!==doc.contractId||prior.learner&&prior.learner.kidId!==doc.learner.kidId)return facts;
    const merged=mergeHubFinanceFacts(prior,doc);
    const rows=[...merged.payments.rows];for(const p of doc.payments.rows)if(!rows.some(q=>q.code===p.code))rows.push(p);
    docs.set(doc.ct,{...merged,payments:{...merged.payments,rows}});
@@ -66,10 +69,11 @@ export function mergeLearnerFinance(facts,pages){
  let result=own?.contractId===facts.contractId?mergeHubFinanceFacts(facts,own):facts;
  // Only ancestors connected to the requested document leave Hub. Other
  // courses, siblings and unrelated payments of this household stay in Hub.
- const known=new Set([facts.ct]),related=[];
+ const known=new Set([facts.ct]),related=[],upgrades=upgradeEdges([result,...docs.values()]);
  for(let depth=0;depth<16&&known.size<=32;depth++){
   const before=known.size;
   for(const ct of [...known])for(const m of (ct===facts.ct?result:docs.get(ct))?.movements?.rows??[])if(m.to===ct)known.add(m.from);
+  for(const e of upgrades)if(known.has(e.to))known.add(e.from);
   if(before===known.size)break;
  }
  for(const ct of known)if(ct!==facts.ct&&docs.has(ct)&&related.length<32)related.push({...docs.get(ct),discounts:null});

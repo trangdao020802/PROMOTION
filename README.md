@@ -1,3 +1,11 @@
+## Truy nguồn DEP qua CT Upgrade · v41 / cầu nối 1.6.23
+
+Upgrade được xem là chặng chuyển đã xác nhận, không đòi thêm Moving-in/out. Nếu thiếu ngày nhưng CT nhận thuộc bộ nguồn của kỳ và có hóa đơn Paid gốc, bộ tính phân bổ số dư tại kỳ đối chiếu. Ngày nâng cấp vẫn để chưa biết; không dùng ngày chốt kỳ làm ngày full hoặc duyệt điều kiện khuyến mãi. Chứng từ đã lưu đủ để tính lại, không bắt kết nối Hub chỉ để đọc lại Moving-out.
+
+Learner Payments truy ngược cả Upgrade và Deposit-to-contract; giữ hóa đơn DEP khi đọc tiếp CT cũ, bổ sung số VAT vào chứng từ đã lưu đúng mã/ID. Chuyển cọc là phân bổ ra khỏi DEP, không phải lần thu thứ hai. Link `/Deposit/detail` và `/deposit/detail` được khớp theo cùng ID đã xác minh. Chi tiết nguồn hiển thị riêng số hóa đơn Paid gốc và lý do chờ kiểm tra.
+
+Thông báo thiếu cầu nối phân biệt trình duyệt đang dùng với tiện ích trên máy tính. Chưa bật kết nối plugin cho khách truy cập: phiên phát triển chưa có công cụ kiểm tra plugin được Sites cho phép và chưa tìm được connector Hub Apollo Việt Nam. Không dùng Apollo.io thay thế hoặc dùng tài khoản chủ web cho khách. [Luồng tiền](docs/hub-upgrade-funding.md) · [Kết nối trình duyệt và tài khoản](docs/visitor-hub-connections.md).
+
 ## Cộng tiền Upgrade từ chứng từ đã lưu · v40
 
 Khi GetContractDetail thiếu ngày, cầu nối 1.6.22 đọc riêng ngày tạo CT nhận từ dịch vụ GetContractInfoForUpdate đang có của Hub, kể cả khi tắt lấy chính sách giá. Sổ tiền cũng tận dụng ngày từ chính sách đã lưu sau khi khớp mã CT, ID và link. Hóa đơn Paid gốc được phân bổ vào CT tổng một lần, kể cả đã có PaymentList lịch sử; khoản đã chuyển nơi khác không được dùng lại. Chi tiết hồ sơ hiển thị số tiền thực sự được phân bổ và lý do còn CHECK. Cập nhật cầu nối, tải lại Hub/Promotion và đọc lại CT tổng nếu thiếu ngày; dữ liệu đã đủ thì bấm **Tính lại chứng từ đã lưu**. [Căn cứ và cách tính](docs/hub-upgrade-funding.md).

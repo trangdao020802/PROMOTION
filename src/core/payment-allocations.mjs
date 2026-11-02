@@ -73,7 +73,7 @@ export function paymentAllocations(row){
  const assigned=new Set(invoices.map(r=>r.id));
  return {ct,invoices,originals:receipts.filter(r=>!assigned.has(r.id)),
   incoming,total:confirmed.reduce((n,e)=>n+e.amount,0)+(hub.ledger?0:hub.amount??0),hubReceipts:hub.ledger?[]:hub.receipts??[],hubCovered,
-  dates:unique(incoming.map(e=>Math.floor(e.date))).sort((a,b)=>a-b),
+  dates:unique(incoming.filter(e=>e.dateBasis!=='period-end').map(e=>Math.floor(e.date))).sort((a,b)=>a-b),periodAllocated:incoming.some(e=>e.dateBasis==='period-end'),
   pending:incoming.filter(e=>!confirmed.includes(e)&&!hubCovered.includes(e)),
   outgoing:events.filter(e=>e.from===ct&&e.to!==ct),
   warnings:unique(invoices.flatMap(r=>r.warnings))};

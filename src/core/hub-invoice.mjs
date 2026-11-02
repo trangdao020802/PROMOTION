@@ -1,6 +1,8 @@
 // Invoice identifiers and printed invoice numbers are different facts. Keep
 // leading zeroes and never turn a GUID, a payment code or an amount into a VAT no.
 import {upgradeSourceMissing} from './hub-upgrade.mjs';
+import {internalHubPayment} from './hub-payment-kind.mjs';
+export {internalHubPayment} from './hub-payment-kind.mjs';
 const clean=v=>typeof v==='string'?v.trim().replace(/\s+/g,' '):'';
 export const invoiceNumber=v=>{const s=typeof v==='number'&&Number.isSafeInteger(v)?String(v):clean(v);return /^\d{1,20}$/.test(s)&&/[1-9]/.test(s)?s:null;};
 export const eInvoiceKey=v=>{const s=clean(v);return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s)?s:null;};
@@ -50,7 +52,7 @@ export function mergePaymentInvoice(row,extra){
   ...(!row.eInvoiceVersion&&extra?.eInvoiceVersion?{eInvoiceVersion:extra.eInvoiceVersion}:{}),...(invoice?{invoice}:{})};
 }
 export const paymentInvoiceNumber=p=>validateInvoice(p?.invoice)?p.invoice.number:invoiceNumber(p?.invoiceRef);
-export const invoiceReadsComplete=f=>f?.payments?.state==='read'&&f.payments.rows.every(p=>p.complete!==true||p.amount<=0||/transfer|moving/i.test(p.method+' '+p.type)||!!paymentInvoiceNumber(p));
+export const invoiceReadsComplete=f=>f?.payments?.state==='read'&&f.payments.rows.every(p=>p.complete!==true||p.amount<=0||internalHubPayment(p)||!!paymentInvoiceNumber(p));
 export const financeReadsComplete=f=>f?.financeRevision===3&&f.movements?.state==='read'&&!upgradeSourceMissing(f)&&invoiceReadsComplete(f);
 export const displayedInvoiceNo=value=>eInvoiceKey(value)?'Chưa đọc số hóa đơn':value||'Chưa có số VAT';
 export const invoiceLabel=p=>paymentInvoiceNumber(p)??invoiceNumber(p?.invoiceNumber)??displayedInvoiceNo(p?.vat??p?.invoiceRef);

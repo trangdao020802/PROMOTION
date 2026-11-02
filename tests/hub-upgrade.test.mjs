@@ -5,7 +5,7 @@ import {parseCoursePage} from '../src/core/hub-course.mjs';
 import {upgradeLinksFromDocument,upgradeEdges,upgradeSourceMissing} from '../src/core/hub-upgrade.mjs';
 import {readUpgradeFinance} from '../src/core/hub-upgrade-reader.mjs';
 import {financeBundle} from '../src/core/hub-finance-bundle.mjs';
-import {knownFinanceDocuments,upstreamCandidates} from '../src/core/hub-upstream.mjs';
+import {knownFinanceDocuments,upstreamCandidates,originPaymentSummary} from '../src/core/hub-upstream.mjs';
 import {childFactKey} from '../src/core/child-hub-evidence.mjs';
 import {attachHubFunding,hubFundingSources} from '../src/core/hub-proven-funding.mjs';
 import {buildModel} from '../src/local/model.mjs';
@@ -15,6 +15,10 @@ import {parseDate} from '../src/core/source-parser.mjs';
 import {build} from 'esbuild';
 import vm from 'node:vm';
 import {hubFixture} from './helpers/hub-policy-fixture.mjs';
+import {projectLearnerPaymentPage,mergeLearnerFinance} from '../src/core/hub-learner-payments.mjs';
+import {invoiceReadsComplete} from '../src/core/hub-invoice.mjs';
+import {fullPaymentDay} from '../src/core/verification.mjs';
+import {upgradeFunding} from '../src/core/hub-upgrade-funding.mjs';
 const master='QA2610-CT-000902',origin='QA2609-CT-000901',student='QA-UPGRADE',datasetId='qa-upgrade';
 const url=id=>'https://hub24.apollo.vn:7777/contract/detail/'+id;
 const payment=(id,ct,amount,date)=>({PaymentId:id,ContractId:ct,PaymentCode:'QA-PAY-'+id,Amount:amount,RemainAmount:0,TotalAmount:amount,IsComplete:true,PaymentTypeId:2,PaymentTypeName:'Payment',PaymentMethodTypeName:'Online Payments',CompleteDate:date,InvoiceNo:'0000'+id,InvoiceDate:date,InvoiceAmount:amount});
@@ -31,6 +35,62 @@ function fixture({history=false,bundleOnly=false}={}){
 }
 function context(f){return {datasetId,facts:[{id:childFactKey({datasetId,masterCt:master,ct:master,student}),datasetId,masterCt:master,ct:master,student,url:url(902),hubContract:f}],links:[{ct:master,url:url(902)}]};}
 const calculated=model=>new AuditEngine(model).calculate({id:'CT::'+master});
+function depositUpgrade(){
+ const dep='QA2610-DEP-000900',root={ContractId:902,ContractNo:master,LeadId:40,KidId:41,CreatedDate:'2026-10-31',UpgradeFromContractId:901,ListCourseInfo:[]};
+ const group=(ct,id,ListPayment)=>({ContractDepositNo:ct,ContractDepositId:id,ListPayment});
+ const rows=[group(master,902,[{PaymentId:902,PaymentCode:'QA2610-PAY-000902',Amount:27630000,PaymentDate:'2026-10-31',Status:'Paid',PaymentType:'Payment',InvoiceNo:'0000625'}]),
+  group(origin,901,[{PaymentCode:'QA2610-PAY-000901',Amount:7200000,PaymentDate:'2026-10-08',Status:'Paid',PaymentType:'Deposit to contract',RelatedContractDepositNo:dep}]),
+  group(dep,900,[{PaymentCode:'QA2610-PAY-000900',Amount:7200000,PaymentDate:'2026-10-08',Status:'Paid',PaymentType:'Deposit',InvoiceNo:'0000571'}]),
+  group('QA2610-CT-000999',999,[{PaymentCode:'QA2610-PAY-000999',Amount:99000000,PaymentDate:'2026-10-08',Status:'Paid',InvoiceNo:'0000999'}])];
+ const page=projectLearnerPaymentPage({KidId:41,TotalCount:4,ListData:rows},root);
+ return {dep,root,page};
+}
+test('Learner Payments follows Upgrade then Deposit-to-contract and carries only the original 7.2m invoice',()=>{
+ const {dep,root,page}=depositUpgrade(),f=mergeLearnerFinance(projectHubContract(root),[page]);
+ assert.ok(validateHubContract(f));assert.deepEqual(f.relatedFinance?.map(d=>d.ct).sort(),[dep,origin].sort());
+ assert.equal(upgradeSourceMissing(f),false);
+ const bundle=fixture({bundleOnly:true}),c=bundle.records[0].cells;c.D='QA2610-PAY-000902';c.O=parseDate('2026-10-31');c.AF=27630000;c.AQ='2026 October - Promotion Discount - 12 months';
+ bundle.exports[0].target=34830000;bundle.exports[0].paid=34830000;
+ const model=buildModel(bundle,policyData());model.dataset={id:datasetId};attachHubFunding(model,context(f));const after=calculated(model);
+ assert.equal(after.cells.W,34830000);assert.equal(after.cells.Q,34830000);assert.equal(after.cells.AC,0);
+ assert.equal(after.receipts.length,2);assert.equal(after.receipts.find(p=>p.contract===dep).vat,'0000571');
+ assert.equal(after.reconciliation.transferIn,7200000);assert.equal(after.reconciliation.hubSupplement.receipts[0].allocated,7200000);
+ assert.equal(after.reconciliation.hubSupplement.pending.length,0);
+ const intermediary=f.relatedFinance.find(d=>d.ct===origin);assert.equal(invoiceReadsComplete(intermediary),true);assert.equal(originPaymentSummary([{ct:origin,hubContract:intermediary}]).payments[0].internal,true);
+ attachHubFunding(model,context(f));assert.equal(calculated(model).cells.W,34830000);
+});
+test('Upgrade retains the Deposit ancestry read while fetching the old contract',async()=>{
+ const {root,page}=depositUpgrade(),from={...root,ContractId:901,ContractNo:origin,UpgradeFromContractId:undefined,UpgradeToContractId:902,UpgradeToContractNo:master};
+ const old=mergeLearnerFinance(projectHubContract(from),[page]),f=await readUpgradeFinance(projectHubContract(root),async()=>old);
+ assert.ok(validateHubContract(f));assert.equal(f.relatedFinance?.length,2);assert.ok(f.relatedFinance.some(d=>d.ct.includes('-DEP-')));
+ const noLearner={...projectHubContract(root)};delete noLearner.learner;
+ const withoutLead=await readUpgradeFinance(noLearner,async()=>old);assert.equal(withoutLead.relatedFinance?.length,2);
+});
+test('Deposit-to-contract is an outgoing allocation of one original Deposit, never another cash receipt',()=>{
+ const {dep}=depositUpgrade(),p=payment(900,900,7200000,'2026-10-08');p.PaymentCode='QA2610-PAY-000900';
+ const f=projectHubContract({DepositId:900,DepositNo:dep,ListCourseInfo:[],ListPayment:[p,{...p,PaymentId:901,PaymentCode:'QA2610-PAY-000901',InvoiceNo:undefined,PaymentTypeName:'Deposit to contract',RelatedContractDepositNo:origin}]});
+ assert.equal(f.payments.rows.length,1);assert.equal(f.movements.rows[0].from,dep);assert.equal(f.movements.rows[0].to,origin);
+ const summary=originPaymentSummary([{ct:dep,hubContract:f}]);assert.equal(summary.originalCount,1);assert.equal(summary.invoicePaid,7200000);
+});
+test('partial Deposit reads are enriched by the same bound learner invoice without adding another 7.2m',()=>{
+ const {dep,root,page}=depositUpgrade(),f=mergeLearnerFinance(projectHubContract(root),[page]),ctx=context(f);
+ const old=structuredClone(f.relatedFinance.find(d=>d.ct===dep));delete old.payments.rows[0].invoiceRef;delete old.payments.rows[0].invoice;
+ const depositURL='https://hub24.apollo.vn:7777/Deposit/detail/900';
+ const stale={datasetId,masterCt:master,ct:dep,student,url:depositURL,hubContract:old};stale.id=childFactKey(stale);ctx.facts.unshift(stale);ctx.links.push({ct:dep,url:depositURL});
+ const model=fixture(),result=hubFundingSources(model.input,ctx);
+ assert.equal(result.cash.find(r=>r.contract===dep)?.amount,7200000);assert.equal(result.cash.filter(r=>r.contract===dep).length,1);
+ assert.equal(result.moves.find(m=>m.type==='Upgrade')?.amount,7200000);
+});
+test('missing Upgrade, Deposit link or original invoice cannot credit the receiving CT',()=>{
+ for(const missing of ['upgrade','deposit','invoice']){
+  const {root,page}=depositUpgrade();if(missing==='upgrade')delete root.UpgradeFromContractId;
+  if(missing==='deposit')page.documents.find(d=>d.ct===origin).movements.rows=[];
+  if(missing==='invoice'){const p=page.documents.find(d=>d.ct.includes('-DEP-')).payments.rows[0];delete p.invoice;delete p.invoiceRef;}
+  const f=mergeLearnerFinance(projectHubContract(root),[page]),model=fixture(),ctx=context(f);
+  assert.equal(hubFundingSources(model.input,ctx).moves.filter(m=>m.type==='Upgrade').length,0);
+  if(missing==='invoice')assert.equal(upgradeSourceMissing(f),true);
+ }
+});
 test('Upgrade metadata takes only CreatedDate from the exact receiving CT, preserving existing facts',()=>{
  const f=masterFacts();f.contractDate=null;
  const info={ContractId:902,ContractNo:master,CreatedDate:'2026-10-20T10:00:00',FinalAmount:1,Phone:'PRIVATE-DO-NOT-COPY'};
@@ -70,15 +130,41 @@ test('separately saved Upgrade evidence uses the receiving CT date already read 
  assert.equal(f.contractDate,null,'calculation must not overwrite the saved read');
  attachHubFunding(model,ctx);assert.equal(calculated(model).cells.W,38700000);
 });
-test('an absent, invalid or differently bound policy cannot supply an Upgrade date',()=>{
+test('an invalid or differently bound policy cannot invent a date; a valid future date remains outside the period',()=>{
  for(const patch of [null,{ct:'QA2610-CT-000999'},{contractId:999},{createdDate:'2026-11-20'},{createdDate:'invalid'}]){
   const f=masterFacts();f.contractDate=null;f.upgrades[0].ct=origin;f.upgrades[0].date=null;
   const ctx=context(f),child={datasetId,masterCt:master,ct:origin,student,url:url(901),hubContract:originFacts()};child.id=childFactKey(child);
   if(patch)ctx.facts[0].hubPolicy={...hubFixture({ct:master,contractId:902,offers:false}).policy,...patch};
   ctx.facts.push(child);ctx.links.push({ct:origin,url:url(901)});
   const model=fixture();attachHubFunding(model,ctx);const after=calculated(model);
-  assert.equal(after.cells.W,29100000);assert.ok(after.reconciliation.hubSupplement.pending.some(p=>p.from===origin&&p.to===master));
+  if(patch?.createdDate==='2026-11-20'){assert.equal(after.cells.W,29100000);assert.ok(after.reconciliation.hubSupplement.pending.some(p=>p.from===origin&&p.to===master));}
+  else{assert.equal(after.cells.W,38700000);assert.equal(after.reconciliation.movementHistory.find(m=>m.kind==='Upgrade').dateBasis,'period-end');}
  }
+});
+test('an explicit undated Upgrade allocates the saved 9.6m at cutoff without inventing a full-payment date',async()=>{
+ const f=await savedFacts();f.contractDate=null;f.upgrades[0].date=null;
+ const model=fixture();attachHubFunding(model,context(f));const after=calculated(model);
+ assert.equal(after.cells.W,38700000);assert.equal(after.cells.AC,0);assert.equal(after.reconciliation.transferIn,9600000);
+ assert.equal(after.reconciliation.hubSupplement.pending.length,0);assert.equal(after.reconciliation.hubSupplement.notes.length,1);
+ assert.equal(after.reconciliation.movementHistory.find(m=>m.kind==='Upgrade').dateBasis,'period-end');assert.equal(fullPaymentDay(after.reconciliation),null);
+ assert.equal(after.receipts.find(r=>r.contract===origin).date,parseDate('2026-09-08'));
+ attachHubFunding(model,context(f));assert.equal(calculated(model).cells.W,38700000);
+});
+test('undated Upgrade still requires a reported receiver, original paid cash, capacity and consistent known dates',async()=>{
+ for(const kind of ['receiver','cash','capacity','date-conflict']){
+  const f=await savedFacts();f.contractDate=null;f.upgrades[0].date=null;const model=fixture();
+  if(kind==='receiver'){model.input.paid=[];model.input.records=[];}
+  if(kind==='cash')f.relatedFinance[0].payments.rows[0].completeDate='2026-11-01';
+  if(kind==='capacity')model.input.transferSources.push({rows:[{type:'Transfer',date:parseDate('2026-10-25'),from:origin,to:'QA2610-CT-000904',out:9600000,amount:9600000,fromStudent:student,toStudent:student,ref:{file:'QA'}}]});
+  if(kind==='date-conflict'){f.upgrades[0].date='2026-10-20';f.relatedFinance[0].upgrades[0].date='2026-10-21';}
+  const result=hubFundingSources(model.input,context(f));assert.equal(result.moves.filter(m=>m.type==='Upgrade').length,0);assert.ok(result.pending.length>0);
+ }
+});
+test('an undated multi-level Upgrade is allocated from the oldest invoice toward the reported master',()=>{
+ const middle='QA2610-CT-000905',model=fixture();
+ model.input.cashSources.push({rows:[{payment:'QA-PAY-901',contract:origin,student,vat:'0000901',date:parseDate('2026-09-08'),amount:9600000,paid:true,cancelled:false,ref:{file:'QA'}}]});
+ const r=upgradeFunding(model.input,[{from:middle,to:master,date:null},{from:origin,to:middle,date:null}]);
+ assert.deepEqual(r.moves.map(m=>[m.from,m.to,m.amount]),[[origin,middle,9600000],[middle,master,9600000]]);assert.equal(r.pending.length,0);
 });
 test('loading saved browser sources passes the receiving policy date into the funding ledger',async()=>{
  const f=masterFacts();f.contractDate=null;f.upgrades[0].ct=origin;f.upgrades[0].date=null;
@@ -119,8 +205,8 @@ test('a conflicting original PaymentList amount cannot be credited through Upgra
  const model=fixture({history:true}),f=await savedFacts();f.relatedFinance[0].payments.rows[0].amount=9500000;f.relatedFinance[0].payments.rows[0].invoice.amount=9500000;
  attachHubFunding(model,context(f));assert.equal(calculated(model).cells.W,29100000);assert.ok(calculated(model).groupWarnings.some(w=>w.includes('PaymentList khác')));
 });
-test('missing original invoice, unknown date, future cash, competing upgrade targets and loops cannot manufacture funding',async()=>{
- for(const change of [f=>{delete f.relatedFinance[0].payments.rows[0].invoiceRef;delete f.relatedFinance[0].payments.rows[0].invoice;},f=>{f.contractDate=null;f.upgrades[0].date=null;},f=>{f.relatedFinance[0].payments.rows[0].completeDate='2026-11-01';},f=>{f.relatedFinance[0].upgrades.push({direction:'to',ct:'QA2610-CT-000903',id:'903',url:url(903),date:'2026-10-20'});},f=>{f.relatedFinance[0].upgrades.push({direction:'from',ct:master,id:'902',url:url(902),date:'2026-10-20'});}]){
+test('missing original invoice, future cash, competing upgrade targets and loops cannot manufacture funding',async()=>{
+ for(const change of [f=>{delete f.relatedFinance[0].payments.rows[0].invoiceRef;delete f.relatedFinance[0].payments.rows[0].invoice;},f=>{f.relatedFinance[0].payments.rows[0].completeDate='2026-11-01';},f=>{f.relatedFinance[0].upgrades.push({direction:'to',ct:'QA2610-CT-000903',id:'903',url:url(903),date:'2026-10-20'});},f=>{f.relatedFinance[0].upgrades.push({direction:'from',ct:master,id:'902',url:url(902),date:'2026-10-20'});}]){
   const model=fixture(),f=await savedFacts();change(f);assert.ok(validateHubContract(f));attachHubFunding(model,context(f));assert.equal(calculated(model).cells.W,29100000);
  }
 });

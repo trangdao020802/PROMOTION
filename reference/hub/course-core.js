@@ -299,6 +299,9 @@ var PromotionHubCourse = (() => {
     for (let depth = 0; depth < 16; depth++) {
       const n = known.size;
       for (const e of edges) if (known.has(e.to)) known.add(e.from);
+      for (const f of docs) if (known.has(f?.ct) && f.movements?.state === "read") {
+        for (const m of f.movements.rows) if (m.to === f.ct && m.amount > 0) known.add(m.from);
+      }
       if (known.size === n) break;
     }
     return known;
@@ -463,7 +466,7 @@ var PromotionHubCourse = (() => {
     }
     const explicitMoves = [...rows];
     for (const p of hubList(root.ListPayment, 500) ?? []) {
-      const other = contractCode(p?.RelatedContractDepositNo), amount = number(p?.Amount), day2 = moveDay(p?.TransferDate ?? p?.CompleteDate), reference = text3(p?.PaymentCode), direction = outgoingPayment(p) ? "out" : "in";
+      const other = contractCode(p?.RelatedContractDepositNo), amount = number(p?.Amount), day2 = moveDay(p?.TransferDate ?? p?.CompleteDate), reference = text3(p?.PaymentCode), direction = outgoingPayment(p) || ct2.includes("-DEP-") && /deposit[ -]+to[ -]+contract/i.test(text3(p?.PaymentTypeName)) ? "out" : "in";
       if (!other || other === ct2 || p.IsComplete !== true || !(amount > 0) || !day2 || /refund/i.test(text3(p.PaymentTypeName))) continue;
       if (direction === "in" && p.PaymentTypeId !== 10 && !/transfer|deposit to contract/i.test(text3(p.PaymentMethodTypeName) + " " + text3(p.PaymentTypeName))) continue;
       if (reference && !/^[A-Za-z0-9][A-Za-z0-9_.:/-]*$/.test(reference)) continue;

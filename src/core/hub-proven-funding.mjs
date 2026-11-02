@@ -1,13 +1,13 @@
 // Supplemental Paid documents enter the same dated, capacity-limited ledger as
 // the source reports. Internal transfers are never added as a second receipt.
-import {validateHubContract} from './hub-contract.mjs';
+import {validateHubContract,mergeHubFinanceFacts} from './hub-contract.mjs';
 import {hubDocumentCode as code,hubDocumentId} from './hub-document.mjs';
 import {childFactKey} from './child-hub-evidence.mjs';
 import {buildAccounts,unionReceipts,unionTransfers} from './reconcile.mjs';
 import {buildContractGroups} from './contracts.mjs';
 import {paymentAllocations} from './payment-allocations.mjs';
 import {financeBundle} from './hub-finance-bundle.mjs';
-import {paymentInvoiceNumber,eInvoiceKey} from './hub-invoice.mjs';
+import {paymentInvoiceNumber,eInvoiceKey,internalHubPayment} from './hub-invoice.mjs';
 import {upgradeEdges} from './hub-upgrade.mjs';
 import {upgradeFunding} from './hub-upgrade-funding.mjs';
 import {validateHubPolicy} from './hub-policy.mjs';
@@ -29,9 +29,10 @@ export function hubFundingSources(input,{datasetId,facts=[],links=[]}={}){
   });
  const valid=[...parents];
  for(const parent of parents)for(const doc of financeBundle(parent.hubContract)){
-  if(urls.has(doc.ct)&&urls.get(doc.ct)!==doc.url)continue;
-  if(valid.some(f=>f.masterCt===parent.masterCt&&f.student===parent.student&&f.ct===doc.ct))continue;
-  const f={...parent,...doc};f.id=childFactKey(f);valid.push(f);
+  if(urls.has(doc.ct)&&hubDocumentId(urls.get(doc.ct),doc.ct)!==doc.hubContract.contractId)continue;
+  const index=valid.findIndex(f=>f.masterCt===parent.masterCt&&f.student===parent.student&&f.ct===doc.ct);
+  if(index>=0){const old=valid[index];if(hubDocumentId(old.url,doc.ct)===doc.hubContract.contractId&&old.hubContract.contractId===doc.hubContract.contractId)valid[index]={...old,hubContract:mergeHubFinanceFacts(old.hubContract,doc.hubContract)};continue;}
+  const f={...parent,...doc,url:urls.get(doc.ct)??doc.url};f.id=childFactKey(f);valid.push(f);
  }
  const rawMoves=unionTransfers(input.transferSources??[]).rows,rawCash=unionReceipts(input.cashSources??[]).rows;
  const existingCodes=new Set(rawCash.map(p=>p.payment.toUpperCase())),rawByPair=new Map(),hubByPair=new Map(),pending=[];
@@ -81,8 +82,8 @@ export function hubFundingSources(input,{datasetId,facts=[],links=[]}={}){
  for(const f of valid){
   if(f.hubContract.payments.state!=='read')continue;
   for(const [i,p]of f.hubContract.payments.rows.entries()){
-   if(!p.code||existingCodes.has(p.code.toUpperCase()))continue;
-   if(!p.invoiceRef||p.invoice?.conflicts?.length||p.invoice?.amount!=null&&Math.abs(p.invoice.amount-p.amount)>1||p.complete!==true||!p.completeDate||!positive(p.amount)||p.typeId==='10'||/transfer|moving|deposit to contract|^other$/i.test((p.method+' '+p.type).trim())){
+   if(!p.code||existingCodes.has(p.code.toUpperCase())||internalHubPayment(p))continue;
+   if(!p.invoiceRef||p.invoice?.conflicts?.length||p.invoice?.amount!=null&&Math.abs(p.invoice.amount-p.amount)>1||p.complete!==true||!p.completeDate||!positive(p.amount)){
     pending.push({origin:f.ct,paymentCode:p.code,reason:'Thiếu hóa đơn Paid gốc, ngày hoặc mã E-Invoice / VAT'});continue;
    }
    if(!reaches(f.ct,f.masterCt)){pending.push({origin:f.ct,paymentCode:p.code,reason:'Chưa có đường Moving / Transfer về CT tổng'});continue;}
@@ -95,7 +96,7 @@ export function hubFundingSources(input,{datasetId,facts=[],links=[]}={}){
  const combined={...input,cashSources:[...(input.cashSources??[]),{rows:addedCash}],transferSources:[...transfers,{rows:addedMoves}]};
  const allocation=upgradeFunding(combined,upgrades);addedMoves.push(...allocation.moves);pending.push(...allocation.pending);
  const observedPayments=unique(valid.flatMap(f=>f.hubContract.payments.rows.map(p=>f.ct+'|'+p.code)));
- return {input:combined,cash:addedCash,moves:addedMoves,pending,meta,observedPayments,changed:!!(addedCash.length||addedMoves.length||blocked.size||pending.length)};
+ return {input:combined,cash:addedCash,moves:addedMoves,pending,notes:allocation.notes,meta,observedPayments,changed:!!(addedCash.length||addedMoves.length||blocked.size||pending.length)};
 }
 export function attachHubFunding(model,{datasetId,facts,links}){
  if(!model.input)return;
@@ -117,7 +118,7 @@ export function attachHubFunding(model,{datasetId,facts,links}){
   const allocations=paymentAllocations({...group,cells:{...group.cells,contractTotal:group.ct},reconciliation:group.account});
   const receipts=allocations.invoices.filter(r=>observed.has(r.receipt.contract+'|'+r.receipt.payment)).map(r=>({origin:r.receipt.contract,paymentCode:r.receipt.payment,invoiceRef:r.receipt.vat,paid:r.receipt.amount,allocated:r.amount,
    completeDate:new Date(Date.UTC(1899,11,30)+r.receipt.date*86400000).toISOString().slice(0,10),path:r.paths[0]??[]}));
-  group.account.hubSupplement={ledger:true,amount:group.account.net-base,receipts,pending:extra.pending,status:'hub-backed'};
+  group.account.hubSupplement={ledger:true,amount:group.account.net-base,receipts,pending:extra.pending,notes:extra.notes,status:'hub-backed'};
  }
  model.contractGroups=groups;
 }

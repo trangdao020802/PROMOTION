@@ -1,5 +1,6 @@
 import {voucherRequest,voucherPayload} from '../core/hub-voucher.mjs';
 import {HUB_BRIDGE_VERSION,bridgeVersionAtLeast} from '../core/hub-bridge-version.mjs';
+import {HUB_BRIDGE_MISSING} from '../core/hub-connection.mjs';
 const CHANNEL='promotion-hub/v1';
 export const VOUCHER_BRIDGE_VERSION=HUB_BRIDGE_VERSION;
 const voucherReady=ready=>bridgeVersionAtLeast(ready.version)&&Array.isArray(ready.capabilities)&&['voucher','background-voucher','no-new-tabs'].every(c=>ready.capabilities.includes(c));
@@ -10,7 +11,7 @@ export function voucherBridgeMessage(action,voucher,{window:target=globalThis.wi
   const cancel=()=>target.postMessage({channel:CHANNEL,direction:'request',action:'cancel',id},target.location.origin);
   const clear=()=>{clearTimeout(timer);target.removeEventListener('message',listener);signal?.removeEventListener('abort',abort);};
   const abort=()=>{cancel();clear();reject(error('Đã dừng tra Voucher.','cancelled'));};
-  const timeout=()=>{if(action!=='ping')cancel();clear();reject(error(action==='ping'?incompatible?'Cầu nối đang kết nối chưa hỗ trợ tra Voucher trong nền. Dùng cầu nối Hub '+HUB_BRIDGE_VERSION+' chung với Input và gắn link; tải lại Promotion và Hub.':'Chưa kết nối cầu nối Hub. Nếu đã cài bản '+HUB_BRIDGE_VERSION+', kiểm tra tiện ích được bật cho trang này và tải lại Promotion.':'Hub chưa trả đủ thông tin Voucher; các ô đang nhập được giữ lại.',action==='ping'?'bridge':'timeout'));};
+  const timeout=()=>{if(action!=='ping')cancel();clear();reject(error(action==='ping'?incompatible?'Cầu nối đang kết nối chưa hỗ trợ tra Voucher trong nền. Dùng cầu nối Hub '+HUB_BRIDGE_VERSION+' chung với Input và gắn link; tải lại Promotion và Hub.':HUB_BRIDGE_MISSING+' Nếu đã cài bản '+HUB_BRIDGE_VERSION+', bật tiện ích cho trang này và tải lại Promotion.':'Hub chưa trả đủ thông tin Voucher; các ô đang nhập được giữ lại.',action==='ping'?'bridge':'timeout'));};
   const reset=ms=>{clearTimeout(timer);timer=setTimeout(timeout,Math.max(0,Math.min(timeoutMs??ms,Number.isFinite(deadline)?deadline-Date.now():Infinity)));};
   const listener=event=>{
    const packet=event.data;if(event.source!==target||event.origin!==target.location.origin||!packet||packet.channel!==CHANNEL||packet.direction!=='response'||packet.id!==id)return;
