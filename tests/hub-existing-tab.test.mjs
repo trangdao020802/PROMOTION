@@ -158,6 +158,16 @@ test('an unavailable direct download retains the authenticated PrintEInvoice fal
  r.send({type:'read-course',course:{...course,readFinance:true,readPolicy:false}});await drain();const packet=r.messages.find(m=>m.type==='invoice-pdf');assert.ok(packet);assert.equal(calls.length,1);assert.equal(calls[0].key,key);assert.equal(calls[0].centerId,3);
  r.send({type:'invoice-pdf-result',ticket:packet.ticket,key,invoice:{number:'0000301',date:'2025-06-27',amount:4725000,source:'e-invoice-pdf',conflicts:[]}});await drain();assert.ok(r.messages.some(m=>m.type==='course'));assert.equal(r.calls.length,2);assert.equal(r.context.location.href,origin+'/home');
 });
+test('the existing-tab reader follows Upgrade from ID and returns original Paid evidence without Moving or changing tabs',async()=>{
+ const r=mainRuntime(),calls=[],sourceCt='QA2609-CT-000071';
+ const pay=(id,contractId,amount,date)=>({PaymentId:id,ContractId:contractId,PaymentCode:'QA-PAY-'+id,Amount:amount,RemainAmount:0,TotalAmount:amount,IsComplete:true,CompleteDate:date,InvoiceNo:'0000'+id,InvoiceDate:date,InvoiceAmount:amount,PaymentTypeName:'Payment',PaymentMethodTypeName:'Online Payments'});
+ const service={getContractDetail:({contractId})=>{calls.push(['detail',String(contractId)]);return Promise.resolve(String(contractId)==='12345'?{...raw(),CreatedDate:'2026-10-20',UpgradeFromContractId:71}:{ContractId:71,ContractNo:sourceCt,CreatedDate:'2026-09-08',UpgradeToContractId:12345,UpgradeToContractNo:course.ct,ListCourseInfo:[],ListMovingIn:[],ListMovingOut:[]});},getContractPayment:({contractId})=>{calls.push(['payment',String(contractId)]);return Promise.resolve([String(contractId)==='12345'?pay(17,12345,29100000,'2026-10-20'):pay(18,71,9600000,'2026-09-08')]);}};
+ r.context.document={querySelector:()=>({})};r.context.window.angular={element:()=>({injector:()=>({get:name=>name==='$rootScope'?{sessionInfo:{UserRoleId:51}}:service})})};
+ r.send({type:'read-course',course:{...course,readPolicy:false}});await drain();await drain();
+ const result=r.messages.find(m=>m.type==='course');assert.ok(result);assert.equal(result.projection.hubContract.upgrades[0].ct,sourceCt);
+ const source=result.projection.hubContract.relatedFinance[0];assert.equal(source.ct,sourceCt);assert.equal(source.payments.rows[0].amount,9600000);assert.equal(source.payments.rows[0].invoice.number,'000018');assert.equal(source.movements.rows.length,0);
+ assert.ok(calls.some(([method,id])=>method==='detail'&&id==='71'));assert.equal(r.calls.length,0);assert.equal(r.context.location.href,origin+'/home');assert.ok(!JSON.stringify(result).includes('PRIVATE-DO-NOT-COPY'));
+});
 test('a payment lookup timeout preserves course/discount input and ignores a late payment response',async()=>{
  const r=mainRuntime(),timers=[],doc={querySelector:()=>({})};let resolvePayment;
  r.context.setTimeout=fn=>(timers.push(fn),timers.length);r.context.clearTimeout=()=>{};r.context.document=doc;

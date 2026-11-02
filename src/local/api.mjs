@@ -20,6 +20,7 @@ import {attachHubFunding} from '../core/hub-proven-funding.mjs';
 import {validateHubContract} from '../core/hub-contract.mjs';
 import {financeBundle} from '../core/hub-finance-bundle.mjs';
 import {hubDocumentId} from '../core/hub-document.mjs';
+import {upgradeEdges} from '../core/hub-upgrade.mjs';
 let policies;
 let resolvedPolicy;
 // Course inputs and review patches never change membership of a source bundle.
@@ -53,7 +54,7 @@ async function rememberLearnerFinance(hubContract,context){
   if(!link)try{link=await versioned('links',doc.ct,0,()=>({ct:doc.ct,url:doc.url,source:'learner-payments'}));}catch{continue;}
   links.push(link);
   const key=childFactKey({...context,ct:doc.ct}),prior=await get('settings',key);
-  const parent=[hubContract,...(hubContract.relatedFinance??[])].find(f=>f.movements?.rows?.some(m=>m.from===doc.ct&&m.to===f.ct))?.ct;
+  const parent=[hubContract,...(hubContract.relatedFinance??[])].find(f=>f.movements?.rows?.some(m=>m.from===doc.ct&&m.to===f.ct))?.ct??upgradeEdges([hubContract,...(hubContract.relatedFinance??[])]).find(e=>e.from===doc.ct)?.to;
   const fact=childFactInput({...context,ct:doc.ct,url:link.url,parentCt:parent,payload:{ct:doc.ct,student:context.student,url:link.url,hubContract:doc.hubContract}});
   if(fact)try{await versioned('settings',key,prior?.version??0,old=>mergeChildFinancialFact(old,fact));}catch{/* Another reader already saved this scoped document. */}
  }
@@ -65,7 +66,7 @@ async function attachVerifiedHubFunding(model,sources=[]){
  attachHubFunding(model,{datasetId,facts:[...settings.filter(x=>typeof x.id==='string'&&x.id.startsWith('hub-child-fact:')),...masterFacts],links});
 }
 
-export async function loadWorkbook(datasetId){const [dataset,p,vouchers,sources]=await Promise.all([currentDataset(datasetId),loadPolicies(),all('vouchers'),courseMemories()]);const model=buildModel(dataset?.bundle,p);model.dataset=dataset;model.hash=dataset?.id||'policy-2026';indexModel(model);await attachVerifiedHubFunding(model,sources);const engine=new AuditEngine(model);engine.setVouchers(vouchers);engine.setCourseSources(sources.filter(s=>identityIndexes.get(model.hash).students.has(s.ct+'|'+s.student)));return engine.data}
+export async function loadWorkbook(datasetId){const [dataset,p,vouchers,sources]=await Promise.all([currentDataset(datasetId),loadPolicies(),all('vouchers'),courseMemories()]);const model=buildModel(dataset?.bundle,p);model.dataset=dataset;model.hash=dataset?.id||'policy-2026';await attachVerifiedHubFunding(model,sources);indexModel(model);const engine=new AuditEngine(model);engine.setVouchers(vouchers);engine.setCourseSources(sources.filter(s=>identityIndexes.get(model.hash).students.has(s.ct+'|'+s.student)));return engine.data}
 const baseRecord=g=>({...g.anchor,errors:[],reviewItems:[],courseInfo:g.courseInfo,id:g.id,kind:g.kind,ct:g.ct,paymentCode:g.paymentCode,memberIds:g.memberIds,...(g.sourceContracts?{sourceContracts:g.sourceContracts}:{}),receipts:g.receipts,groupWarnings:g.warnings,hubContract:g.hubContract??null,hubReadMissing:g.hubReadMissing??[],hubPolicy:g.hubPolicy??null,hubPolicyError:g.hubPolicyError??null,cells:{...g.cells,contractTotal:g.ct||'',AG:'',AF:'CHECK'}});
 async function bootstrap(datasetId){
  const model=await loadWorkbook(datasetId),saved=await all('edits'),links=await all('links');const savedMap=new Map(saved.map(x=>[x.id,x]));
@@ -75,7 +76,7 @@ async function bootstrap(datasetId){
  return {cachedRows:restored.count?restored.rows:null,cachedCount:restored.count,priceCatalogue,ruleCatalogue,policyCoverage:{sources:model.policy.priceEvidence.sources.length+(model.policy.policySupplement?.sources.length??0),checkedRows:model.policy.priceEvidence.checkedRows,conflicts:model.policy.priceEvidence.conflicts,sourceOrder:model.policy.policyRegister.sourceOrder,decisions:model.policy.policySupplement?.decisions??[],revision:model.policy.policyRevision,typedRows:model.policy.typedPrices?.length??0},source:model.source,hash:model.hash,tolerance:model.policy.auditPolicy?.moneyTolerance??1,policyReference:model.policy.auditPolicy?{file:model.policy.auditPolicy.sourceFile,moneyTolerance:model.policy.auditPolicy.moneyTolerance,hourTolerance:model.policy.auditPolicy.hourTolerance}:null,dataset:d?datasetMeta(d):null,needsSources:!d,needsCalculation:!!d,records,edits,choices:model.choices,courseSources:Object.fromEntries((await courseMemories()).filter(s=>groups.some(g=>g.ct===s.ct&&String(g.cells.F)===s.student)).map(s=>[s.ct,s])),hubLinks:Object.fromEntries(links.map(l=>[l.ct,l])),customVouchers:model.extensions.customVouchers,vouchers:model.extensions.customVouchers.map(voucherReference),prices:model.policy.prices,rules:model.policy.rules,catalogue:model.extensions.catalogue,sourceManifest:[...model.policy.manifest,...model.policy.priceEvidence.sources.slice(16),...(model.policy.policySupplement?.sources??[])],cutoff:model.cutoff??Math.floor((Date.now()-Date.UTC(1899,11,30))/86400000),groupKocByRecord:Object.fromEntries(groups.map(g=>[g.id,model.grids.RAW_REPORT['X'+g.rawRow]||''])),groupingStats:{payments:d?.bundle.records.length||0,contracts:groups.filter(g=>g.kind==='contract').length,unlinked:groups.filter(g=>g.kind!=='contract').length},reconciliationStats:model.extensions.accounts.statistics,sourceCalculation:d?{counts:{payments:model.input.cashSources.flatMap(s=>s.rows).filter(r=>r.paid&&r.vat&&!r.cancelled).length,transfers:d.bundle.transfers.length,exports:d.bundle.exports.length},scope:d.bundle.scope,inputs:d.bundle.sources.map(s=>({file:s.fileName,sheet:s.sheetName,rows:s.rowCount}))}:null,continuity:d?{matchedRecords:Object.keys(edits).length,newRecords:groups.length-Object.keys(edits).length}:null};
 }
 function datasetMeta(d){return {id:d.id,fileName:d.fileName,sheetName:'Export · PaymentList · Transfer',rowCount:d.bundle.records.length,createdAt:d.createdAt,from:d.bundle.scope.from,to:d.bundle.scope.to,usable:true,sources:d.bundle.sources.map(s=>({...s,fileId:d.fileIds[s.fileIndex]}))}}
-async function recordFor(datasetId,recordId){const model=await datasetIndex(datasetId),group=model.groups.get(recordId);if(!group)throw fail('Không có CT/hồ sơ trong bộ nguồn đang mở.');return {model,group,key:identity(group)}}
+async function recordFor(datasetId,recordId,{allowSource=false}={}){const model=await datasetIndex(datasetId),group=model.groups.get(recordId)??(allowSource?[...model.groups.values()].find(g=>g.sourceContracts?.includes(String(recordId).replace(/^CT::/,''))):null);if(!group)throw fail('Không có CT/hồ sơ trong bộ nguồn đang mở.');return {model,group,key:identity(group)}}
 async function ensureVouchers(codes){for(const code of [...new Set(codes.map(voucherCode).filter(Boolean))])if(!await get('vouchers',code))await versioned('vouchers',code,0,()=>({...EMPTY_VOUCHER,code}));}
 export function validHubURL(value,code){try{const u=new URL(value);if(u.origin!=='https://hub24.apollo.vn:7777'||u.username||u.password||u.hash)return false;const ct=String(code).includes('-CT-');if(ct)return /^\/contract\/detail\/[1-9]\d{0,14}\/?$/i.test(u.pathname)&&!u.search;return /^\/deposit\/(?:detail|view)\/[1-9]\d{0,14}\/?$/i.test(u.pathname)&&!u.search||/^\/deposit\/(?:detail|view)\/?$/i.test(u.pathname)&&u.searchParams.size===1&&['id','depositId'].some(k=>/^[1-9]\d{0,14}$/.test(u.searchParams.get(k)||''))}catch{return false}}
 async function originalFile(file){if(!file?.blob)throw fail('Không tìm thấy file gốc trên trình duyệt này.',404);return new Response(file.blob,{headers:{'Content-Type':'application/octet-stream','Content-Disposition':`attachment; filename*=UTF-8''${encodeURIComponent(file.name||file.fileName)}`}})}
@@ -161,7 +162,7 @@ export async function localFetch(input,options={}){
     const {group}=await recordFor(datasetId,'CT::'+masterCt);
     if(group.ct!==masterCt||String(group.cells.F)!==student)throw fail('CT/học viên không khớp.');
     const parentCt=ctCode(query?.parentCt);
-    if(!knownFinanceDocuments(group,await financeSettings({datasetId,masterCt,student}),{datasetId,masterCt,student}).has(ct))throw fail('CT / DEP nguồn chưa có trong Transfer, Moving-in hoặc danh sách cần gắn link.');
+    if(!knownFinanceDocuments(group,await financeSettings({datasetId,masterCt,student}),{datasetId,masterCt,student}).has(ct))throw fail('CT / DEP nguồn chưa có trong Transfer, Moving-in, Upgrade hoặc danh sách cần gắn link.');
 
     const link=await get('links',ct);
     if(!link?.url||!validHubURL(link.url,ct))throw fail('CT con chưa có link Hub hợp lệ.');
@@ -204,7 +205,7 @@ export async function localFetch(input,options={}){
    throw fail('Thao tác lưu tiến độ không hợp lệ.');
   }
   if(path==='/api/course-sources'&&method==='PATCH'){
-   const {model,group}=await recordFor(body.datasetId,'CT::'+body.payload?.ct);const payload=body.payload;
+   const {model,group}=await recordFor(body.datasetId,'CT::'+body.payload?.ct,{allowSource:true});const payload=body.payload;
    if(body.hash!==model.hash||!model.students.has(payload.ct+'|'+String(payload.student)))throw fail('Nguồn Course info không khớp CT/học viên hiện tại.');
    const normalized=payload?.readFinance===true?null:coursePayload(payload,payload);if(!normalized)throw fail('Thông tin đầu vào từ Hub không hợp lệ. Chứng từ tài chính bổ sung không thay thông tin khóa học.');
    if(normalized.inheritedCourses?.some(s=>!group.sourceContracts.includes(s.ct)||s.student!==String(group.cells.F)))throw fail('CT nguồn không có luồng Transfer đã xác minh vào CT tổng của học viên.');

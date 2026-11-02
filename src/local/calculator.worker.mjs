@@ -22,10 +22,11 @@ self.onmessage=async({data})=>{try{
   const needsFunding=!!source.hubContract&&!!engine.data.input&&hubFundingSources(engine.data.input,{datasetId:data.datasetId,facts:[evidence],links:[{ct:source.ct,url:source.url}]}).changed;
   if(needsFunding){engine=new AuditEngine(await loadWorkbook(data.datasetId));engine.setPatches(patches);}
   engine.updateCourseSource(data.source);engine.setVouchers(data.vouchers);
-  const baseline=engine.calculate(data.record,{});engine.setPatches(patches);
-  const row=engine.calculate(data.record,patches[data.record.id]||{}),relatedIds=needsFunding?engine.data.contractGroups.filter(g=>g.id!==data.record.id).map(g=>g.id):engine.dependentIds(data.record.id),relatedRows=relatedIds.map(id=>engine.calculate({id},patches[id]||{}));
+  const id=engine.data.contractGroups.some(g=>g.id===data.record.id)?data.record.id:'CT::'+engine.data.contractSettlements?.[source.ct]?.target,record={...data.record,id};
+  const baseline=engine.calculate(record,{});engine.setPatches(patches);
+  const row=engine.calculate(record,patches[id]||{}),replaceRows=needsFunding||id!==data.record.id,relatedIds=replaceRows?engine.data.contractGroups.filter(g=>g.id!==id).map(g=>g.id):engine.dependentIds(id),relatedRows=relatedIds.map(id=>engine.calculate({id},patches[id]||{}));
   await remember([row,...relatedRows]);
-  self.postMessage({type:'course-sources-ready',requestId:data.requestId,baseline,row,relatedRows});return;
+  self.postMessage({type:'course-sources-ready',requestId:data.requestId,baseline,row,relatedRows,...(replaceRows?{rows:[row,...relatedRows]}:{})});return;
  }
  patches[data.record.id]=data.patch;const row=engine.calculate(data.record,data.patch);const relatedRows=engine.dependentIds(data.record.id).map(id=>engine.calculate({id},patches[id]||{}));await remember([row,...relatedRows]);self.postMessage({type:'result',requestId:data.requestId,row,relatedRows});
 }catch(e){self.postMessage({type:'error',requestId:data.requestId,message:e.message})}};

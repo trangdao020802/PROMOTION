@@ -202,13 +202,106 @@ var PromotionHubCourse = (() => {
       const match = new RegExp("^/" + kind + "/(?:" + (kind === "deposit" ? "detail|view" : "detail") + ")/([1-9]\\d{0,14})/?$", "i").exec(u.pathname);
       if (match && !u.search) return match[1];
       if (kind === "deposit" && /^\/deposit\/(?:detail|view)\/?$/i.test(u.pathname) && u.searchParams.size === 1) {
-        const id3 = u.searchParams.get("id") ?? u.searchParams.get("depositId");
-        if (/^[1-9]\d{0,14}$/.test(id3 ?? "")) return id3;
+        const id4 = u.searchParams.get("id") ?? u.searchParams.get("depositId");
+        if (/^[1-9]\d{0,14}$/.test(id4 ?? "")) return id4;
       }
       return null;
     } catch {
       return null;
     }
+  }
+
+  // src/core/hub-upgrade.mjs
+  var HUB2 = "https://hub24.apollo.vn:7777";
+  var text2 = (v) => typeof v === "string" ? v.trim().replace(/\s+/g, " ") : "";
+  var id2 = (v) => /^[1-9]\d{0,14}$/.test(String(v ?? "")) ? String(v) : null;
+  var ct = (v) => hubDocumentCode(v)?.includes("-CT-") ? hubDocumentCode(v) : null;
+  var upgradeDate = (v) => {
+    const s = text2(v), m = /^(\d{2})\/(\d{2})\/(\d{4})/.exec(s), day2 = m ? m[3] + "-" + m[2] + "-" + m[1] : /^\d{4}-\d\d-\d\d(?:$|T| )/.test(s) ? s.slice(0, 10) : null;
+    return day2 && Number.isFinite(Date.parse(day2)) && (/* @__PURE__ */ new Date(day2 + "T00:00:00Z")).toISOString().slice(0, 10) === day2 ? day2 : null;
+  };
+  var upgradeDirection = (value) => ({ "upgrade from contract": "from", "upgraded from contract": "from", "upgrade to contract": "to", "upgraded to contract": "to" })[text2(value).toLowerCase().replace(/[\s:*]+$/, "")] ?? null;
+  var urlFor = (value) => HUB2 + "/contract/detail/" + value;
+  var linkId = (value) => {
+    try {
+      return hubDocumentId(new URL(value, HUB2).href, "QA-CT-000001");
+    } catch {
+      return null;
+    }
+  };
+  function validUpgradeLinks(values) {
+    return Array.isArray(values) && values.length <= 20 && values.every((v) => v && Object.keys(v).every((k) => ["direction", "ct", "id", "url", "date"].includes(k)) && ["from", "to"].includes(v.direction) && (v.ct === null || ct(v.ct) === v.ct) && id2(v.id) === v.id && v.url === urlFor(v.id) && (v.date === null || upgradeDate(v.date) === v.date));
+  }
+  function projectUpgradeLinks(root) {
+    const rows = [];
+    for (const [direction, prefixes] of [["from", ["UpgradeFromContract", "UpgradedFromContract"]], ["to", ["UpgradeToContract", "UpgradedToContract"]]]) {
+      for (const prefix of prefixes) {
+        const nested = root?.[prefix], object = nested && typeof nested === "object" ? nested : {};
+        const value = id2(root?.[prefix + "Id"] ?? object.ContractId ?? object.Id);
+        if (!value) continue;
+        const code = ct(root?.[prefix + "No"] ?? root?.[prefix + "Code"] ?? object.ContractNo ?? object.ContractCode ?? nested);
+        const date2 = upgradeDate(root.UpgradeDate ?? root.UpgradedDate ?? (direction === "from" ? root.CreatedDate ?? root.CreatedTime : null));
+        rows.push({ direction, ct: code, id: value, url: urlFor(value), date: date2 });
+      }
+    }
+    return [...new Map(rows.map((r) => [r.direction + "|" + r.id, r])).values()];
+  }
+  function upgradeLinksFromDocument(root, { staticDocument = false } = {}) {
+    const visible = (e) => !!e && !e.hidden && e.getAttribute?.("aria-hidden") !== "true" && !e.closest?.('[hidden],[aria-hidden="true"],.ng-hide,script,template') && (staticDocument || !e.getClientRects || e.getClientRects().length > 0);
+    const query = (e, s) => [...e?.querySelectorAll?.(s) ?? []], rows = [];
+    for (const label2 of query(root, 'label,dt,th,td,.control-label,.form-label,[class*="col-"]')) {
+      const direction = upgradeDirection(label2.textContent);
+      if (!direction || !visible(label2)) continue;
+      let cursor = label2;
+      for (let depth = 0; cursor && depth < 4; depth++, cursor = cursor.parentElement) {
+        const sibling = cursor.nextElementSibling;
+        if (!sibling || !visible(sibling)) continue;
+        const links = query(sibling, "a[href]");
+        if (sibling.tagName === "A") links.push(sibling);
+        const choices = links.filter(visible).map((a) => {
+          const code = ct(a.innerText ?? a.textContent), value = linkId(a.getAttribute?.("href") ?? a.href);
+          return code && value ? { direction, ct: code, id: value, url: urlFor(value), date: null } : null;
+        }).filter(Boolean);
+        if (choices.length) {
+          rows.push(...choices);
+          break;
+        }
+        if (query(sibling, "label,dt,th,.control-label").length) break;
+      }
+    }
+    return [...new Map(rows.map((r) => [r.direction + "|" + r.id, r])).values()].slice(0, 20);
+  }
+  function mergeUpgradeLinks(facts, links) {
+    if (!facts || !validUpgradeLinks(links)) return facts;
+    const rows = [...facts.upgrades ?? [], ...links], byKey = /* @__PURE__ */ new Map();
+    for (const row of rows) {
+      if (row.id === facts.contractId || row.ct === facts.ct) continue;
+      const key = row.direction + "|" + row.id, prior = byKey.get(key);
+      byKey.set(key, prior ? { ...prior, ct: prior.ct ?? row.ct, date: prior.date ?? row.date } : row);
+    }
+    return { ...facts, upgrades: [...byKey.values()] };
+  }
+  function upgradeEdges(facts) {
+    const docs = (facts ?? []).filter(Boolean), byId = new Map(docs.map((f) => [f.contractId, f])), edges = [];
+    for (const f of docs) for (const link of f.upgrades ?? []) {
+      if (!validUpgradeLinks([link])) continue;
+      const other = byId.get(link.id), otherCode = link.ct ?? other?.ct;
+      if (!ct(otherCode) || other && other.ct !== otherCode || otherCode === f.ct) continue;
+      const from = link.direction === "from" ? otherCode : f.ct, to = link.direction === "from" ? f.ct : otherCode;
+      const fromId = link.direction === "from" ? link.id : f.contractId, toId = link.direction === "from" ? f.contractId : link.id;
+      const date2 = link.date ?? (link.direction === "from" ? f.contractDate : other?.contractDate) ?? null;
+      edges.push({ from, to, fromId, toId, date: date2, url: link.url });
+    }
+    return [...new Map(edges.map((e) => [JSON.stringify([e.from, e.to, e.date]), e])).values()];
+  }
+  function upgradeAncestors(facts) {
+    const docs = [facts, ...facts?.relatedFinance ?? []], edges = upgradeEdges(docs), known = /* @__PURE__ */ new Set([facts?.ct]);
+    for (let depth = 0; depth < 16; depth++) {
+      const n = known.size;
+      for (const e of edges) if (known.has(e.to)) known.add(e.from);
+      if (known.size === n) break;
+    }
+    return known;
   }
 
   // src/core/hub-invoice.mjs
@@ -282,8 +375,8 @@ var PromotionHubCourse = (() => {
   // src/core/hub-contract.mjs
   var HUB_CONTRACT_SCHEMA = "apollo-hub-contract/v1";
   var plain2 = (v) => !!v && typeof v === "object" && !Array.isArray(v);
-  var text2 = (v) => typeof v === "string" ? v.trim().replace(/\s+/g, " ") : "";
-  var id2 = (v) => /^[1-9]\d{0,14}$/.test(String(v ?? "")) ? String(v) : null;
+  var text3 = (v) => typeof v === "string" ? v.trim().replace(/\s+/g, " ") : "";
+  var id3 = (v) => /^[1-9]\d{0,14}$/.test(String(v ?? "")) ? String(v) : null;
   var number = (v) => typeof v === "number" && Number.isFinite(v) && Math.abs(v) <= 1e13 ? v : null;
   var date = (v) => typeof v === "string" && v.length <= 50 && /^\d{4}-\d\d-\d\d(?:$|T| )/.test(v) && Number.isFinite(Date.parse(v)) ? v.slice(0, 10) : null;
   var exact = (v, names) => plain2(v) && Object.keys(v).every((k) => names.includes(k));
@@ -303,20 +396,20 @@ var PromotionHubCourse = (() => {
     const rows = values.find((v) => v.length) ?? values[0], result = [];
     for (const r of rows) {
       if (!plain2(r)) return null;
-      const group = text2(r.GroupDiscountName), name2 = normalizeHubDiscount(text2(r.DiscountName ?? r.Name)) ?? text2(r.DiscountName ?? r.Name);
+      const group = text3(r.GroupDiscountName), name2 = normalizeHubDiscount(text3(r.DiscountName ?? r.Name)) ?? text3(r.DiscountName ?? r.Name);
       const full = normalizeHubDiscount(group && name2 && !name2.toLowerCase().startsWith(group.toLowerCase()) ? group + " - " + name2 : name2);
       if (!full || full === "0" || full.length > 2e3) return null;
       const type = [1, 2, 3].includes(r.GroupDiscountTypeId) ? r.GroupDiscountTypeId : null;
-      result.push({ label: full, groupId: id2(r.GroupDiscountId), discountId: id2(r.DiscountId ?? r.ContractDiscountId), type, percent: number(r.PercentDiscount), amount: number(r.AmountDiscount), months: number(r.GiftMonths) });
+      result.push({ label: full, groupId: id3(r.GroupDiscountId), discountId: id3(r.DiscountId ?? r.ContractDiscountId), type, percent: number(r.PercentDiscount), amount: number(r.AmountDiscount), months: number(r.GiftMonths) });
     }
     return result;
   }
   var invoiceEvidence = invoiceReference;
-  var outgoingPayment = (r) => Number(r?.PaymentTypeId) === 8 || /moving[ -]?out|transfer[ -]?out/i.test(text2(r?.PaymentTypeName));
+  var outgoingPayment = (r) => Number(r?.PaymentTypeId) === 8 || /moving[ -]?out|transfer[ -]?out/i.test(text3(r?.PaymentTypeName));
   function projectContractPayments(value, contractId) {
     let list2 = hubList(value, 500);
     if (!list2 && plain2(value)) {
-      if ((value.ContractId ?? value.DepositId) != null && id2(value.ContractId ?? value.DepositId) !== String(contractId)) return null;
+      if ((value.ContractId ?? value.DepositId) != null && id3(value.ContractId ?? value.DepositId) !== String(contractId)) return null;
       for (const key of ["ListPayment", "Data", "data", "Result", "result"]) {
         list2 = hubList(value[key], 500);
         if (list2) break;
@@ -326,10 +419,10 @@ var PromotionHubCourse = (() => {
     const rows = [];
     for (const r of list2) {
       if (plain2(r) && outgoingPayment(r)) continue;
-      if (!plain2(r) || (r.ContractId ?? r.DepositId) != null && id2(r.ContractId ?? r.DepositId) !== String(contractId) || !id2(r.PaymentId) || number(r.Amount) === null) return null;
-      const code = text2(r.PaymentCode);
+      if (!plain2(r) || (r.ContractId ?? r.DepositId) != null && id3(r.ContractId ?? r.DepositId) !== String(contractId) || !id3(r.PaymentId) || number(r.Amount) === null) return null;
+      const code = text3(r.PaymentCode);
       if (code.length > 150 || code && !/^[A-Za-z0-9][A-Za-z0-9_.:/-]*$/.test(code)) return null;
-      rows.push({ id: id2(r.PaymentId), code, amount: number(r.Amount), totalAmount: number(r.TotalAmount), remaining: number(r.RemainAmount), typeId: id2(r.PaymentTypeId), type: text2(r.PaymentTypeName).slice(0, 200), method: text2(r.PaymentMethodTypeName ?? r.PaymentMethodName).slice(0, 200), scheduledDate: date(r.ScheduledDate), completeDate: date(r.CompleteDate), complete: typeof r.IsComplete === "boolean" ? r.IsComplete : null, ...projectPaymentInvoice(r) });
+      rows.push({ id: id3(r.PaymentId), code, amount: number(r.Amount), totalAmount: number(r.TotalAmount), remaining: number(r.RemainAmount), typeId: id3(r.PaymentTypeId), type: text3(r.PaymentTypeName).slice(0, 200), method: text3(r.PaymentMethodTypeName ?? r.PaymentMethodName).slice(0, 200), scheduledDate: date(r.ScheduledDate), completeDate: date(r.CompleteDate), complete: typeof r.IsComplete === "boolean" ? r.IsComplete : null, ...projectPaymentInvoice(r) });
     }
     return new Set(rows.map((r) => r.id)).size === rows.length ? rows : null;
   }
@@ -337,15 +430,15 @@ var PromotionHubCourse = (() => {
   var moveDay = (v) => {
     const iso = date(v);
     if (iso) return iso;
-    const match = /^(\d{2})\/(\d{2})\/(\d{4})(?:\s|$)/.exec(text2(v));
+    const match = /^(\d{2})\/(\d{2})\/(\d{4})(?:\s|$)/.exec(text3(v));
     if (!match) return null;
     const candidate = match[3] + "-" + match[2] + "-" + match[1];
     return Number.isFinite(Date.parse(candidate)) && (/* @__PURE__ */ new Date(candidate + "T00:00:00Z")).toISOString().slice(0, 10) === candidate ? candidate : null;
   };
   function projectHubMovements(root) {
     if (!plain2(root)) return null;
-    const ct = contractCode(root.ContractNo ?? root.ContractCode ?? root.DepositNo ?? root.DepositCode);
-    if (!ct) return null;
+    const ct2 = contractCode(root.ContractNo ?? root.ContractCode ?? root.DepositNo ?? root.DepositCode);
+    if (!ct2) return null;
     const lists = [["out", ["ListMovingOut", "ListTransferOut", "MovingOut"]], ["in", ["ListMovingIn", "ListTransferIn", "MovingIn"]]];
     const rows = [];
     let hasList = false;
@@ -357,49 +450,57 @@ var PromotionHubCourse = (() => {
       hasList = true;
       for (const item of list2) {
         if (!plain2(item)) return null;
-        const from = contractCode(item.FromContractNo ?? item.FromContractCode ?? item.FromDepositNo ?? item.MovingInFrom ?? (direction === "out" ? ct : null));
-        const to = contractCode(item.ToContractNo ?? item.ToContractCode ?? item.ToDepositNo ?? item.TransferTo ?? (direction === "in" ? ct : null));
+        const from = contractCode(item.FromContractNo ?? item.FromContractCode ?? item.FromDepositNo ?? item.MovingInFrom ?? (direction === "out" ? ct2 : null));
+        const to = contractCode(item.ToContractNo ?? item.ToContractCode ?? item.ToDepositNo ?? item.TransferTo ?? (direction === "in" ? ct2 : null));
         const amount = number(item.TransferAmount ?? item.MovingAmount ?? item.Amount);
         if (!from || !to || from === to || amount === null || amount <= 0) return null;
-        if (direction === "out" && from !== ct || direction === "in" && to !== ct) return null;
+        if (direction === "out" && from !== ct2 || direction === "in" && to !== ct2) return null;
         const day2 = moveDay(item.TransferDate ?? item.MovingDate ?? item.MovingInDate ?? item.MovingOutDate ?? item.Date);
-        const reference = text2(item.PaymentCode ?? item.TransferCode ?? "");
+        const reference = text3(item.PaymentCode ?? item.TransferCode ?? "");
         if (!day2 || reference.length > 150 || reference && !/^[A-Za-z0-9][A-Za-z0-9_.:/-]*$/.test(reference)) return null;
         rows.push({ from, to, amount, date: day2, reference, direction });
       }
     }
     const explicitMoves = [...rows];
     for (const p of hubList(root.ListPayment, 500) ?? []) {
-      const other = contractCode(p?.RelatedContractDepositNo), amount = number(p?.Amount), day2 = moveDay(p?.TransferDate ?? p?.CompleteDate), reference = text2(p?.PaymentCode), direction = outgoingPayment(p) ? "out" : "in";
-      if (!other || other === ct || p.IsComplete !== true || !(amount > 0) || !day2 || /refund/i.test(text2(p.PaymentTypeName))) continue;
-      if (direction === "in" && p.PaymentTypeId !== 10 && !/transfer|deposit to contract/i.test(text2(p.PaymentMethodTypeName) + " " + text2(p.PaymentTypeName))) continue;
+      const other = contractCode(p?.RelatedContractDepositNo), amount = number(p?.Amount), day2 = moveDay(p?.TransferDate ?? p?.CompleteDate), reference = text3(p?.PaymentCode), direction = outgoingPayment(p) ? "out" : "in";
+      if (!other || other === ct2 || p.IsComplete !== true || !(amount > 0) || !day2 || /refund/i.test(text3(p.PaymentTypeName))) continue;
+      if (direction === "in" && p.PaymentTypeId !== 10 && !/transfer|deposit to contract/i.test(text3(p.PaymentMethodTypeName) + " " + text3(p.PaymentTypeName))) continue;
       if (reference && !/^[A-Za-z0-9][A-Za-z0-9_.:/-]*$/.test(reference)) continue;
-      const from = direction === "out" ? ct : other, to = direction === "out" ? other : ct;
+      const from = direction === "out" ? ct2 : other, to = direction === "out" ? other : ct2;
       if (!explicitMoves.some((m) => m.from === from && m.to === to && m.date === day2) && !rows.some((m) => m.direction === direction && m.reference === reference && m.from === from && m.to === to && m.amount === amount && m.date === day2)) rows.push({ from, to, amount, date: day2, reference, direction });
       hasList = true;
     }
     return hasList ? rows : null;
   }
   function projectHubLearner(root) {
-    const leadId = id2(root?.LeadId), kidId = id2(root?.KidId);
+    const leadId = id3(root?.LeadId), kidId = id3(root?.KidId);
     return leadId && kidId ? { leadId, kidId, url: "https://hub24.apollo.vn:7777/lead/detail/" + leadId + "?s=" + kidId } : null;
   }
   function projectHubContract(root, { payments = null, paymentState = "pending", capturedAt = (/* @__PURE__ */ new Date()).toISOString() } = {}) {
-    const result = { schema: HUB_CONTRACT_SCHEMA, ct: text2(root?.ContractNo ?? root?.ContractCode ?? root?.DepositNo ?? root?.DepositCode).toUpperCase(), contractId: id2(root?.ContractId ?? root?.DepositId ?? root?.Id), capturedAt, discounts: contractDiscountFacts(root), payments: { state: paymentState === "pending" && (projectContractPayments(root, id2(root?.ContractId ?? root?.DepositId ?? root?.Id))?.length ?? 0) > 0 ? "read" : paymentState, rows: payments ?? ((projectContractPayments(root, id2(root?.ContractId ?? root?.DepositId ?? root?.Id))?.length ?? 0) > 0 ? projectContractPayments(root, id2(root?.ContractId ?? root?.DepositId ?? root?.Id)) : []) }, ...projectHubMovements(root) !== null ? { movements: { state: "read", rows: projectHubMovements(root) } } : { movements: { state: "pending", rows: [] } } };
-    result.financeRevision = 2;
+    const result = { schema: HUB_CONTRACT_SCHEMA, ct: text3(root?.ContractNo ?? root?.ContractCode ?? root?.DepositNo ?? root?.DepositCode).toUpperCase(), contractId: id3(root?.ContractId ?? root?.DepositId ?? root?.Id), capturedAt, discounts: contractDiscountFacts(root), payments: { state: paymentState === "pending" && (projectContractPayments(root, id3(root?.ContractId ?? root?.DepositId ?? root?.Id))?.length ?? 0) > 0 ? "read" : paymentState, rows: payments ?? ((projectContractPayments(root, id3(root?.ContractId ?? root?.DepositId ?? root?.Id))?.length ?? 0) > 0 ? projectContractPayments(root, id3(root?.ContractId ?? root?.DepositId ?? root?.Id)) : []) }, ...projectHubMovements(root) !== null ? { movements: { state: "read", rows: projectHubMovements(root) } } : { movements: { state: "pending", rows: [] } } };
+    result.financeRevision = 3;
+    result.contractDate = upgradeDate(root?.CreatedDate ?? root?.CreatedTime);
+    result.upgrades = projectUpgradeLinks(root);
     const learner = projectHubLearner(root);
     if (learner) result.learner = learner;
     result.payments = withoutOutgoingPayments(result.payments, result.movements);
     return validateHubContract(result) ? result : null;
   }
   function validateHubContract(v, depth = 0) {
-    if (!exact(v, ["schema", "ct", "contractId", "capturedAt", "discounts", "payments", "movements", "learner", "relatedFinance", "financeRevision"]) || v.schema !== HUB_CONTRACT_SCHEMA || hubDocumentCode(v.ct) !== v.ct || id2(v.contractId) !== v.contractId || typeof v.capturedAt !== "string" || !Number.isFinite(Date.parse(v.capturedAt)) || v.financeRevision !== void 0 && v.financeRevision !== 2) return false;
+    if (!exact(v, ["schema", "ct", "contractId", "capturedAt", "discounts", "payments", "movements", "learner", "relatedFinance", "financeRevision", "upgrades", "contractDate"]) || v.schema !== HUB_CONTRACT_SCHEMA || hubDocumentCode(v.ct) !== v.ct || id3(v.contractId) !== v.contractId || typeof v.capturedAt !== "string" || !Number.isFinite(Date.parse(v.capturedAt)) || v.financeRevision !== void 0 && ![2, 3].includes(v.financeRevision)) return false;
+    if (v.upgrades !== void 0 && (!validUpgradeLinks(v.upgrades) || v.upgrades.some((r) => r.id === v.contractId || r.ct === v.ct))) return false;
+    if (v.contractDate !== void 0 && v.contractDate !== null && upgradeDate(v.contractDate) !== v.contractDate) return false;
     if (v.learner !== void 0) {
       const l = v.learner;
-      if (!exact(l, ["leadId", "kidId", "url"]) || id2(l.leadId) !== l.leadId || id2(l.kidId) !== l.kidId || l.url !== "https://hub24.apollo.vn:7777/lead/detail/" + l.leadId + "?s=" + l.kidId) return false;
+      if (!exact(l, ["leadId", "kidId", "url"]) || id3(l.leadId) !== l.leadId || id3(l.kidId) !== l.kidId || l.url !== "https://hub24.apollo.vn:7777/lead/detail/" + l.leadId + "?s=" + l.kidId) return false;
     }
-    if (v.relatedFinance !== void 0 && (depth > 0 || !v.learner || !hubList(v.relatedFinance, 32) || new Set(v.relatedFinance.map((f) => f?.ct)).size !== v.relatedFinance.length || !v.relatedFinance.every((f) => f.ct !== v.ct && f.discounts === null && f.relatedFinance === void 0 && f.learner?.kidId === v.learner.kidId && validateHubContract(f, depth + 1)))) return false;
-    if (v.discounts !== null && (!hubList(v.discounts, 100) || !v.discounts.every((d) => exact(d, ["label", "groupId", "discountId", "type", "percent", "amount", "months"]) && !!text2(d.label) && d.label.length <= 2e3 && ["groupId", "discountId"].every((k) => d[k] === null || id2(d[k]) === d[k]) && (d.type === null || [1, 2, 3].includes(d.type)) && ["percent", "amount", "months"].every((k) => d[k] === null || number(d[k]) === d[k] && d[k] >= 0 && d[k] <= (k === "percent" ? 100 : k === "months" ? 120 : 1e13))))) return false;
+    if (v.relatedFinance !== void 0) {
+      if (depth > 0 || !hubList(v.relatedFinance, 32) || new Set(v.relatedFinance.map((f) => f?.ct)).size !== v.relatedFinance.length || !v.relatedFinance.every((f) => f.ct !== v.ct && f.discounts === null && f.relatedFinance === void 0 && validateHubContract(f, depth + 1))) return false;
+      const ancestors = upgradeAncestors(v);
+      if (v.relatedFinance.some((f) => !(v.learner && f.learner?.kidId === v.learner.kidId) && !ancestors.has(f.ct))) return false;
+    }
+    if (v.discounts !== null && (!hubList(v.discounts, 100) || !v.discounts.every((d) => exact(d, ["label", "groupId", "discountId", "type", "percent", "amount", "months"]) && !!text3(d.label) && d.label.length <= 2e3 && ["groupId", "discountId"].every((k) => d[k] === null || id3(d[k]) === d[k]) && (d.type === null || [1, 2, 3].includes(d.type)) && ["percent", "amount", "months"].every((k) => d[k] === null || number(d[k]) === d[k] && d[k] >= 0 && d[k] <= (k === "percent" ? 100 : k === "months" ? 120 : 1e13))))) return false;
     if (v.movements !== void 0) {
       const m = v.movements;
       if (!exact(m, ["state", "rows"]) || !["read", "pending"].includes(m.state) || !hubList(m.rows, 400) || m.state === "pending" && m.rows.length) return false;
@@ -407,7 +508,7 @@ var PromotionHubCourse = (() => {
     }
     const p = v.payments;
     if (!exact(p, ["state", "rows"]) || !["read", "pending", "unavailable"].includes(p.state) || !hubList(p.rows, 500) || p.state !== "read" && p.rows.length || new Set(p.rows.map((r) => r.id ?? r.code)).size !== p.rows.length) return false;
-    return p.rows.every((r) => exact(r, ["id", "code", "amount", "totalAmount", "remaining", "typeId", "type", "method", "scheduledDate", "completeDate", "complete", "invoiceRef", "eInvoiceKey", "eInvoiceVersion", "invoice"]) && (r.id === null && !!r.code || id2(r.id) === r.id) && typeof r.code === "string" && r.code.length <= 150 && (!r.code || /^[A-Za-z0-9][A-Za-z0-9_.:/-]*$/.test(r.code)) && number(r.amount) === r.amount && ["totalAmount", "remaining"].every((k) => r[k] === null || number(r[k]) === r[k]) && (r.typeId === null || id2(r.typeId) === r.typeId) && ["type", "method"].every((k) => typeof r[k] === "string" && r[k].length <= 200) && ["scheduledDate", "completeDate"].every((k) => r[k] === null || date(r[k]) === r[k]) && (r.complete === null || typeof r.complete === "boolean") && (r.invoiceRef === void 0 || invoiceEvidence(r.invoiceRef) === r.invoiceRef) && (r.eInvoiceKey === void 0 || eInvoiceKey(r.eInvoiceKey) === r.eInvoiceKey) && (r.eInvoiceVersion === void 0 || [1, 2].includes(r.eInvoiceVersion)) && (r.invoice === void 0 || validateInvoice(r.invoice))) && JSON.stringify(v).length <= 12e5;
+    return p.rows.every((r) => exact(r, ["id", "code", "amount", "totalAmount", "remaining", "typeId", "type", "method", "scheduledDate", "completeDate", "complete", "invoiceRef", "eInvoiceKey", "eInvoiceVersion", "invoice"]) && (r.id === null && !!r.code || id3(r.id) === r.id) && typeof r.code === "string" && r.code.length <= 150 && (!r.code || /^[A-Za-z0-9][A-Za-z0-9_.:/-]*$/.test(r.code)) && number(r.amount) === r.amount && ["totalAmount", "remaining"].every((k) => r[k] === null || number(r[k]) === r[k]) && (r.typeId === null || id3(r.typeId) === r.typeId) && ["type", "method"].every((k) => typeof r[k] === "string" && r[k].length <= 200) && ["scheduledDate", "completeDate"].every((k) => r[k] === null || date(r[k]) === r[k]) && (r.complete === null || typeof r.complete === "boolean") && (r.invoiceRef === void 0 || invoiceEvidence(r.invoiceRef) === r.invoiceRef) && (r.eInvoiceKey === void 0 || eInvoiceKey(r.eInvoiceKey) === r.eInvoiceKey) && (r.eInvoiceVersion === void 0 || [1, 2].includes(r.eInvoiceVersion)) && (r.invoice === void 0 || validateInvoice(r.invoice))) && JSON.stringify(v).length <= 12e5;
   }
   var line = (v) => String(v ?? "").replace(/\s+/g, " ").trim();
   var vnd = (v) => {
@@ -434,8 +535,8 @@ var PromotionHubCourse = (() => {
     const out = (movements?.rows ?? []).filter((m) => m.direction === "out" && m.reference);
     return { ...payments, rows: payments.rows.filter((p) => !out.some((m) => m.reference === p.code && m.date === p.completeDate && Math.abs(m.amount - p.amount) <= 1)) };
   }
-  function projectHubDisplayedTables(tables, ct) {
-    const current = contractCode(ct);
+  function projectHubDisplayedTables(tables, ct2) {
+    const current = contractCode(ct2);
     if (!current || !Array.isArray(tables) || tables.length > 100) return null;
     let payments = null, movements = null;
     for (const table of tables) {
@@ -473,9 +574,9 @@ var PromotionHubCourse = (() => {
     }
     return { payments, movements };
   }
-  function mergeDisplayedHubContract(facts, tables, ct) {
-    if (!validateHubContract(facts) || facts.ct !== ct) return null;
-    const extra = projectHubDisplayedTables(tables, ct);
+  function mergeDisplayedHubContract(facts, tables, ct2) {
+    if (!validateHubContract(facts) || facts.ct !== ct2) return null;
+    const extra = projectHubDisplayedTables(tables, ct2);
     if (!extra) return facts;
     const payments = facts.payments.state === "read" && facts.payments.rows.length ? {
       ...facts.payments,
@@ -487,7 +588,7 @@ var PromotionHubCourse = (() => {
     const moves = [...facts.movements?.rows ?? [], ...extra.movements ?? []];
     const distinct = [...new Map(moves.map((m) => [JSON.stringify([m.from, m.to, m.amount, m.date, m.reference, m.direction]), m])).values()];
     const movements = facts.movements?.state === "read" || extra.movements !== null ? { state: "read", rows: distinct } : facts.movements ?? { state: "pending", rows: [] };
-    const result = { ...facts, financeRevision: 2, payments: withoutOutgoingPayments(payments, movements), movements };
+    const result = { ...facts, payments: withoutOutgoingPayments(payments, movements), movements };
     return validateHubContract(result) ? result : facts;
   }
   function hubDisplayedTablesFromDocument(root, { staticDocument = false } = {}) {
@@ -542,9 +643,9 @@ var PromotionHubCourse = (() => {
   }
 
   // src/core/hub-course.mjs
-  var HUB2 = "https://hub24.apollo.vn:7777";
-  var text3 = (v) => String(v ?? "").trim().replace(/\s+/g, " ");
-  var label = (v) => text3(v).replace(/[\s:*]+$/, "").replace(/\s*\/\s*/g, "/").toLowerCase();
+  var HUB3 = "https://hub24.apollo.vn:7777";
+  var text4 = (v) => String(v ?? "").trim().replace(/\s+/g, " ");
+  var label = (v) => text4(v).replace(/[\s:*]+$/, "").replace(/\s*\/\s*/g, "/").toLowerCase();
   var courseLabel = (v) => COURSE_LABELS[label(v)] ?? null;
   var COURSE_FIELDS = ["courseFee", "hoursPerWeek", "package", "giftcode", "discount", "groupKoc", "contractType"];
   var courseReadComplete = (payload) => !!payload && (payload.readFinance ? payload.hubContract?.payments?.state === "read" || payload.hubContract?.movements?.state === "read" : payload.courseState === "empty" || ["courseFee", "hoursPerWeek", "package", "giftcode", "discount"].every((k) => payload[k] != null));
@@ -597,7 +698,7 @@ var PromotionHubCourse = (() => {
     for (const node of query(root, 'label,dt,th,td,.control-label,.form-label,[class*="col-"]')) {
       const key = courseLabel(node.textContent);
       if (!key || !visible(node)) continue;
-      const id3 = node.getAttribute?.("for"), control = node.control || (id3 ? root.getElementById?.(id3) : null);
+      const id4 = node.getAttribute?.("for"), control = node.control || (id4 ? root.getElementById?.(id4) : null);
       let value = control ? valueOf(control, key) : null;
       if (value == null) {
         let current = node;
@@ -606,16 +707,16 @@ var PromotionHubCourse = (() => {
           const sibling = current.nextElementSibling;
           if (sibling) {
             value = valueOf(sibling, key);
-            if (text3(value)) break;
+            if (text4(value)) break;
           }
           const parent = current.parentElement;
           if (!parent || query(parent, "label,dt,th,.control-label,.form-label").filter((e) => visible(e) && courseLabel(e.textContent)).length > 1) break;
         }
       }
       if (key === "discount" && !normalizeHubDiscount(value, { wrappedOnly: label(node.textContent) === "discount" })) continue;
-      if (text3(value)) pairs.push({ label: node.textContent, value: key === "discount" ? String(value).trim() : text3(value) });
+      if (text4(value)) pairs.push({ label: node.textContent, value: key === "discount" ? String(value).trim() : text4(value) });
     }
-    return { titles: query(root, 'h1,h2,h3,h4,h5,h6,[role="heading"],.page-title,.content-header,.breadcrumb').filter(visible).map((e) => e.textContent), pairs, ...readFinance ? { financeTables: hubDisplayedTablesFromDocument(root, { staticDocument }) } : {} };
+    return { titles: query(root, 'h1,h2,h3,h4,h5,h6,[role="heading"],.page-title,.content-header,.breadcrumb').filter(visible).map((e) => e.textContent), pairs, upgradeLinks: upgradeLinksFromDocument(root, { staticDocument }), ...readFinance ? { financeTables: hubDisplayedTablesFromDocument(root, { staticDocument }) } : {} };
   }
   function courseFailure(reason, fields = []) {
     const messages = { identity: "Kh\xF4ng x\xE1c minh \u0111\u01B0\u1EE3c duy nh\u1EA5t m\xE3 CT tr\xEAn ti\xEAu \u0111\u1EC1 ho\u1EB7c tr\u01B0\u1EDDng Contract code / Contract No.", student: "Student ID tr\xEAn Hub kh\xF4ng kh\u1EDBp h\u1ECDc vi\xEAn \u0111ang \u0111\u1ED1i chi\u1EBFu.", conflict: "C\xF3 nhi\u1EC1u gi\xE1 tr\u1ECB kh\xE1c nhau cho c\xF9ng tr\u01B0\u1EDDng Course info.", empty: "Ch\u01B0a t\xECm th\u1EA5y tr\u01B0\u1EDDng Course info c\xF3 nh\xE3n \u0111\u1ECDc \u0111\u01B0\u1EE3c tr\xEAn Hub.", format: "\u0110\u1ECBnh d\u1EA1ng d\u1EEF li\u1EC7u Course info ch\u01B0a h\u1EE3p l\u1EC7.", loading: "Hub v\u1EABn \u0111ang t\u1EA3i Course info khi h\u1EBFt th\u1EDDi gian ch\u1EDD.", navigation: "Hub \u0111\xE3 chuy\u1EC3n kh\u1ECFi URL chi ti\u1EBFt CT \u0111\u01B0\u1EE3c y\xEAu c\u1EA7u." };
@@ -624,12 +725,12 @@ var PromotionHubCourse = (() => {
   }
   function courseRequest(v) {
     if (!v || typeof v !== "object" || typeof v.ct !== "string" || typeof v.student !== "string" || typeof v.url !== "string") return null;
-    const ct = v.ct.trim().toUpperCase(), student = v.student.trim();
-    if (!(v.readFinance === true ? hubDocumentCode(ct) : /^[A-Z0-9]+-CT-\d{4,20}$/.test(ct)) || !/^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,149}$/.test(student) || Object.hasOwn(Object.prototype, student)) return null;
+    const ct2 = v.ct.trim().toUpperCase(), student = v.student.trim();
+    if (!(v.readFinance === true ? hubDocumentCode(ct2) : /^[A-Z0-9]+-CT-\d{4,20}$/.test(ct2)) || !/^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,149}$/.test(student) || Object.hasOwn(Object.prototype, student)) return null;
     try {
       const u = new URL(v.url);
-      if (u.origin !== HUB2 || u.username || u.password || u.hash || !(v.readFinance === true ? hubDocumentId(u.href, ct) : !u.search && /^\/contract\/detail\/[1-9]\d{0,14}\/?$/i.test(u.pathname)) || v.readPolicy !== void 0 && typeof v.readPolicy !== "boolean" || v.readFinance !== void 0 && typeof v.readFinance !== "boolean" || v.refreshFinance !== void 0 && typeof v.refreshFinance !== "boolean") return null;
-      return { ct, student, url: u.href, ...v.readPolicy !== void 0 ? { readPolicy: v.readPolicy } : {}, ...v.readFinance !== void 0 ? { readFinance: v.readFinance } : {}, ...v.refreshFinance !== void 0 ? { refreshFinance: v.refreshFinance } : {} };
+      if (u.origin !== HUB3 || u.username || u.password || u.hash || !(v.readFinance === true ? hubDocumentId(u.href, ct2) : !u.search && /^\/contract\/detail\/[1-9]\d{0,14}\/?$/i.test(u.pathname)) || v.readPolicy !== void 0 && typeof v.readPolicy !== "boolean" || v.readFinance !== void 0 && typeof v.readFinance !== "boolean" || v.refreshFinance !== void 0 && typeof v.refreshFinance !== "boolean") return null;
+      return { ct: ct2, student, url: u.href, ...v.readPolicy !== void 0 ? { readPolicy: v.readPolicy } : {}, ...v.readFinance !== void 0 ? { readFinance: v.readFinance } : {}, ...v.refreshFinance !== void 0 ? { refreshFinance: v.refreshFinance } : {} };
     } catch {
       return null;
     }
@@ -643,8 +744,8 @@ var PromotionHubCourse = (() => {
       return { ...result, readFinance: true, courseState: "empty", ...Object.fromEntries(COURSE_FIELDS.map((k) => [k, null])), hubContract: { ...v.hubContract, discounts: null } };
     }
     for (const key of COURSE_FIELDS) {
-      if (v[key] != null && (typeof v[key] !== "string" || !text3(v[key]) || text3(v[key]).length > (key === "discount" ? 2e3 : 200))) return null;
-      result[key] = v[key] == null ? null : key === "discount" ? normalizeHubDiscount(v[key]) : text3(v[key]);
+      if (v[key] != null && (typeof v[key] !== "string" || !text4(v[key]) || text4(v[key]).length > (key === "discount" ? 2e3 : 200))) return null;
+      result[key] = v[key] == null ? null : key === "discount" ? normalizeHubDiscount(v[key]) : text4(v[key]);
     }
     if (v.courseState !== void 0 && v.courseState !== "empty") return null;
     if (v.courseState === "empty") {
@@ -691,11 +792,12 @@ var PromotionHubCourse = (() => {
     const request = courseRequest(expected);
     if (!request || page.url !== request.url) return { error: "identity" };
     const identity = [...page.titles ?? [], ...(page.pairs ?? []).filter((p) => courseLabel(p.label) === "contract").map((p) => p.value)];
-    const codes = [...new Set(identity.flatMap((t) => text3(t).match(/[A-Z0-9]+-(?:CT|DEP)-\d{4,20}\b/gi) ?? []).map((v) => v.toUpperCase()))];
+    const linked = new Set(validUpgradeLinks(page.upgradeLinks) ? page.upgradeLinks.map((l) => l.ct).filter((ct2) => ct2 !== request.ct) : []);
+    const codes = [...new Set(identity.flatMap((t) => text4(t).match(/[A-Z0-9]+-(?:CT|DEP)-\d{4,20}\b/gi) ?? []).map((v) => v.toUpperCase()))].filter((ct2) => !linked.has(ct2));
     if (codes.length !== 1 || codes[0] !== request.ct) return { error: "identity" };
     if (request.readFinance === true) {
       const facts = projectHubContract({ ContractId: hubDocumentId(request.url, request.ct), ContractNo: request.ct, ListCourseInfo: [] });
-      const hubContract = mergeDisplayedHubContract(facts, page.financeTables ?? [], request.ct);
+      const hubContract = mergeUpgradeLinks(mergeDisplayedHubContract(facts, page.financeTables ?? [], request.ct), page.upgradeLinks ?? []);
       const payload2 = coursePayload({ ...request, hubContract }, request);
       return payload2 ? { payload: payload2 } : { error: "format" };
     }
@@ -703,7 +805,7 @@ var PromotionHubCourse = (() => {
     for (const pair of pairs) {
       const key = COURSE_LABELS[label(pair.label)];
       if (!key || key === "contract" || hasBefore && key === "package" && !/before discount/i.test(pair.label)) continue;
-      let value = key === "discount" ? normalizeHubDiscount(pair.value, { wrappedOnly: label(pair.label) === "discount" }) : text3(pair.value);
+      let value = key === "discount" ? normalizeHubDiscount(pair.value, { wrappedOnly: label(pair.label) === "discount" }) : text4(pair.value);
       if (!value) continue;
       if (["giftcode", "discount"].includes(key) && /^(?:0|[-—]+|none|no (?:giftcode|discount)|n\/a)$/i.test(value)) value = "0";
       else if (/^[-—]+$/.test(value) || value === "0") continue;
@@ -712,44 +814,45 @@ var PromotionHubCourse = (() => {
     const conflicts = Object.entries(values).filter(([k, s]) => k !== "discount" && s.size > 1).map(([k]) => k);
     if (conflicts.length) return { error: "conflict", fields: conflicts };
     if (values.student && [...values.student][0] !== request.student) return { error: "student" };
-    const payload = coursePayload({ ...request, ...Object.fromEntries(COURSE_FIELDS.map((k) => [k, values[k] ? [...values[k]].join(k === "discount" ? ";" : "") : null])) }, request);
+    const upgradeFacts = page.upgradeLinks?.length ? mergeUpgradeLinks(projectHubContract({ ContractId: hubDocumentId(request.url, request.ct), ContractNo: request.ct, ListCourseInfo: [] }), page.upgradeLinks) : null;
+    const payload = coursePayload({ ...request, ...Object.fromEntries(COURSE_FIELDS.map((k) => [k, values[k] ? [...values[k]].join(k === "discount" ? ";" : "") : null])), ...upgradeFacts ? { hubContract: upgradeFacts } : {} }, request);
     return payload ? { payload } : { error: COURSE_FIELDS.some((k) => values[k]) ? "format" : "empty", fields: COURSE_FIELDS.filter((k) => values[k]) };
   }
   function missingContractInputs(row) {
     if (row?.kind !== "contract" || !String(row.ct || row.cells?.contractTotal || "").includes("-CT-")) return [];
-    const c = row.cells ?? {}, missing = ["H", "I", "J"].filter((k) => !text3(c[k]));
-    if (row.hubReadMissing?.includes("giftcode") || !text3(c.K) || text3(c.K) === "0" && (Number(c.V) > 0 || text3(row.context?.voucherDescription) && text3(row.context.voucherDescription) !== "0")) missing.push("K");
-    if (row.hubReadMissing?.includes("discount") || !text3(c.L) || text3(c.L) === "0" && Number(c.U) > 0) missing.push("L");
+    const c = row.cells ?? {}, missing = ["H", "I", "J"].filter((k) => !text4(c[k]));
+    if (row.hubReadMissing?.includes("giftcode") || !text4(c.K) || text4(c.K) === "0" && (Number(c.V) > 0 || text4(row.context?.voucherDescription) && text4(row.context.voucherDescription) !== "0")) missing.push("K");
+    if (row.hubReadMissing?.includes("discount") || !text4(c.L) || text4(c.L) === "0" && Number(c.U) > 0) missing.push("L");
     return missing;
   }
   function contractInputPlan(rows, { refresh = false, completed = [], needsVoucher = () => false, needsPolicy = () => false } = {}) {
     const unique = /* @__PURE__ */ new Map(), students = /* @__PURE__ */ new Map();
     for (const row of rows ?? []) {
-      const ct = text3(row.ct || row.cells?.contractTotal), student = text3(row.cells?.F);
-      if (row.kind !== "contract" || !/^[A-Z0-9]+-CT-\d{4,20}$/.test(ct) || !/^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,149}$/.test(student) || Object.hasOwn(Object.prototype, student)) continue;
-      (students.get(ct) ?? (students.set(ct, /* @__PURE__ */ new Set()), students.get(ct))).add(student);
-      unique.set(ct + "|" + student, row);
+      const ct2 = text4(row.ct || row.cells?.contractTotal), student = text4(row.cells?.F);
+      if (row.kind !== "contract" || !/^[A-Z0-9]+-CT-\d{4,20}$/.test(ct2) || !/^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,149}$/.test(student) || Object.hasOwn(Object.prototype, student)) continue;
+      (students.get(ct2) ?? (students.set(ct2, /* @__PURE__ */ new Set()), students.get(ct2))).add(student);
+      unique.set(ct2 + "|" + student, row);
     }
     const done = new Set(completed);
-    return [...unique.values()].filter((r) => (refresh || missingContractInputs(r).length > 0 || needsVoucher(r) || needsPolicy(r)) && students.get(text3(r.ct || r.cells.contractTotal)).size === 1 && !done.has(text3(r.ct || r.cells.contractTotal) + "|" + text3(r.cells.F)));
+    return [...unique.values()].filter((r) => (refresh || missingContractInputs(r).length > 0 || needsVoucher(r) || needsPolicy(r)) && students.get(text4(r.ct || r.cells.contractTotal)).size === 1 && !done.has(text4(r.ct || r.cells.contractTotal) + "|" + text4(r.cells.F)));
   }
   async function fillContractInputs(rows, io) {
     const results = [];
     for (const [index, row] of rows.entries()) {
       if (io.signal?.aborted) break;
-      const ct = text3(row.ct || row.cells.contractTotal), student = text3(row.cells.F);
+      const ct2 = text4(row.ct || row.cells.contractTotal), student = text4(row.cells.F);
       let stage = "input";
       try {
-        await io.progress?.("\u0110ang l\u1EA5y Input theo " + ct + "\u2026", { ct, student, studentName: String(row.cells.G ?? ""), index: index + 1, total: rows.length });
-        let link = await io.loadLink(ct);
-        if (!courseRequest({ ct, student, url: link?.url ?? "" })) {
-          const found = await io.lookup(ct);
+        await io.progress?.("\u0110ang l\u1EA5y Input theo " + ct2 + "\u2026", { ct: ct2, student, studentName: String(row.cells.G ?? ""), index: index + 1, total: rows.length });
+        let link = await io.loadLink(ct2);
+        if (!courseRequest({ ct: ct2, student, url: link?.url ?? "" })) {
+          const found = await io.lookup(ct2);
           if (io.signal?.aborted) break;
-          if (found.ct !== ct || !courseRequest({ ct, student, url: found.url })) throw Error("Link Hub kh\xF4ng kh\u1EDBp CT nh\u1EADn.");
-          link = await io.saveLink({ ct, url: found.url, version: link?.version ?? 0 });
+          if (found.ct !== ct2 || !courseRequest({ ct: ct2, student, url: found.url })) throw Error("Link Hub kh\xF4ng kh\u1EDBp CT nh\u1EADn.");
+          link = await io.saveLink({ ct: ct2, url: found.url, version: link?.version ?? 0 });
         }
         if (io.signal?.aborted) break;
-        const expected = { ct, student, url: link.url }, payload = await readContractInputs(row, expected, io);
+        const expected = { ct: ct2, student, url: link.url }, payload = await readContractInputs(row, expected, io);
         if (!payload) throw Error("Th\xF4ng tin tr\u1EA3 v\u1EC1 kh\xF4ng kh\u1EDBp CT / Student ID.");
         if (io.signal?.aborted) break;
         const saved = await io.save(row, payload);
@@ -757,12 +860,12 @@ var PromotionHubCourse = (() => {
         const completion = await io.afterSave?.(row, payload, saved);
         stage = "checkpoint";
         const checkpoint = await io.checkpoint?.(row, payload, saved);
-        results.push({ ct, status: checkpoint?.complete === false ? "partial" : "saved", fields: [...COURSE_FIELDS.filter((k) => payload[k] !== null), ...payload.hubContract ? ["hubContract"] : [], ...payload.hubPolicy ? ["hubPolicy"] : []], missing: checkpoint?.missing ?? [], hubPolicyError: payload.hubPolicyError ?? null, ...completion ? { voucher: completion } : {} });
+        results.push({ ct: ct2, status: checkpoint?.complete === false ? "partial" : "saved", fields: [...COURSE_FIELDS.filter((k) => payload[k] !== null), ...payload.hubContract ? ["hubContract"] : [], ...payload.hubPolicy ? ["hubPolicy"] : []], missing: checkpoint?.missing ?? [], hubPolicyError: payload.hubPolicyError ?? null, ...completion ? { voucher: completion } : {} });
         io.saved?.(row, payload);
       } catch (e) {
         if (io.signal?.aborted) break;
         const skippedVoucher = stage === "voucher" && (["timeout", "hub_timeout"].includes(e.code) || /^voucher_/.test(e.code ?? ""));
-        results.push({ ct, status: "check", message: String(e.message ?? e) + (skippedVoucher ? " B\u1ECF qua Voucher c\u1EE7a CT n\xE0y trong l\u01B0\u1EE3t hi\u1EC7n t\u1EA1i; ti\u1EBFp t\u1EE5c CT kh\xE1c. CT c\xF2n thi\u1EBFu s\u1EBD \u0111\u01B0\u1EE3c th\u1EED l\u1EA1i khi l\u1EA5y ti\u1EBFp." : ""), ...skippedVoucher ? { voucher: { state: "unavailable" } } : {} });
+        results.push({ ct: ct2, status: "check", message: String(e.message ?? e) + (skippedVoucher ? " B\u1ECF qua Voucher c\u1EE7a CT n\xE0y trong l\u01B0\u1EE3t hi\u1EC7n t\u1EA1i; ti\u1EBFp t\u1EE5c CT kh\xE1c. CT c\xF2n thi\u1EBFu s\u1EBD \u0111\u01B0\u1EE3c th\u1EED l\u1EA1i khi l\u1EA5y ti\u1EBFp." : ""), ...skippedVoucher ? { voucher: { state: "unavailable" } } : {} });
         if (!skippedVoucher && !["index_unresolved", "not_found", "course_invalid", "course_empty", "course_unavailable", "timeout", "hub_timeout", "hub_frame_unavailable"].includes(e.code)) break;
       }
       io.update?.([...results]);
@@ -774,17 +877,17 @@ var PromotionHubCourse = (() => {
     if (!payload) return null;
     if (["courseFee", "hoursPerWeek", "package"].every((k) => payload[k] != null) || !row.sourceContracts?.length) return payload;
     const inherited = [];
-    for (const ct of row.sourceContracts.slice(0, 20)) {
+    for (const ct2 of row.sourceContracts.slice(0, 20)) {
       if (io.signal?.aborted) break;
       try {
-        await io.progress?.("CT " + expected.ct + " thi\u1EBFu Course info; \u0111ang \u0111\u1ECDc CT chuy\u1EC3n v\xE0o " + ct + "\u2026");
-        let link = await io.loadLink(ct);
-        if (!courseRequest({ ct, student: expected.student, url: link?.url ?? "" })) {
-          const found = await io.lookup(ct);
-          if (found.ct !== ct || !courseRequest({ ct, student: expected.student, url: found.url })) throw Object.assign(Error("Link CT chuy\u1EC3n v\xE0o kh\xF4ng kh\u1EDBp."), { code: "course_unavailable" });
-          link = await io.saveLink({ ct, url: found.url, version: link?.version ?? 0 });
+        await io.progress?.("CT " + expected.ct + " thi\u1EBFu Course info; \u0111ang \u0111\u1ECDc CT chuy\u1EC3n v\xE0o " + ct2 + "\u2026");
+        let link = await io.loadLink(ct2);
+        if (!courseRequest({ ct: ct2, student: expected.student, url: link?.url ?? "" })) {
+          const found = await io.lookup(ct2);
+          if (found.ct !== ct2 || !courseRequest({ ct: ct2, student: expected.student, url: found.url })) throw Object.assign(Error("Link CT chuy\u1EC3n v\xE0o kh\xF4ng kh\u1EDBp."), { code: "course_unavailable" });
+          link = await io.saveLink({ ct: ct2, url: found.url, version: link?.version ?? 0 });
         }
-        const donor = { ct, student: expected.student, url: link.url }, source = coursePayload(await io.read(donor), donor);
+        const donor = { ct: ct2, student: expected.student, url: link.url }, source = coursePayload(await io.read(donor), donor);
         if (source) inherited.push(source);
       } catch (e) {
         if (io.signal?.aborted) break;

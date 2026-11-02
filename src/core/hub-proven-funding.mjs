@@ -8,6 +8,8 @@ import {buildContractGroups} from './contracts.mjs';
 import {paymentAllocations} from './payment-allocations.mjs';
 import {financeBundle} from './hub-finance-bundle.mjs';
 import {paymentInvoiceNumber,eInvoiceKey} from './hub-invoice.mjs';
+import {upgradeEdges} from './hub-upgrade.mjs';
+import {upgradeFunding} from './hub-upgrade-funding.mjs';
 const day=value=>typeof value==='number'?value:(Date.parse(String(value)+'T00:00:00Z')-Date.UTC(1899,11,30))/86400000;
 const positive=value=>typeof value==='number'&&Number.isFinite(value)&&value>0;
 const signature=m=>JSON.stringify([m.from,m.to,Math.floor(m.date)]);
@@ -51,10 +53,20 @@ export function hubFundingSources(input,{datasetId,facts=[],links=[]}={}){
  // Preserve the imported ledger. A disagreement cannot supply a new Hub cash
  // path and remains a visible warning. A manual ancestry supplies no money.
  const transfers=input.transferSources??[];
- const allMoves=[...rawMoves.filter(m=>!blocked.has(signature(m))),...addedMoves];
+ const observedUpgrades=upgradeEdges(valid.map(f=>f.hubContract)),conflictingOrigins=new Set();
+ for(const f of valid){
+  if(!observedUpgrades.some(e=>e.from===f.ct))continue;
+  for(const p of f.hubContract.payments.rows){
+   const imported=rawCash.filter(r=>r.payment.toUpperCase()===p.code.toUpperCase());
+   if(imported.some(r=>r.contract!==f.ct||Math.abs(r.amount-p.amount)>1||p.completeDate&&Math.floor(r.date)!==day(p.completeDate)))conflictingOrigins.add(f.ct);
+  }
+ }
+ for(const e of observedUpgrades.filter(e=>conflictingOrigins.has(e.from)))pending.push({from:e.from,to:e.to,reason:'Upgrade '+e.from+' → '+e.to+': PaymentList khác chứng từ Paid trên Hub; cần đối chiếu.'});
+ const upgrades=observedUpgrades.filter(e=>!conflictingOrigins.has(e.from));
+ const allMoves=[...rawMoves.filter(m=>!blocked.has(signature(m))),...addedMoves,...upgrades];
  const reaches=(origin,target)=>{
   const queue=[origin],seen=new Set();
-  for(let i=0;i<queue.length&&seen.size<200;i++){const ct=queue[i];if(ct===target)return true;if(seen.has(ct))continue;seen.add(ct);for(const m of allMoves)if(m.from===ct&&positive(m.amount))queue.push(m.to);}
+  for(let i=0;i<queue.length&&seen.size<200;i++){const ct=queue[i];if(ct===target)return true;if(seen.has(ct))continue;seen.add(ct);for(const m of allMoves)if(m.from===ct&&(positive(m.amount)||upgrades.includes(m)))queue.push(m.to);}
   return false;
  };
  const addedCash=[],meta={};
@@ -72,7 +84,9 @@ export function hubFundingSources(input,{datasetId,facts=[],links=[]}={}){
    meta[p.code]={method:p.method||null,term:null,invoiceNumber:invoiceNo,invoiceDate:p.invoice?.date??null,invoiceAmount:p.invoice?.amount??null,eInvoiceKey:p.eInvoiceKey??eInvoiceKey(p.invoiceRef),invoiceSource:p.invoice?.source??null,hubURL:f.url};
   }
  }
- return {input:{...input,cashSources:[...(input.cashSources??[]),{rows:addedCash}],transferSources:[...transfers,{rows:addedMoves}]},cash:addedCash,moves:addedMoves,pending,meta,changed:!!(addedCash.length||addedMoves.length||blocked.size)};
+ const combined={...input,cashSources:[...(input.cashSources??[]),{rows:addedCash}],transferSources:[...transfers,{rows:addedMoves}]};
+ const allocation=upgradeFunding(combined,upgrades);addedMoves.push(...allocation.moves);pending.push(...allocation.pending);
+ return {input:combined,cash:addedCash,moves:addedMoves,pending,meta,changed:!!(addedCash.length||addedMoves.length||blocked.size||pending.length)};
 }
 export function attachHubFunding(model,{datasetId,facts,links}){
  if(!model.input)return;
@@ -80,20 +94,23 @@ export function attachHubFunding(model,{datasetId,facts,links}){
  const prior=new Map(model.contractGroups.map(g=>[g.id,g]));
  model.input=extra.input;model.receiptMeta={...model.receiptMeta,...extra.meta};
  model.extensions.accounts=buildAccounts(extra.input,{contractSummaries:true});
+ delete model.contractSettlements;
  const refreshed=buildContractGroups(model,extra.input,{paymentTrace:true});
- const codes=new Set(extra.cash.map(r=>r.payment));
+ const codes=new Set(extra.cash.map(r=>r.payment)),groups=[];
  for(const fresh of refreshed){
-  const group=prior.get(fresh.id);if(!group||group.kind!=='contract')continue;
-  const base=group.account.net;
-  group.account=fresh.account;group.receipts=fresh.receipts;group.raw=fresh.raw;
-  group.warnings=unique([...group.warnings.filter(w=>!w.includes('chưa có phương thức thanh toán')), ...fresh.warnings]);
+  const old=prior.get(fresh.id);
+  const group=old?{...old,...fresh,cells:{...fresh.cells,...Object.fromEntries(['T','U','V','X'].map(k=>[k,old.cells[k]]))},export:old.export}:fresh;
+  groups.push(group);if(group.kind!=='contract')continue;
+  const base=old?.account.net??0;
+  group.warnings=unique([...(old?.warnings??group.warnings).filter(w=>!w.includes('chưa có phương thức thanh toán')), ...fresh.warnings]);
   const codesInPath=new Set([group.ct,...(group.account.movementHistory??[]).flatMap(m=>[m.from,m.to])]);
-  group.warnings=unique([...group.warnings,...extra.pending.filter(p=>p.from&&codesInPath.has(p.from)&&codesInPath.has(p.to)||p.origin&&codesInPath.has(p.origin)).map(p=>p.reason)]);
+  group.warnings=unique([...group.warnings,...extra.pending.filter(p=>p.from&&(codesInPath.has(p.from)||codesInPath.has(p.to))||p.origin&&codesInPath.has(p.origin)).map(p=>p.reason)]);
   const allocations=paymentAllocations({...group,cells:{...group.cells,contractTotal:group.ct},reconciliation:group.account});
   const receipts=allocations.invoices.filter(r=>codes.has(r.receipt.payment)).map(r=>({origin:r.receipt.contract,paymentCode:r.receipt.payment,invoiceRef:r.receipt.vat,paid:r.receipt.amount,allocated:r.amount,
    completeDate:new Date(Date.UTC(1899,11,30)+r.receipt.date*86400000).toISOString().slice(0,10),path:r.paths[0]??[]}));
   group.account.hubSupplement={ledger:true,amount:group.account.net-base,receipts,pending:extra.pending,status:'hub-backed'};
  }
+ model.contractGroups=groups;
 }
 // Bounded projection retained for integrations; production uses attachHubFunding
 // once for the whole dataset so competing masters share one funding budget.

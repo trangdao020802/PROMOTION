@@ -1,7 +1,7 @@
 import React,{useCallback,useEffect,useRef,useState} from 'react';
 import {voucherInput,VOUCHER_POLICIES} from '../core/vouchers.mjs';
 import {HUB_VOUCHERS,voucherRequest,withVoucherProfile,mergeHubVoucher,voucherDetailURL} from '../core/hub-voucher.mjs';
-import {readHubVoucher} from './hub-voucher-bridge.mjs';
+import {readHubVoucher,VOUCHER_BRIDGE_VERSION} from './hub-voucher-bridge.mjs';
 import {assetPath} from './paths.mjs';
 
 const hubStatus:any={ACTIVE:'Đang áp dụng',CLOSED:'Đã đóng / đã sử dụng',INACTIVE:'Không áp dụng',UNKNOWN:'Chưa rõ'};
@@ -10,11 +10,11 @@ export default function VoucherEditor({initial={},profile={},disabled=false,onSa
  const[draft,setDraft]=useState(()=>withVoucherProfile(voucherInput(initial),profile)),[saving,setSaving]=useState(false),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[failure,setFailure]=useState(''),[bridgeNeeded,setBridgeNeeded]=useState(false),[conflict,setConflict]=useState(false);
  const ref=useRef(draft),controller=useRef<AbortController|null>(null),attempted=useRef('');ref.current=draft;
  const dirty=JSON.stringify(draft)!==base,locked=disabled||saving||busy;
- useEffect(()=>{controller.current?.abort();controller.current=null;setBusy(false);setDraft(withVoucherProfile(voucherInput(initial),profile));setFailure('');setMessage('');setConflict(false);attempted.current='';},[initial.code,initial.version,profile.ct,profile.studentId]);
+ useEffect(()=>{controller.current?.abort();controller.current=null;setBusy(false);setDraft(withVoucherProfile(voucherInput(initial),profile));setFailure('');setMessage('');setBridgeNeeded(false);setConflict(false);attempted.current='';},[initial.code,initial.version,profile.ct,profile.studentId]);
  useEffect(()=>{onDirty?.(dirty||saving||busy);return()=>onDirty?.(false);},[dirty,saving,busy,onDirty]);
  useEffect(()=>{if(!dirty)return;const prevent=(e:any)=>{e.preventDefault();e.returnValue='';};window.addEventListener('beforeunload',prevent);return()=>window.removeEventListener('beforeunload',prevent);},[dirty]);
  useEffect(()=>()=>controller.current?.abort(),[]);
- const lookup=useCallback(async(automatic=false)=>{
+ const lookup=useCallback(async()=>{
   const current=ref.current;if(!voucherRequest({code:current.code})||disabled||saving||controller.current)return;
   controller.current?.abort();const task=new AbortController();controller.current=task;
   setBusy(true);setFailure('');setBridgeNeeded(false);setMessage('Đang kết nối Hub…');
@@ -22,12 +22,12 @@ export default function VoucherEditor({initial={},profile={},disabled=false,onSa
    const payload=await readHubVoucher(current.code,{signal:task.signal,onProgress:setMessage});
    if(task.signal.aborted)return;
    setDraft(mergeHubVoucher(ref.current,payload,profile));const number=(n:number)=>n.toLocaleString('vi-VN',{maximumSignificantDigits:15});setMessage(payload.type==='percent'?'Đã đọc Discount amount '+number(payload.rate*100)+' % → Tỷ lệ giảm (%) = '+number(payload.rate*100)+'. Bấm Lưu voucher & tính lại.':payload.type==='amount'?'Đã đọc Discount amount '+number(payload.amount)+' đ → Số tiền giảm (VND) = '+number(payload.amount)+'. Bấm Lưu voucher & tính lại.':'Hub chưa có Discount amount đủ rõ; cần bổ sung trước khi duyệt.');
-  }catch(e:any){if(e.code!=='cancelled'){setBridgeNeeded(e.code==='bridge');setMessage(automatic&&e.code==='bridge'?'Cập nhật cầu nối Hub 1.6.14 để tự tra Voucher.':e.message);if(e.code!=='bridge')setFailure(e.message);}}
+  }catch(e:any){if(e.code!=='cancelled'){setBridgeNeeded(e.code==='bridge');setMessage(e.message);if(e.code!=='bridge')setFailure(e.message);}}
   finally{if(controller.current===task){controller.current=null;setBusy(false);}}
  },[disabled,saving,profile.ct,profile.studentId,profile.studentName,profile.center,profile.centerName]);
  useEffect(()=>{
   if(disabled||!initial.code||draft.hubUrl||draft.status!=='PENDING'||attempted.current===initial.code||!['label','studentId','studentName','center','startDate','endDate','type'].some(k=>!draft[k]))return;
-  attempted.current=initial.code;const timer=setTimeout(()=>void lookup(true),300);return()=>clearTimeout(timer);
+  attempted.current=initial.code;const timer=setTimeout(()=>void lookup(),300);return()=>clearTimeout(timer);
  },[initial.code,initial.version,disabled,lookup]);
  const change=(key:string,value:any)=>setDraft((old:any)=>key==='code'&&value!==old.code?old.hubUrl?withVoucherProfile(voucherInput({code:value}),profile):{...old,code:value,status:'PENDING',hubUrl:'',hubCheckedAt:'',hubStatus:''}:{...old,[key]:value});
  const save=async()=>{setSaving(true);setFailure('');setConflict(false);try{setDraft(voucherInput(await onSave(draft,initial.version??0)));setMessage('Đã lưu voucher và tính lại.');}catch(e:any){setFailure(e.message||'Chưa lưu được voucher.');setConflict(!!e.conflict);}finally{setSaving(false);}};
@@ -38,16 +38,16 @@ export default function VoucherEditor({initial={},profile={},disabled=false,onSa
   <div className="verification-heading"><h3>{initial.version?'Voucher đã nhập':'Bổ sung voucher mới'}</h3><span className="policy-badge partial">{initial.version?'Phiên bản '+initial.version:'Chưa lưu'}</span></div>
   <p className="evidence-caption">Thông tin học viên lấy từ hồ sơ CT đang mở. Mã đầy đủ được tra tại Voucher và List gift code trên Hub; đơn vị % hoặc đ lấy cạnh Discount amount, center lấy từ cột Center code; ngày và căn cứ lấy từ trang chi tiết.</p>
   <div className="voucher-hub-tools">
-   <button type="button" className="secondary-button" disabled={locked||!voucherRequest({code:draft.code})} onClick={()=>void lookup(false)}>{busy?'Đang tìm trên Hub…':'Tìm & tự điền từ Hub'}</button>
+   <button type="button" className="secondary-button" disabled={locked||!voucherRequest({code:draft.code})} onClick={()=>void lookup()}>{busy?'Đang tìm trên Hub…':'Tìm & tự điền từ Hub'}</button>
    {busy&&<button type="button" className="quiet-button" onClick={()=>{controller.current?.abort();setMessage('Đã dừng tra Voucher.');}}>Dừng tìm</button>}
    <a href={source||HUB_VOUCHERS} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">{source?'Mở chi tiết Voucher trên Hub':'Mở danh sách Voucher trên Hub'}</a>
    <button type="button" className="quiet-button" disabled={!draft.code} onClick={()=>void navigator.clipboard.writeText(draft.code).then(()=>setMessage('Đã sao chép Giftcode đầy đủ.')).catch(()=>setFailure('Chưa sao chép được mã.'))}>Sao chép mã</button>
   </div>
   {message&&<p className="voucher-hub-message" role="status">{message}</p>}
-  {bridgeNeeded&&<details className="voucher-bridge-help"><summary>Cập nhật cầu nối để tự tìm Voucher</summary><p>Tải bản 1.6.14, giải nén và tải lại tiện ích tại chrome://extensions hoặc edge://extensions. Sau đó tải lại Promotion và các tab Hub, đăng nhập Hub rồi bấm Tìm & tự điền từ Hub.</p><a href={assetPath('downloads/promotion-hub-bridge.zip')+'?v=1.6.14'} download>Tải cầu nối Hub 1.6.14</a></details>}
+  {bridgeNeeded&&<details className="voucher-bridge-help"><summary>Kết nối cầu nối Hub để tìm Voucher</summary><p>Voucher dùng chung cầu nối {VOUCHER_BRIDGE_VERSION} với Tự lấy Input và Tự gắn link Hub. Nếu đã cài bản này, bật tiện ích cho trang Promotion và tải lại Promotion cùng tab Hub đang mở. Chỉ cài hoặc cập nhật nếu chưa có bản phù hợp.</p><a href={assetPath('downloads/promotion-hub-bridge.zip')+'?v='+VOUCHER_BRIDGE_VERSION} download>Tải cầu nối Hub {VOUCHER_BRIDGE_VERSION}</a></details>}
   {source&&<p className="evidence-caption">Nguồn Hub: <a href={source} target="_blank" rel="noopener noreferrer">{draft.code}</a> · {hubStatus[draft.hubStatus]||'Chưa rõ'}{draft.hubCheckedAt?' · đọc lúc '+new Date(draft.hubCheckedAt).toLocaleString('vi-VN'):''}. Dữ liệu tự điền cần được lưu; trạng thái duyệt của hồ sơ kiểm tra riêng.</p>}
   <div className="verification-grid">
-   {input('code','Giftcode No *',{maxLength:150,placeholder:'Nhập mã chính xác',onBlur:()=>{if(!initial.code&&voucherRequest({code:ref.current.code}))void lookup(false);},onKeyDown:(e:any)=>{if(e.key==='Enter'){e.preventDefault();void lookup(false);}}})}{input('label','Tên / mô tả voucher',{maxLength:200})}
+   {input('code','Giftcode No *',{maxLength:150,placeholder:'Nhập mã chính xác',onBlur:()=>{if(!initial.code&&voucherRequest({code:ref.current.code}))void lookup();},onKeyDown:(e:any)=>{if(e.key==='Enter'){e.preventDefault();void lookup();}}})}{input('label','Tên / mô tả voucher',{maxLength:200})}
    {input('studentId','Student ID *',{maxLength:200})}{input('studentName','Tên học viên *',{maxLength:200})}
    {input('center','Center / phạm vi *',{maxLength:2000,placeholder:'Mã từ cột Center code trên Hub, phân cách bằng dấu phẩy'})}
    <label><span>Trạng thái</span><select value={draft.status} disabled={locked} onChange={e=>change('status',e.target.value)}><option value="PENDING">Chờ bổ sung / duyệt</option><option value="APPROVED">Đã duyệt</option><option value="CLOSED">Đã đóng · có duyệt</option><option value="REJECTED">Từ chối</option><option value="INACTIVE">Không áp dụng</option></select></label>

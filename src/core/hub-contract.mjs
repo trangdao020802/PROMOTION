@@ -2,6 +2,7 @@
 // prices or a second set of receipts to add to Export/PaymentList/Transfer.
 import {normalizeHubDiscount} from './hub-discount.mjs';
 import {hubDocumentCode} from './hub-document.mjs';
+import {projectUpgradeLinks,validUpgradeLinks,upgradeDate,upgradeAncestors,mergeUpgradeLinks} from './hub-upgrade.mjs';
 import {invoiceReference,projectPaymentInvoice,validateInvoice,eInvoiceKey,mergePaymentInvoice,invoiceKeyFromURL} from './hub-invoice.mjs';
 export const HUB_CONTRACT_SCHEMA='apollo-hub-contract/v1';
 const plain=v=>!!v&&typeof v==='object'&&!Array.isArray(v);
@@ -102,15 +103,23 @@ export function projectHubLearner(root){
 
 export function projectHubContract(root,{payments=null,paymentState='pending',capturedAt=new Date().toISOString()}={}){
  const result={schema:HUB_CONTRACT_SCHEMA,ct:text(root?.ContractNo??root?.ContractCode??root?.DepositNo??root?.DepositCode).toUpperCase(),contractId:id(root?.ContractId??root?.DepositId??root?.Id),capturedAt,discounts:contractDiscountFacts(root),payments:{state:paymentState==='pending'&&(projectContractPayments(root,id(root?.ContractId??root?.DepositId??root?.Id))?.length??0)>0?'read':paymentState,rows:payments??((projectContractPayments(root,id(root?.ContractId??root?.DepositId??root?.Id))?.length??0)>0?projectContractPayments(root,id(root?.ContractId??root?.DepositId??root?.Id)):[])},...(projectHubMovements(root)!==null?{movements:{state:'read',rows:projectHubMovements(root)}}:{movements:{state:'pending',rows:[]}})};
- result.financeRevision=2;
+ result.financeRevision=3;
+ result.contractDate=upgradeDate(root?.CreatedDate??root?.CreatedTime);
+ result.upgrades=projectUpgradeLinks(root);
  const learner=projectHubLearner(root);if(learner)result.learner=learner;
  result.payments=withoutOutgoingPayments(result.payments,result.movements);
  return validateHubContract(result)?result:null;
 }
 export function validateHubContract(v,depth=0){
- if(!exact(v,['schema','ct','contractId','capturedAt','discounts','payments','movements','learner','relatedFinance','financeRevision'])||v.schema!==HUB_CONTRACT_SCHEMA||hubDocumentCode(v.ct)!==v.ct||id(v.contractId)!==v.contractId||typeof v.capturedAt!=='string'||!Number.isFinite(Date.parse(v.capturedAt))||v.financeRevision!==undefined&&v.financeRevision!==2)return false;
+ if(!exact(v,['schema','ct','contractId','capturedAt','discounts','payments','movements','learner','relatedFinance','financeRevision','upgrades','contractDate'])||v.schema!==HUB_CONTRACT_SCHEMA||hubDocumentCode(v.ct)!==v.ct||id(v.contractId)!==v.contractId||typeof v.capturedAt!=='string'||!Number.isFinite(Date.parse(v.capturedAt))||v.financeRevision!==undefined&&![2,3].includes(v.financeRevision))return false;
+ if(v.upgrades!==undefined&&(!validUpgradeLinks(v.upgrades)||v.upgrades.some(r=>r.id===v.contractId||r.ct===v.ct)))return false;
+ if(v.contractDate!==undefined&&v.contractDate!==null&&upgradeDate(v.contractDate)!==v.contractDate)return false;
  if(v.learner!==undefined){const l=v.learner;if(!exact(l,['leadId','kidId','url'])||id(l.leadId)!==l.leadId||id(l.kidId)!==l.kidId||l.url!=='https://hub24.apollo.vn:7777/lead/detail/'+l.leadId+'?s='+l.kidId)return false;}
- if(v.relatedFinance!==undefined&&(depth>0||!v.learner||!hubList(v.relatedFinance,32)||new Set(v.relatedFinance.map(f=>f?.ct)).size!==v.relatedFinance.length||!v.relatedFinance.every(f=>f.ct!==v.ct&&f.discounts===null&&f.relatedFinance===undefined&&f.learner?.kidId===v.learner.kidId&&validateHubContract(f,depth+1))))return false;
+ if(v.relatedFinance!==undefined){
+  if(depth>0||!hubList(v.relatedFinance,32)||new Set(v.relatedFinance.map(f=>f?.ct)).size!==v.relatedFinance.length||!v.relatedFinance.every(f=>f.ct!==v.ct&&f.discounts===null&&f.relatedFinance===undefined&&validateHubContract(f,depth+1)))return false;
+  const ancestors=upgradeAncestors(v);
+  if(v.relatedFinance.some(f=>!(v.learner&&f.learner?.kidId===v.learner.kidId)&&!ancestors.has(f.ct)))return false;
+ }
  if(v.discounts!==null&&(!hubList(v.discounts,100)||!v.discounts.every(d=>exact(d,['label','groupId','discountId','type','percent','amount','months'])&&!!text(d.label)&&d.label.length<=2000&&['groupId','discountId'].every(k=>d[k]===null||id(d[k])===d[k])&&(d.type===null||[1,2,3].includes(d.type))&&['percent','amount','months'].every(k=>d[k]===null||number(d[k])===d[k]&&d[k]>=0&&d[k]<=(k==='percent'?100:k==='months'?120:1e13)))))return false;
  if(v.movements!==undefined){
   const m=v.movements;
@@ -196,7 +205,7 @@ export function mergeDisplayedHubContract(facts,tables,ct){
  const moves=[...(facts.movements?.rows??[]),...(extra.movements??[])];
  const distinct=[...new Map(moves.map(m=>[JSON.stringify([m.from,m.to,m.amount,m.date,m.reference,m.direction]),m])).values()];
  const movements=facts.movements?.state==='read'||extra.movements!==null?{state:'read',rows:distinct}:facts.movements??{state:'pending',rows:[]};
- const result={...facts,financeRevision:2,payments:withoutOutgoingPayments(payments,movements),movements};return validateHubContract(result)?result:facts;
+ const result={...facts,payments:withoutOutgoingPayments(payments,movements),movements};return validateHubContract(result)?result:facts;
 }
 export function mergeHubFinanceFacts(first,second){
  if(!validateHubContract(first)||!validateHubContract(second)||first.ct!==second.ct||first.contractId!==second.contractId)return first;
@@ -208,7 +217,10 @@ export function mergeHubFinanceFacts(first,second){
  }
  const values=[...(first.movements?.rows??[]),...(second.movements?.rows??[])],rows=[...new Map(values.map(m=>[JSON.stringify(m),m])).values()];
  const movements={state:first.movements?.state==='read'||second.movements?.state==='read'?'read':'pending',rows};
- const result={...first,payments:withoutOutgoingPayments(payments,movements),movements};return validateHubContract(result)?result:first;
+ let result={...first,payments:withoutOutgoingPayments(payments,movements),movements,contractDate:first.contractDate??second.contractDate??null};
+ result=mergeUpgradeLinks(result,second.upgrades??[]);
+ if(second.relatedFinance?.length)result.relatedFinance=[...new Map([...(first.relatedFinance??[]),...second.relatedFinance].map(f=>[f.ct,f])).values()];
+ return validateHubContract(result)?result:first;
 }
 
 // A Payment Info table can contain multiple header sections (Payment,

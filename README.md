@@ -1,3 +1,11 @@
+## Nguồn tiền Upgrade · cầu nối 1.6.21
+
+Đọc Upgrade from contract / Upgraded to contract từ API và nhãn có link trên Hub, truy CT nguồn trong nền rồi phân bổ số dư có hóa đơn Paid vào CT tổng kể cả không có Moving-in/out. Không cộng trùng PaymentList/Transfer; liên kết vòng, nhiều CT nhận hoặc thiếu ngày/chứng từ giữ CHECK.
+
+## Sửa kết nối Giftcode · dùng chung cầu nối 1.6.21
+
+Voucher dùng cùng phiên bản và link tải với Input, gắn link và báo cáo. Bỏ yêu cầu 1.6.14 ghi cứng; phân biệt lỗi chưa kết nối với Hub đang bận hoặc thiếu tab Hub, giữ dữ liệu đang nhập. Nếu đã cài 1.6.21 chỉ cần tải lại Promotion, không cài thêm tiện ích cũ. [Chi tiết](docs/hub-voucher-import.md).
+
 ## Cập nhật 1.6.20 · Dừng đúng CT gốc, đọc PDF E-Invoice trực tiếp
 
 Ẩn khối nhập thêm nguồn ở CT có khoản thu gốc và không có Moving-in; tách Moving-out khỏi Payment. Đọc link `/Downloads/EInvoice/<FKey>.pdf` trong nền từ cả API và DOM, không bắt buộc CenterId; đọc lại bản lưu thiếu, giữ dữ liệu đã có. Cập nhật cầu nối 1.6.20 rồi tải lại Promotion và tab Hub. [Chi tiết](docs/invoice-evidence.md).

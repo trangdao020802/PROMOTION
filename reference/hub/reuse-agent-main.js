@@ -105,14 +105,32 @@
   }
  }
  async function addDisplayedFinance(projection,request,signal){
-  if(!request.readFinance||!projection?.hubContract||typeof DOMParser!=='function')return;
+  if(signal.aborted||!request.readFinance||!projection?.hubContract||typeof DOMParser!=='function')return;
   if(projection.hubContract.payments?.rows?.every(p=>p.invoiceRef)&&projection.hubContract.payments.rows.length&&projection.hubContract.movements?.state==='read')return;
   const controller=new AbortController(),stop=()=>controller.abort(),timer=setTimeout(stop,3000);signal.addEventListener('abort',stop,{once:true});
   try{const html=await fetchBody(request.url,controller.signal),doc=new DOMParser().parseFromString(html,'text/html');
    const titles=[...doc.querySelectorAll('title,h1,h2,h3,.page-title,.content-header')].map(n=>n.textContent??'').join(' ');
    if(!titles.includes(request.ct))return;
-   const merged=N.mergeDisplayedHubContract(projection.hubContract,N.hubDisplayedTablesFromDocument(doc),request.ct);if(merged)projection.hubContract=merged;
+   const merged=N.mergeUpgradeLinks(N.mergeDisplayedHubContract(projection.hubContract,N.hubDisplayedTablesFromDocument(doc,{staticDocument:true}),request.ct),N.upgradeLinksFromDocument(doc,{staticDocument:true}));if(merged)projection.hubContract=merged;
   }catch{}finally{clearTimeout(timer);signal.removeEventListener('abort',stop);}
+ }
+ async function addUpgradeFinance(projection,client,signal,request,jobId){
+  if(!projection?.hubContract?.upgrades?.some(l=>l.direction==='from')||signal.aborted)return;
+  projection.hubContract=await N.readUpgradeFinance(projection.hubContract,async(link,remaining)=>{
+   const ctrl=new AbortController(),stop=()=>ctrl.abort(),timer=setTimeout(stop,Math.min(3000,remaining));signal.addEventListener('abort',stop,{once:true});
+   try{
+    let api=new URL(projection.source);api.searchParams.set('contractId',link.id);api=N.courseDetailEndpoint(api.href,link.url);if(!api)return null;
+    const payment=client?.payments?bounded(client.payments({contractId:link.id}),1500):Promise.resolve(null);
+    const value=await bounded(client?.read?client.read(link.id):fetchJSON(api,ctrl.signal),Math.min(1800,remaining)),root=N.contractRoot(value);
+    if(!root||ctrl.signal.aborted)return null;
+    const payments=N.projectContractPayments(await payment,link.id),facts=N.projectHubContract(root,{payments,paymentState:payments?'read':'pending'});
+    if(!facts||facts.contractId!==link.id||link.ct&&facts.ct!==link.ct)return null;
+    const expected={...request,ct:facts.ct,url:link.url,readFinance:true},source={hubContract:facts};
+    await addDisplayedFinance(source,expected,ctrl.signal);
+    await addInvoicePDF(source,root,client,{...request,readFinance:true},ctrl.signal,jobId);
+    return source.hubContract;
+   }finally{clearTimeout(timer);signal.removeEventListener('abort',stop);}
+  },{signal,budgetMs:7000,maxDocuments:6,refresh:request.refreshFinance===true});
  }
  const indexEndpoint=(value,method)=>{try{const u=new URL(value,location.href);return String(method||'GET').toUpperCase()==='GET'&&u.origin===P.HUB&&!u.username&&!u.password&&!u.hash&&/\/GetAllContracts\/?$/i.test(u.pathname);}catch{return false;}};
  function accept(value,url,method){
@@ -192,6 +210,7 @@
     if(projection&&root){const rawPayments=await paymentRead,payments=N.projectContractPayments(rawPayments,contractId),facts=N.projectHubContract({...root,...(Array.isArray(rawPayments)?{ListPayment:rawPayments}:{})},{payments,paymentState:payments?'read':'unavailable'});if(facts)projection.hubContract=facts;}
     await addDisplayedFinance(projection,request,signal);
     await addLearnerFinance(projection,root,client,signal,request);
+    await addUpgradeFinance(projection,client,signal,request,m.id);
     await addInvoicePDF(projection,root,client,request,signal,m.id);
     if(projection&&!request.readFinance&&request.readPolicy!==false&&client.policy.prices&&client.policy.groups&&!signal.aborted){
      const rules=await N.readHubPolicy(root,client.policy,{signal,budgetMs:5000});
@@ -211,6 +230,7 @@
     const value=await fetchJSON(url,signal),projection=N.projectContractDetail(value,url,request.url),root=N.contractRoot(value);
     if(projection&&root){const payments=N.projectContractPayments(await paymentRead,projection.contractId),facts=N.projectHubContract(root,{payments,paymentState:payments?'read':'unavailable'});if(facts)projection.hubContract=facts;}
     await addDisplayedFinance(projection,request,signal);
+    await addUpgradeFinance(projection,null,signal,request,m.id);
     if(active?.id===m.id&&!signal.aborted)publish(projection?{type:'course',id:m.id,projection}:{type:'route-missing',id:m.id});
    }catch{if(active?.id===m.id&&!signal.aborted)publish({type:'route-missing',id:m.id});}
   })();

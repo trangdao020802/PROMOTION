@@ -3,6 +3,7 @@ import {weeklyHours,pricingIdentity} from './pricing-key.mjs';
 import {validateHubPolicy,HUB_POLICY_ERRORS} from './hub-policy.mjs';
 import {validateHubContract,projectHubContract,mergeDisplayedHubContract,hubDisplayedTablesFromDocument} from './hub-contract.mjs';
 import {hubDocumentCode,hubDocumentId} from './hub-document.mjs';
+import {upgradeLinksFromDocument,validUpgradeLinks,mergeUpgradeLinks} from './hub-upgrade.mjs';
 const HUB='https://hub24.apollo.vn:7777';
 const text=v=>String(v??'').trim().replace(/\s+/g,' ');
 const label=v=>text(v).replace(/[\s:*]+$/,'').replace(/\s*\/\s*/g,'/').toLowerCase();
@@ -52,7 +53,7 @@ export function coursePageFromDocument(root,{staticDocument=false,readFinance=fa
   if(key==='discount'&&!normalizeHubDiscount(value,{wrappedOnly:label(node.textContent)==='discount'}))continue;
   if(text(value))pairs.push({label:node.textContent,value:key==='discount'?String(value).trim():text(value)});
  }
- return {titles:query(root,'h1,h2,h3,h4,h5,h6,[role="heading"],.page-title,.content-header,.breadcrumb').filter(visible).map(e=>e.textContent),pairs,...(readFinance?{financeTables:hubDisplayedTablesFromDocument(root,{staticDocument})}:{})};
+ return {titles:query(root,'h1,h2,h3,h4,h5,h6,[role="heading"],.page-title,.content-header,.breadcrumb').filter(visible).map(e=>e.textContent),pairs,upgradeLinks:upgradeLinksFromDocument(root,{staticDocument}),...(readFinance?{financeTables:hubDisplayedTablesFromDocument(root,{staticDocument})}:{})};
 }
 export function courseFailure(reason,fields=[]){
  const messages={identity:'Không xác minh được duy nhất mã CT trên tiêu đề hoặc trường Contract code / Contract No.',student:'Student ID trên Hub không khớp học viên đang đối chiếu.',conflict:'Có nhiều giá trị khác nhau cho cùng trường Course info.',empty:'Chưa tìm thấy trường Course info có nhãn đọc được trên Hub.',format:'Định dạng dữ liệu Course info chưa hợp lệ.',loading:'Hub vẫn đang tải Course info khi hết thời gian chờ.',navigation:'Hub đã chuyển khỏi URL chi tiết CT được yêu cầu.'};
@@ -96,11 +97,12 @@ export function coursePayload(v,expected){
 export function parseCoursePage(page,expected){
  const request=courseRequest(expected);if(!request||page.url!==request.url)return {error:'identity'};
  const identity=[...(page.titles??[]),...(page.pairs??[]).filter(p=>courseLabel(p.label)==='contract').map(p=>p.value)];
- const codes=[...new Set(identity.flatMap(t=>text(t).match(/[A-Z0-9]+-(?:CT|DEP)-\d{4,20}\b/gi)??[]).map(v=>v.toUpperCase()))];
+ const linked=new Set(validUpgradeLinks(page.upgradeLinks)?page.upgradeLinks.map(l=>l.ct).filter(ct=>ct!==request.ct):[]);
+ const codes=[...new Set(identity.flatMap(t=>text(t).match(/[A-Z0-9]+-(?:CT|DEP)-\d{4,20}\b/gi)??[]).map(v=>v.toUpperCase()))].filter(ct=>!linked.has(ct));
  if(codes.length!==1||codes[0]!==request.ct)return {error:'identity'};
  if(request.readFinance===true){
   const facts=projectHubContract({ContractId:hubDocumentId(request.url,request.ct),ContractNo:request.ct,ListCourseInfo:[]});
-  const hubContract=mergeDisplayedHubContract(facts,page.financeTables??[],request.ct);
+  const hubContract=mergeUpgradeLinks(mergeDisplayedHubContract(facts,page.financeTables??[],request.ct),page.upgradeLinks??[]);
   const payload=coursePayload({...request,hubContract},request);return payload?{payload}:{error:'format'};
  }
  const pairs=page.pairs??[],hasBefore=pairs.some(p=>/before discount/i.test(p.label)&&COURSE_LABELS[label(p.label)]==='package'),values={};
@@ -114,7 +116,8 @@ export function parseCoursePage(page,expected){
  const conflicts=Object.entries(values).filter(([k,s])=>k!=='discount'&&s.size>1).map(([k])=>k);
  if(conflicts.length)return {error:'conflict',fields:conflicts};
  if(values.student&&[...values.student][0]!==request.student)return {error:'student'};
- const payload=coursePayload({...request,...Object.fromEntries(COURSE_FIELDS.map(k=>[k,values[k]?[...values[k]].join(k==='discount'?';':''):null]))},request);
+ const upgradeFacts=page.upgradeLinks?.length?mergeUpgradeLinks(projectHubContract({ContractId:hubDocumentId(request.url,request.ct),ContractNo:request.ct,ListCourseInfo:[]}),page.upgradeLinks):null;
+ const payload=coursePayload({...request,...Object.fromEntries(COURSE_FIELDS.map(k=>[k,values[k]?[...values[k]].join(k==='discount'?';':''):null])),...(upgradeFacts?{hubContract:upgradeFacts}:{})},request);
  return payload?{payload}:{error:COURSE_FIELDS.some(k=>values[k])?'format':'empty',fields:COURSE_FIELDS.filter(k=>values[k])};
 }
 export function missingContractInputs(row){

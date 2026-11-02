@@ -31,6 +31,7 @@ var PromotionHubCourseNetwork = (() => {
     mergeHubFinanceFacts: () => mergeHubFinanceFacts,
     mergeLearnerFinance: () => mergeLearnerFinance,
     mergePaymentInvoice: () => mergePaymentInvoice,
+    mergeUpgradeLinks: () => mergeUpgradeLinks,
     parseContractDetailProjection: () => parseContractDetailProjection,
     parseInvoiceText: () => parseInvoiceText,
     paymentInvoiceNumber: () => paymentInvoiceNumber,
@@ -42,6 +43,9 @@ var PromotionHubCourseNetwork = (() => {
     projectPaymentInvoice: () => projectPaymentInvoice,
     readDirectInvoices: () => readDirectInvoices,
     readHubPolicy: () => readHubPolicy,
+    readUpgradeFinance: () => readUpgradeFinance,
+    upgradeEdges: () => upgradeEdges,
+    upgradeLinksFromDocument: () => upgradeLinksFromDocument,
     validateInvoice: () => validateInvoice
   });
 
@@ -345,13 +349,106 @@ var PromotionHubCourseNetwork = (() => {
       const match = new RegExp("^/" + kind + "/(?:" + (kind === "deposit" ? "detail|view" : "detail") + ")/([1-9]\\d{0,14})/?$", "i").exec(u.pathname);
       if (match && !u.search) return match[1];
       if (kind === "deposit" && /^\/deposit\/(?:detail|view)\/?$/i.test(u.pathname) && u.searchParams.size === 1) {
-        const id4 = u.searchParams.get("id") ?? u.searchParams.get("depositId");
-        if (/^[1-9]\d{0,14}$/.test(id4 ?? "")) return id4;
+        const id5 = u.searchParams.get("id") ?? u.searchParams.get("depositId");
+        if (/^[1-9]\d{0,14}$/.test(id5 ?? "")) return id5;
       }
       return null;
     } catch {
       return null;
     }
+  }
+
+  // src/core/hub-upgrade.mjs
+  var HUB2 = "https://hub24.apollo.vn:7777";
+  var text2 = (v) => typeof v === "string" ? v.trim().replace(/\s+/g, " ") : "";
+  var id2 = (v) => /^[1-9]\d{0,14}$/.test(String(v ?? "")) ? String(v) : null;
+  var ct = (v) => hubDocumentCode(v)?.includes("-CT-") ? hubDocumentCode(v) : null;
+  var upgradeDate = (v) => {
+    const s = text2(v), m = /^(\d{2})\/(\d{2})\/(\d{4})/.exec(s), day2 = m ? m[3] + "-" + m[2] + "-" + m[1] : /^\d{4}-\d\d-\d\d(?:$|T| )/.test(s) ? s.slice(0, 10) : null;
+    return day2 && Number.isFinite(Date.parse(day2)) && (/* @__PURE__ */ new Date(day2 + "T00:00:00Z")).toISOString().slice(0, 10) === day2 ? day2 : null;
+  };
+  var upgradeDirection = (value) => ({ "upgrade from contract": "from", "upgraded from contract": "from", "upgrade to contract": "to", "upgraded to contract": "to" })[text2(value).toLowerCase().replace(/[\s:*]+$/, "")] ?? null;
+  var urlFor = (value) => HUB2 + "/contract/detail/" + value;
+  var linkId = (value) => {
+    try {
+      return hubDocumentId(new URL(value, HUB2).href, "QA-CT-000001");
+    } catch {
+      return null;
+    }
+  };
+  function validUpgradeLinks(values) {
+    return Array.isArray(values) && values.length <= 20 && values.every((v) => v && Object.keys(v).every((k) => ["direction", "ct", "id", "url", "date"].includes(k)) && ["from", "to"].includes(v.direction) && (v.ct === null || ct(v.ct) === v.ct) && id2(v.id) === v.id && v.url === urlFor(v.id) && (v.date === null || upgradeDate(v.date) === v.date));
+  }
+  function projectUpgradeLinks(root) {
+    const rows = [];
+    for (const [direction, prefixes] of [["from", ["UpgradeFromContract", "UpgradedFromContract"]], ["to", ["UpgradeToContract", "UpgradedToContract"]]]) {
+      for (const prefix of prefixes) {
+        const nested = root?.[prefix], object = nested && typeof nested === "object" ? nested : {};
+        const value = id2(root?.[prefix + "Id"] ?? object.ContractId ?? object.Id);
+        if (!value) continue;
+        const code2 = ct(root?.[prefix + "No"] ?? root?.[prefix + "Code"] ?? object.ContractNo ?? object.ContractCode ?? nested);
+        const date2 = upgradeDate(root.UpgradeDate ?? root.UpgradedDate ?? (direction === "from" ? root.CreatedDate ?? root.CreatedTime : null));
+        rows.push({ direction, ct: code2, id: value, url: urlFor(value), date: date2 });
+      }
+    }
+    return [...new Map(rows.map((r) => [r.direction + "|" + r.id, r])).values()];
+  }
+  function upgradeLinksFromDocument(root, { staticDocument = false } = {}) {
+    const visible = (e) => !!e && !e.hidden && e.getAttribute?.("aria-hidden") !== "true" && !e.closest?.('[hidden],[aria-hidden="true"],.ng-hide,script,template') && (staticDocument || !e.getClientRects || e.getClientRects().length > 0);
+    const query = (e, s) => [...e?.querySelectorAll?.(s) ?? []], rows = [];
+    for (const label of query(root, 'label,dt,th,td,.control-label,.form-label,[class*="col-"]')) {
+      const direction = upgradeDirection(label.textContent);
+      if (!direction || !visible(label)) continue;
+      let cursor = label;
+      for (let depth = 0; cursor && depth < 4; depth++, cursor = cursor.parentElement) {
+        const sibling = cursor.nextElementSibling;
+        if (!sibling || !visible(sibling)) continue;
+        const links = query(sibling, "a[href]");
+        if (sibling.tagName === "A") links.push(sibling);
+        const choices = links.filter(visible).map((a) => {
+          const code2 = ct(a.innerText ?? a.textContent), value = linkId(a.getAttribute?.("href") ?? a.href);
+          return code2 && value ? { direction, ct: code2, id: value, url: urlFor(value), date: null } : null;
+        }).filter(Boolean);
+        if (choices.length) {
+          rows.push(...choices);
+          break;
+        }
+        if (query(sibling, "label,dt,th,.control-label").length) break;
+      }
+    }
+    return [...new Map(rows.map((r) => [r.direction + "|" + r.id, r])).values()].slice(0, 20);
+  }
+  function mergeUpgradeLinks(facts, links) {
+    if (!facts || !validUpgradeLinks(links)) return facts;
+    const rows = [...facts.upgrades ?? [], ...links], byKey = /* @__PURE__ */ new Map();
+    for (const row of rows) {
+      if (row.id === facts.contractId || row.ct === facts.ct) continue;
+      const key = row.direction + "|" + row.id, prior = byKey.get(key);
+      byKey.set(key, prior ? { ...prior, ct: prior.ct ?? row.ct, date: prior.date ?? row.date } : row);
+    }
+    return { ...facts, upgrades: [...byKey.values()] };
+  }
+  function upgradeEdges(facts) {
+    const docs = (facts ?? []).filter(Boolean), byId = new Map(docs.map((f) => [f.contractId, f])), edges = [];
+    for (const f of docs) for (const link of f.upgrades ?? []) {
+      if (!validUpgradeLinks([link])) continue;
+      const other = byId.get(link.id), otherCode = link.ct ?? other?.ct;
+      if (!ct(otherCode) || other && other.ct !== otherCode || otherCode === f.ct) continue;
+      const from = link.direction === "from" ? otherCode : f.ct, to = link.direction === "from" ? f.ct : otherCode;
+      const fromId = link.direction === "from" ? link.id : f.contractId, toId = link.direction === "from" ? f.contractId : link.id;
+      const date2 = link.date ?? (link.direction === "from" ? f.contractDate : other?.contractDate) ?? null;
+      edges.push({ from, to, fromId, toId, date: date2, url: link.url });
+    }
+    return [...new Map(edges.map((e) => [JSON.stringify([e.from, e.to, e.date]), e])).values()];
+  }
+  function upgradeAncestors(facts) {
+    const docs = [facts, ...facts?.relatedFinance ?? []], edges = upgradeEdges(docs), known = /* @__PURE__ */ new Set([facts?.ct]);
+    for (let depth = 0; depth < 16; depth++) {
+      const n = known.size;
+      for (const e of edges) if (known.has(e.to)) known.add(e.from);
+      if (known.size === n) break;
+    }
+    return known;
   }
 
   // src/core/hub-invoice.mjs
@@ -439,21 +536,21 @@ var PromotionHubCourseNetwork = (() => {
   }
   function parseInvoiceText(value) {
     if (typeof value !== "string" || value.length > 15e4) return null;
-    const text6 = folded(value).replace(/\s+/g, " ");
-    if (!/hoa don gia tri gia tang|vat\s*invoice/.test(text6)) return null;
-    const nos = [...text6.matchAll(/(?:so\s*\(\s*invoice\s*no\.?\s*\)|invoice\s*(?:no\.?|number)|so\s*hoa\s*don)\s*[:：]?\s*(\d{1,20})\b/g)].map((m) => m[1]);
+    const text7 = folded(value).replace(/\s+/g, " ");
+    if (!/hoa don gia tri gia tang|vat\s*invoice/.test(text7)) return null;
+    const nos = [...text7.matchAll(/(?:so\s*\(\s*invoice\s*no\.?\s*\)|invoice\s*(?:no\.?|number)|so\s*hoa\s*don)\s*[:：]?\s*(\d{1,20})\b/g)].map((m) => m[1]);
     if (!nos.length || new Set(nos.map((n) => n.replace(/^0+/, ""))).size !== 1) return null;
     const number2 = nos.reduce((a, b) => a.length >= b.length ? a : b), dates = [];
-    for (const m of text6.matchAll(/(?:ngay\s*\(\s*date\s*\)|invoice\s*date|ngay\s*(?:lap\s*)?hoa\s*don)\s*[:：]?\s*(\d{1,2}\/\d{1,2}\/\d{4})/g)) {
+    for (const m of text7.matchAll(/(?:ngay\s*\(\s*date\s*\)|invoice\s*date|ngay\s*(?:lap\s*)?hoa\s*don)\s*[:：]?\s*(\d{1,2}\/\d{1,2}\/\d{4})/g)) {
       const d = invoiceDay(m[1]);
       if (d) dates.push(d);
     }
-    const parts = /(?:ngay\s*(?:\(date\))?\s*[:：]?\s*)(\d{1,2})\s*(?:thang|month)(?:\s*\(month\))?\s*(\d{1,2})\s*(?:nam|year)(?:\s*\(year\))?\s*(\d{4})/.exec(text6);
+    const parts = /(?:ngay\s*(?:\(date\))?\s*[:：]?\s*)(\d{1,2})\s*(?:thang|month)(?:\s*\(month\))?\s*(\d{1,2})\s*(?:nam|year)(?:\s*\(year\))?\s*(\d{4})/.exec(text7);
     if (parts) {
       const d = invoiceDay(parts[1] + "/" + parts[2] + "/" + parts[3]);
       if (d) dates.push(d);
     }
-    const amounts = [...text6.matchAll(/(?:tong\s*cong\s*tien\s*thanh\s*toan\s*(?:\(grand\s*total\))?|grand\s*total)\s*(?:\(\s*\d\s*\))?\s*[:：]?\s*([\d][\d.,]*(?:\s*[.,]\s*\d{3})*)/g)].map((m) => printedMoney(m[1])).filter((v) => v !== null);
+    const amounts = [...text7.matchAll(/(?:tong\s*cong\s*tien\s*thanh\s*toan\s*(?:\(grand\s*total\))?|grand\s*total)\s*(?:\(\s*\d\s*\))?\s*[:：]?\s*([\d][\d.,]*(?:\s*[.,]\s*\d{3})*)/g)].map((m) => printedMoney(m[1])).filter((v) => v !== null);
     const uniqueDate = [...new Set(dates)], uniqueAmount = [...new Set(amounts)];
     const result = { number: number2, date: uniqueDate.length === 1 ? uniqueDate[0] : null, amount: uniqueAmount.length === 1 ? uniqueAmount[0] : null, source: "e-invoice-pdf", conflicts: [...uniqueDate.length > 1 ? ["date"] : [], ...uniqueAmount.length > 1 ? ["amount"] : []] };
     return validateInvoice(result) ? result : null;
@@ -462,8 +559,8 @@ var PromotionHubCourseNetwork = (() => {
   // src/core/hub-contract.mjs
   var HUB_CONTRACT_SCHEMA = "apollo-hub-contract/v1";
   var plain2 = (v) => !!v && typeof v === "object" && !Array.isArray(v);
-  var text2 = (v) => typeof v === "string" ? v.trim().replace(/\s+/g, " ") : "";
-  var id2 = (v) => /^[1-9]\d{0,14}$/.test(String(v ?? "")) ? String(v) : null;
+  var text3 = (v) => typeof v === "string" ? v.trim().replace(/\s+/g, " ") : "";
+  var id3 = (v) => /^[1-9]\d{0,14}$/.test(String(v ?? "")) ? String(v) : null;
   var number = (v) => typeof v === "number" && Number.isFinite(v) && Math.abs(v) <= 1e13 ? v : null;
   var date = (v) => typeof v === "string" && v.length <= 50 && /^\d{4}-\d\d-\d\d(?:$|T| )/.test(v) && Number.isFinite(Date.parse(v)) ? v.slice(0, 10) : null;
   var exact = (v, names) => plain2(v) && Object.keys(v).every((k) => names.includes(k));
@@ -481,7 +578,7 @@ var PromotionHubCourseNetwork = (() => {
     let level = [value];
     const seen = /* @__PURE__ */ new Set();
     for (let depth = 0; depth < 6 && level.length <= 40; depth++) {
-      const matches = level.filter((v) => plain2(v) && !seen.has(v) && (hubList(v.ListCourseInfo, 20) || hubList(v.CourseInfos, 20) || id2(v.ContractId ?? v.DepositId ?? v.Id) && text2(v.ContractNo ?? v.ContractCode ?? v.DepositNo ?? v.DepositCode) && ["ListPayment", "ListMovingOut", "ListMovingIn"].some((k) => v[k] != null)));
+      const matches = level.filter((v) => plain2(v) && !seen.has(v) && (hubList(v.ListCourseInfo, 20) || hubList(v.CourseInfos, 20) || id3(v.ContractId ?? v.DepositId ?? v.Id) && text3(v.ContractNo ?? v.ContractCode ?? v.DepositNo ?? v.DepositCode) && ["ListPayment", "ListMovingOut", "ListMovingIn"].some((k) => v[k] != null)));
       if (matches.length) return matches.length === 1 ? matches[0] : null;
       const next = [];
       for (const v of level) {
@@ -499,20 +596,20 @@ var PromotionHubCourseNetwork = (() => {
     const rows = values.find((v) => v.length) ?? values[0], result = [];
     for (const r of rows) {
       if (!plain2(r)) return null;
-      const group = text2(r.GroupDiscountName), name2 = normalizeHubDiscount(text2(r.DiscountName ?? r.Name)) ?? text2(r.DiscountName ?? r.Name);
+      const group = text3(r.GroupDiscountName), name2 = normalizeHubDiscount(text3(r.DiscountName ?? r.Name)) ?? text3(r.DiscountName ?? r.Name);
       const full = normalizeHubDiscount(group && name2 && !name2.toLowerCase().startsWith(group.toLowerCase()) ? group + " - " + name2 : name2);
       if (!full || full === "0" || full.length > 2e3) return null;
       const type = [1, 2, 3].includes(r.GroupDiscountTypeId) ? r.GroupDiscountTypeId : null;
-      result.push({ label: full, groupId: id2(r.GroupDiscountId), discountId: id2(r.DiscountId ?? r.ContractDiscountId), type, percent: number(r.PercentDiscount), amount: number(r.AmountDiscount), months: number(r.GiftMonths) });
+      result.push({ label: full, groupId: id3(r.GroupDiscountId), discountId: id3(r.DiscountId ?? r.ContractDiscountId), type, percent: number(r.PercentDiscount), amount: number(r.AmountDiscount), months: number(r.GiftMonths) });
     }
     return result;
   }
   var invoiceEvidence = invoiceReference;
-  var outgoingPayment = (r) => Number(r?.PaymentTypeId) === 8 || /moving[ -]?out|transfer[ -]?out/i.test(text2(r?.PaymentTypeName));
+  var outgoingPayment = (r) => Number(r?.PaymentTypeId) === 8 || /moving[ -]?out|transfer[ -]?out/i.test(text3(r?.PaymentTypeName));
   function projectContractPayments(value, contractId) {
     let list2 = hubList(value, 500);
     if (!list2 && plain2(value)) {
-      if ((value.ContractId ?? value.DepositId) != null && id2(value.ContractId ?? value.DepositId) !== String(contractId)) return null;
+      if ((value.ContractId ?? value.DepositId) != null && id3(value.ContractId ?? value.DepositId) !== String(contractId)) return null;
       for (const key of ["ListPayment", "Data", "data", "Result", "result"]) {
         list2 = hubList(value[key], 500);
         if (list2) break;
@@ -522,10 +619,10 @@ var PromotionHubCourseNetwork = (() => {
     const rows = [];
     for (const r of list2) {
       if (plain2(r) && outgoingPayment(r)) continue;
-      if (!plain2(r) || (r.ContractId ?? r.DepositId) != null && id2(r.ContractId ?? r.DepositId) !== String(contractId) || !id2(r.PaymentId) || number(r.Amount) === null) return null;
-      const code2 = text2(r.PaymentCode);
+      if (!plain2(r) || (r.ContractId ?? r.DepositId) != null && id3(r.ContractId ?? r.DepositId) !== String(contractId) || !id3(r.PaymentId) || number(r.Amount) === null) return null;
+      const code2 = text3(r.PaymentCode);
       if (code2.length > 150 || code2 && !/^[A-Za-z0-9][A-Za-z0-9_.:/-]*$/.test(code2)) return null;
-      rows.push({ id: id2(r.PaymentId), code: code2, amount: number(r.Amount), totalAmount: number(r.TotalAmount), remaining: number(r.RemainAmount), typeId: id2(r.PaymentTypeId), type: text2(r.PaymentTypeName).slice(0, 200), method: text2(r.PaymentMethodTypeName ?? r.PaymentMethodName).slice(0, 200), scheduledDate: date(r.ScheduledDate), completeDate: date(r.CompleteDate), complete: typeof r.IsComplete === "boolean" ? r.IsComplete : null, ...projectPaymentInvoice(r) });
+      rows.push({ id: id3(r.PaymentId), code: code2, amount: number(r.Amount), totalAmount: number(r.TotalAmount), remaining: number(r.RemainAmount), typeId: id3(r.PaymentTypeId), type: text3(r.PaymentTypeName).slice(0, 200), method: text3(r.PaymentMethodTypeName ?? r.PaymentMethodName).slice(0, 200), scheduledDate: date(r.ScheduledDate), completeDate: date(r.CompleteDate), complete: typeof r.IsComplete === "boolean" ? r.IsComplete : null, ...projectPaymentInvoice(r) });
     }
     return new Set(rows.map((r) => r.id)).size === rows.length ? rows : null;
   }
@@ -533,15 +630,15 @@ var PromotionHubCourseNetwork = (() => {
   var moveDay = (v) => {
     const iso = date(v);
     if (iso) return iso;
-    const match = /^(\d{2})\/(\d{2})\/(\d{4})(?:\s|$)/.exec(text2(v));
+    const match = /^(\d{2})\/(\d{2})\/(\d{4})(?:\s|$)/.exec(text3(v));
     if (!match) return null;
     const candidate = match[3] + "-" + match[2] + "-" + match[1];
     return Number.isFinite(Date.parse(candidate)) && (/* @__PURE__ */ new Date(candidate + "T00:00:00Z")).toISOString().slice(0, 10) === candidate ? candidate : null;
   };
   function projectHubMovements(root) {
     if (!plain2(root)) return null;
-    const ct = contractCode(root.ContractNo ?? root.ContractCode ?? root.DepositNo ?? root.DepositCode);
-    if (!ct) return null;
+    const ct2 = contractCode(root.ContractNo ?? root.ContractCode ?? root.DepositNo ?? root.DepositCode);
+    if (!ct2) return null;
     const lists = [["out", ["ListMovingOut", "ListTransferOut", "MovingOut"]], ["in", ["ListMovingIn", "ListTransferIn", "MovingIn"]]];
     const rows = [];
     let hasList = false;
@@ -553,49 +650,57 @@ var PromotionHubCourseNetwork = (() => {
       hasList = true;
       for (const item of list2) {
         if (!plain2(item)) return null;
-        const from = contractCode(item.FromContractNo ?? item.FromContractCode ?? item.FromDepositNo ?? item.MovingInFrom ?? (direction === "out" ? ct : null));
-        const to = contractCode(item.ToContractNo ?? item.ToContractCode ?? item.ToDepositNo ?? item.TransferTo ?? (direction === "in" ? ct : null));
+        const from = contractCode(item.FromContractNo ?? item.FromContractCode ?? item.FromDepositNo ?? item.MovingInFrom ?? (direction === "out" ? ct2 : null));
+        const to = contractCode(item.ToContractNo ?? item.ToContractCode ?? item.ToDepositNo ?? item.TransferTo ?? (direction === "in" ? ct2 : null));
         const amount2 = number(item.TransferAmount ?? item.MovingAmount ?? item.Amount);
         if (!from || !to || from === to || amount2 === null || amount2 <= 0) return null;
-        if (direction === "out" && from !== ct || direction === "in" && to !== ct) return null;
+        if (direction === "out" && from !== ct2 || direction === "in" && to !== ct2) return null;
         const day2 = moveDay(item.TransferDate ?? item.MovingDate ?? item.MovingInDate ?? item.MovingOutDate ?? item.Date);
-        const reference = text2(item.PaymentCode ?? item.TransferCode ?? "");
+        const reference = text3(item.PaymentCode ?? item.TransferCode ?? "");
         if (!day2 || reference.length > 150 || reference && !/^[A-Za-z0-9][A-Za-z0-9_.:/-]*$/.test(reference)) return null;
         rows.push({ from, to, amount: amount2, date: day2, reference, direction });
       }
     }
     const explicitMoves = [...rows];
     for (const p of hubList(root.ListPayment, 500) ?? []) {
-      const other = contractCode(p?.RelatedContractDepositNo), amount2 = number(p?.Amount), day2 = moveDay(p?.TransferDate ?? p?.CompleteDate), reference = text2(p?.PaymentCode), direction = outgoingPayment(p) ? "out" : "in";
-      if (!other || other === ct || p.IsComplete !== true || !(amount2 > 0) || !day2 || /refund/i.test(text2(p.PaymentTypeName))) continue;
-      if (direction === "in" && p.PaymentTypeId !== 10 && !/transfer|deposit to contract/i.test(text2(p.PaymentMethodTypeName) + " " + text2(p.PaymentTypeName))) continue;
+      const other = contractCode(p?.RelatedContractDepositNo), amount2 = number(p?.Amount), day2 = moveDay(p?.TransferDate ?? p?.CompleteDate), reference = text3(p?.PaymentCode), direction = outgoingPayment(p) ? "out" : "in";
+      if (!other || other === ct2 || p.IsComplete !== true || !(amount2 > 0) || !day2 || /refund/i.test(text3(p.PaymentTypeName))) continue;
+      if (direction === "in" && p.PaymentTypeId !== 10 && !/transfer|deposit to contract/i.test(text3(p.PaymentMethodTypeName) + " " + text3(p.PaymentTypeName))) continue;
       if (reference && !/^[A-Za-z0-9][A-Za-z0-9_.:/-]*$/.test(reference)) continue;
-      const from = direction === "out" ? ct : other, to = direction === "out" ? other : ct;
+      const from = direction === "out" ? ct2 : other, to = direction === "out" ? other : ct2;
       if (!explicitMoves.some((m) => m.from === from && m.to === to && m.date === day2) && !rows.some((m) => m.direction === direction && m.reference === reference && m.from === from && m.to === to && m.amount === amount2 && m.date === day2)) rows.push({ from, to, amount: amount2, date: day2, reference, direction });
       hasList = true;
     }
     return hasList ? rows : null;
   }
   function projectHubLearner(root) {
-    const leadId = id2(root?.LeadId), kidId = id2(root?.KidId);
+    const leadId = id3(root?.LeadId), kidId = id3(root?.KidId);
     return leadId && kidId ? { leadId, kidId, url: "https://hub24.apollo.vn:7777/lead/detail/" + leadId + "?s=" + kidId } : null;
   }
   function projectHubContract(root, { payments = null, paymentState = "pending", capturedAt = (/* @__PURE__ */ new Date()).toISOString() } = {}) {
-    const result = { schema: HUB_CONTRACT_SCHEMA, ct: text2(root?.ContractNo ?? root?.ContractCode ?? root?.DepositNo ?? root?.DepositCode).toUpperCase(), contractId: id2(root?.ContractId ?? root?.DepositId ?? root?.Id), capturedAt, discounts: contractDiscountFacts(root), payments: { state: paymentState === "pending" && (projectContractPayments(root, id2(root?.ContractId ?? root?.DepositId ?? root?.Id))?.length ?? 0) > 0 ? "read" : paymentState, rows: payments ?? ((projectContractPayments(root, id2(root?.ContractId ?? root?.DepositId ?? root?.Id))?.length ?? 0) > 0 ? projectContractPayments(root, id2(root?.ContractId ?? root?.DepositId ?? root?.Id)) : []) }, ...projectHubMovements(root) !== null ? { movements: { state: "read", rows: projectHubMovements(root) } } : { movements: { state: "pending", rows: [] } } };
-    result.financeRevision = 2;
+    const result = { schema: HUB_CONTRACT_SCHEMA, ct: text3(root?.ContractNo ?? root?.ContractCode ?? root?.DepositNo ?? root?.DepositCode).toUpperCase(), contractId: id3(root?.ContractId ?? root?.DepositId ?? root?.Id), capturedAt, discounts: contractDiscountFacts(root), payments: { state: paymentState === "pending" && (projectContractPayments(root, id3(root?.ContractId ?? root?.DepositId ?? root?.Id))?.length ?? 0) > 0 ? "read" : paymentState, rows: payments ?? ((projectContractPayments(root, id3(root?.ContractId ?? root?.DepositId ?? root?.Id))?.length ?? 0) > 0 ? projectContractPayments(root, id3(root?.ContractId ?? root?.DepositId ?? root?.Id)) : []) }, ...projectHubMovements(root) !== null ? { movements: { state: "read", rows: projectHubMovements(root) } } : { movements: { state: "pending", rows: [] } } };
+    result.financeRevision = 3;
+    result.contractDate = upgradeDate(root?.CreatedDate ?? root?.CreatedTime);
+    result.upgrades = projectUpgradeLinks(root);
     const learner = projectHubLearner(root);
     if (learner) result.learner = learner;
     result.payments = withoutOutgoingPayments(result.payments, result.movements);
     return validateHubContract(result) ? result : null;
   }
   function validateHubContract(v, depth = 0) {
-    if (!exact(v, ["schema", "ct", "contractId", "capturedAt", "discounts", "payments", "movements", "learner", "relatedFinance", "financeRevision"]) || v.schema !== HUB_CONTRACT_SCHEMA || hubDocumentCode(v.ct) !== v.ct || id2(v.contractId) !== v.contractId || typeof v.capturedAt !== "string" || !Number.isFinite(Date.parse(v.capturedAt)) || v.financeRevision !== void 0 && v.financeRevision !== 2) return false;
+    if (!exact(v, ["schema", "ct", "contractId", "capturedAt", "discounts", "payments", "movements", "learner", "relatedFinance", "financeRevision", "upgrades", "contractDate"]) || v.schema !== HUB_CONTRACT_SCHEMA || hubDocumentCode(v.ct) !== v.ct || id3(v.contractId) !== v.contractId || typeof v.capturedAt !== "string" || !Number.isFinite(Date.parse(v.capturedAt)) || v.financeRevision !== void 0 && ![2, 3].includes(v.financeRevision)) return false;
+    if (v.upgrades !== void 0 && (!validUpgradeLinks(v.upgrades) || v.upgrades.some((r) => r.id === v.contractId || r.ct === v.ct))) return false;
+    if (v.contractDate !== void 0 && v.contractDate !== null && upgradeDate(v.contractDate) !== v.contractDate) return false;
     if (v.learner !== void 0) {
       const l = v.learner;
-      if (!exact(l, ["leadId", "kidId", "url"]) || id2(l.leadId) !== l.leadId || id2(l.kidId) !== l.kidId || l.url !== "https://hub24.apollo.vn:7777/lead/detail/" + l.leadId + "?s=" + l.kidId) return false;
+      if (!exact(l, ["leadId", "kidId", "url"]) || id3(l.leadId) !== l.leadId || id3(l.kidId) !== l.kidId || l.url !== "https://hub24.apollo.vn:7777/lead/detail/" + l.leadId + "?s=" + l.kidId) return false;
     }
-    if (v.relatedFinance !== void 0 && (depth > 0 || !v.learner || !hubList(v.relatedFinance, 32) || new Set(v.relatedFinance.map((f) => f?.ct)).size !== v.relatedFinance.length || !v.relatedFinance.every((f) => f.ct !== v.ct && f.discounts === null && f.relatedFinance === void 0 && f.learner?.kidId === v.learner.kidId && validateHubContract(f, depth + 1)))) return false;
-    if (v.discounts !== null && (!hubList(v.discounts, 100) || !v.discounts.every((d) => exact(d, ["label", "groupId", "discountId", "type", "percent", "amount", "months"]) && !!text2(d.label) && d.label.length <= 2e3 && ["groupId", "discountId"].every((k) => d[k] === null || id2(d[k]) === d[k]) && (d.type === null || [1, 2, 3].includes(d.type)) && ["percent", "amount", "months"].every((k) => d[k] === null || number(d[k]) === d[k] && d[k] >= 0 && d[k] <= (k === "percent" ? 100 : k === "months" ? 120 : 1e13))))) return false;
+    if (v.relatedFinance !== void 0) {
+      if (depth > 0 || !hubList(v.relatedFinance, 32) || new Set(v.relatedFinance.map((f) => f?.ct)).size !== v.relatedFinance.length || !v.relatedFinance.every((f) => f.ct !== v.ct && f.discounts === null && f.relatedFinance === void 0 && validateHubContract(f, depth + 1))) return false;
+      const ancestors = upgradeAncestors(v);
+      if (v.relatedFinance.some((f) => !(v.learner && f.learner?.kidId === v.learner.kidId) && !ancestors.has(f.ct))) return false;
+    }
+    if (v.discounts !== null && (!hubList(v.discounts, 100) || !v.discounts.every((d) => exact(d, ["label", "groupId", "discountId", "type", "percent", "amount", "months"]) && !!text3(d.label) && d.label.length <= 2e3 && ["groupId", "discountId"].every((k) => d[k] === null || id3(d[k]) === d[k]) && (d.type === null || [1, 2, 3].includes(d.type)) && ["percent", "amount", "months"].every((k) => d[k] === null || number(d[k]) === d[k] && d[k] >= 0 && d[k] <= (k === "percent" ? 100 : k === "months" ? 120 : 1e13))))) return false;
     if (v.movements !== void 0) {
       const m = v.movements;
       if (!exact(m, ["state", "rows"]) || !["read", "pending"].includes(m.state) || !hubList(m.rows, 400) || m.state === "pending" && m.rows.length) return false;
@@ -603,7 +708,7 @@ var PromotionHubCourseNetwork = (() => {
     }
     const p = v.payments;
     if (!exact(p, ["state", "rows"]) || !["read", "pending", "unavailable"].includes(p.state) || !hubList(p.rows, 500) || p.state !== "read" && p.rows.length || new Set(p.rows.map((r) => r.id ?? r.code)).size !== p.rows.length) return false;
-    return p.rows.every((r) => exact(r, ["id", "code", "amount", "totalAmount", "remaining", "typeId", "type", "method", "scheduledDate", "completeDate", "complete", "invoiceRef", "eInvoiceKey", "eInvoiceVersion", "invoice"]) && (r.id === null && !!r.code || id2(r.id) === r.id) && typeof r.code === "string" && r.code.length <= 150 && (!r.code || /^[A-Za-z0-9][A-Za-z0-9_.:/-]*$/.test(r.code)) && number(r.amount) === r.amount && ["totalAmount", "remaining"].every((k) => r[k] === null || number(r[k]) === r[k]) && (r.typeId === null || id2(r.typeId) === r.typeId) && ["type", "method"].every((k) => typeof r[k] === "string" && r[k].length <= 200) && ["scheduledDate", "completeDate"].every((k) => r[k] === null || date(r[k]) === r[k]) && (r.complete === null || typeof r.complete === "boolean") && (r.invoiceRef === void 0 || invoiceEvidence(r.invoiceRef) === r.invoiceRef) && (r.eInvoiceKey === void 0 || eInvoiceKey(r.eInvoiceKey) === r.eInvoiceKey) && (r.eInvoiceVersion === void 0 || [1, 2].includes(r.eInvoiceVersion)) && (r.invoice === void 0 || validateInvoice(r.invoice))) && JSON.stringify(v).length <= 12e5;
+    return p.rows.every((r) => exact(r, ["id", "code", "amount", "totalAmount", "remaining", "typeId", "type", "method", "scheduledDate", "completeDate", "complete", "invoiceRef", "eInvoiceKey", "eInvoiceVersion", "invoice"]) && (r.id === null && !!r.code || id3(r.id) === r.id) && typeof r.code === "string" && r.code.length <= 150 && (!r.code || /^[A-Za-z0-9][A-Za-z0-9_.:/-]*$/.test(r.code)) && number(r.amount) === r.amount && ["totalAmount", "remaining"].every((k) => r[k] === null || number(r[k]) === r[k]) && (r.typeId === null || id3(r.typeId) === r.typeId) && ["type", "method"].every((k) => typeof r[k] === "string" && r[k].length <= 200) && ["scheduledDate", "completeDate"].every((k) => r[k] === null || date(r[k]) === r[k]) && (r.complete === null || typeof r.complete === "boolean") && (r.invoiceRef === void 0 || invoiceEvidence(r.invoiceRef) === r.invoiceRef) && (r.eInvoiceKey === void 0 || eInvoiceKey(r.eInvoiceKey) === r.eInvoiceKey) && (r.eInvoiceVersion === void 0 || [1, 2].includes(r.eInvoiceVersion)) && (r.invoice === void 0 || validateInvoice(r.invoice))) && JSON.stringify(v).length <= 12e5;
   }
   var line = (v) => String(v ?? "").replace(/\s+/g, " ").trim();
   var vnd = (v) => {
@@ -630,8 +735,8 @@ var PromotionHubCourseNetwork = (() => {
     const out = (movements?.rows ?? []).filter((m) => m.direction === "out" && m.reference);
     return { ...payments, rows: payments.rows.filter((p) => !out.some((m) => m.reference === p.code && m.date === p.completeDate && Math.abs(m.amount - p.amount) <= 1)) };
   }
-  function projectHubDisplayedTables(tables, ct) {
-    const current = contractCode(ct);
+  function projectHubDisplayedTables(tables, ct2) {
+    const current = contractCode(ct2);
     if (!current || !Array.isArray(tables) || tables.length > 100) return null;
     let payments = null, movements = null;
     for (const table of tables) {
@@ -669,9 +774,9 @@ var PromotionHubCourseNetwork = (() => {
     }
     return { payments, movements };
   }
-  function mergeDisplayedHubContract(facts, tables, ct) {
-    if (!validateHubContract(facts) || facts.ct !== ct) return null;
-    const extra = projectHubDisplayedTables(tables, ct);
+  function mergeDisplayedHubContract(facts, tables, ct2) {
+    if (!validateHubContract(facts) || facts.ct !== ct2) return null;
+    const extra = projectHubDisplayedTables(tables, ct2);
     if (!extra) return facts;
     const payments = facts.payments.state === "read" && facts.payments.rows.length ? {
       ...facts.payments,
@@ -683,7 +788,7 @@ var PromotionHubCourseNetwork = (() => {
     const moves = [...facts.movements?.rows ?? [], ...extra.movements ?? []];
     const distinct = [...new Map(moves.map((m) => [JSON.stringify([m.from, m.to, m.amount, m.date, m.reference, m.direction]), m])).values()];
     const movements = facts.movements?.state === "read" || extra.movements !== null ? { state: "read", rows: distinct } : facts.movements ?? { state: "pending", rows: [] };
-    const result = { ...facts, financeRevision: 2, payments: withoutOutgoingPayments(payments, movements), movements };
+    const result = { ...facts, payments: withoutOutgoingPayments(payments, movements), movements };
     return validateHubContract(result) ? result : facts;
   }
   function mergeHubFinanceFacts(first, second) {
@@ -699,7 +804,9 @@ var PromotionHubCourseNetwork = (() => {
     }
     const values = [...first.movements?.rows ?? [], ...second.movements?.rows ?? []], rows = [...new Map(values.map((m) => [JSON.stringify(m), m])).values()];
     const movements = { state: first.movements?.state === "read" || second.movements?.state === "read" ? "read" : "pending", rows };
-    const result = { ...first, payments: withoutOutgoingPayments(payments, movements), movements };
+    let result = { ...first, payments: withoutOutgoingPayments(payments, movements), movements, contractDate: first.contractDate ?? second.contractDate ?? null };
+    result = mergeUpgradeLinks(result, second.upgrades ?? []);
+    if (second.relatedFinance?.length) result.relatedFinance = [...new Map([...first.relatedFinance ?? [], ...second.relatedFinance].map((f) => [f.ct, f])).values()];
     return validateHubContract(result) ? result : first;
   }
   function hubDisplayedTablesFromDocument(root, { staticDocument = false } = {}) {
@@ -754,17 +861,17 @@ var PromotionHubCourseNetwork = (() => {
   }
 
   // src/core/hub-course.mjs
-  var HUB2 = "https://hub24.apollo.vn:7777";
-  var text3 = (v) => String(v ?? "").trim().replace(/\s+/g, " ");
+  var HUB3 = "https://hub24.apollo.vn:7777";
+  var text4 = (v) => String(v ?? "").trim().replace(/\s+/g, " ");
   var COURSE_FIELDS = ["courseFee", "hoursPerWeek", "package", "giftcode", "discount", "groupKoc", "contractType"];
   function courseRequest(v) {
     if (!v || typeof v !== "object" || typeof v.ct !== "string" || typeof v.student !== "string" || typeof v.url !== "string") return null;
-    const ct = v.ct.trim().toUpperCase(), student = v.student.trim();
-    if (!(v.readFinance === true ? hubDocumentCode(ct) : /^[A-Z0-9]+-CT-\d{4,20}$/.test(ct)) || !/^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,149}$/.test(student) || Object.hasOwn(Object.prototype, student)) return null;
+    const ct2 = v.ct.trim().toUpperCase(), student = v.student.trim();
+    if (!(v.readFinance === true ? hubDocumentCode(ct2) : /^[A-Z0-9]+-CT-\d{4,20}$/.test(ct2)) || !/^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,149}$/.test(student) || Object.hasOwn(Object.prototype, student)) return null;
     try {
       const u = new URL(v.url);
-      if (u.origin !== HUB2 || u.username || u.password || u.hash || !(v.readFinance === true ? hubDocumentId(u.href, ct) : !u.search && /^\/contract\/detail\/[1-9]\d{0,14}\/?$/i.test(u.pathname)) || v.readPolicy !== void 0 && typeof v.readPolicy !== "boolean" || v.readFinance !== void 0 && typeof v.readFinance !== "boolean" || v.refreshFinance !== void 0 && typeof v.refreshFinance !== "boolean") return null;
-      return { ct, student, url: u.href, ...v.readPolicy !== void 0 ? { readPolicy: v.readPolicy } : {}, ...v.readFinance !== void 0 ? { readFinance: v.readFinance } : {}, ...v.refreshFinance !== void 0 ? { refreshFinance: v.refreshFinance } : {} };
+      if (u.origin !== HUB3 || u.username || u.password || u.hash || !(v.readFinance === true ? hubDocumentId(u.href, ct2) : !u.search && /^\/contract\/detail\/[1-9]\d{0,14}\/?$/i.test(u.pathname)) || v.readPolicy !== void 0 && typeof v.readPolicy !== "boolean" || v.readFinance !== void 0 && typeof v.readFinance !== "boolean" || v.refreshFinance !== void 0 && typeof v.refreshFinance !== "boolean") return null;
+      return { ct: ct2, student, url: u.href, ...v.readPolicy !== void 0 ? { readPolicy: v.readPolicy } : {}, ...v.readFinance !== void 0 ? { readFinance: v.readFinance } : {}, ...v.refreshFinance !== void 0 ? { refreshFinance: v.refreshFinance } : {} };
     } catch {
       return null;
     }
@@ -778,8 +885,8 @@ var PromotionHubCourseNetwork = (() => {
       return { ...result, readFinance: true, courseState: "empty", ...Object.fromEntries(COURSE_FIELDS.map((k) => [k, null])), hubContract: { ...v.hubContract, discounts: null } };
     }
     for (const key of COURSE_FIELDS) {
-      if (v[key] != null && (typeof v[key] !== "string" || !text3(v[key]) || text3(v[key]).length > (key === "discount" ? 2e3 : 200))) return null;
-      result[key] = v[key] == null ? null : key === "discount" ? normalizeHubDiscount(v[key]) : text3(v[key]);
+      if (v[key] != null && (typeof v[key] !== "string" || !text4(v[key]) || text4(v[key]).length > (key === "discount" ? 2e3 : 200))) return null;
+      result[key] = v[key] == null ? null : key === "discount" ? normalizeHubDiscount(v[key]) : text4(v[key]);
     }
     if (v.courseState !== void 0 && v.courseState !== "empty") return null;
     if (v.courseState === "empty") {
@@ -875,10 +982,47 @@ var PromotionHubCourseNetwork = (() => {
     return validateHubContract(result) ? result : facts;
   }
 
+  // src/core/hub-upgrade-reader.mjs
+  async function readUpgradeFinance(facts, read, { signal, budgetMs = 7e3, maxDocuments = 6, refresh = false } = {}) {
+    if (!validateHubContract(facts)) return facts;
+    const copy = (v) => JSON.parse(JSON.stringify(v));
+    const start = Date.now(), docs = new Map([[facts.contractId, copy(facts)], ...(facts.relatedFinance ?? []).map((f) => [f.contractId, copy(f)])]), queue = [facts.contractId], seen = /* @__PURE__ */ new Set();
+    let reads = 0;
+    for (let i = 0; i < queue.length && seen.size < maxDocuments; i++) {
+      if (signal?.aborted || Date.now() - start >= budgetMs) break;
+      const current = docs.get(queue[i]);
+      if (!current || seen.has(current.contractId)) continue;
+      seen.add(current.contractId);
+      for (const link of current.upgrades ?? []) {
+        if (link.direction !== "from" || !validUpgradeLinks([link]) || link.id === facts.contractId || signal?.aborted || Date.now() - start >= budgetMs) continue;
+        let other = docs.get(link.id);
+        if ((refresh || !other || other.payments?.state !== "read") && reads < maxDocuments) try {
+          reads++;
+          const value = await read({ ...link }, Math.max(1, budgetMs - (Date.now() - start)));
+          if (!signal?.aborted && validateHubContract(value) && value.contractId === link.id && (!link.ct || value.ct === link.ct)) other = other ? mergeHubFinanceFacts(value, other) : value;
+        } catch {
+        }
+        if (!other || other.contractId !== link.id || link.ct && other.ct !== link.ct || other.ct === current.ct) continue;
+        link.ct = other.ct;
+        const doc = { ...other, discounts: null };
+        delete doc.relatedFinance;
+        docs.set(link.id, doc);
+        queue.push(link.id);
+      }
+    }
+    const result = docs.get(facts.contractId), related = [...docs.values()].filter((f) => f.contractId !== facts.contractId).map((f) => {
+      const d = { ...f, discounts: null };
+      delete d.relatedFinance;
+      return d;
+    });
+    if (related.length) result.relatedFinance = related.slice(0, 32);
+    return validateHubContract(result) ? result : facts;
+  }
+
   // src/core/hub-learner-payments.mjs
   var plain3 = (v) => v && typeof v === "object" && !Array.isArray(v);
-  var id3 = (v) => /^[1-9]\d{0,14}$/.test(String(v ?? "")) ? String(v) : null;
-  var text4 = (v) => typeof v === "string" ? v.trim().replace(/\s+/g, " ") : "";
+  var id4 = (v) => /^[1-9]\d{0,14}$/.test(String(v ?? "")) ? String(v) : null;
+  var text5 = (v) => typeof v === "string" ? v.trim().replace(/\s+/g, " ") : "";
   var amount = (v) => typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= 1e13 ? v : null;
   var code = hubDocumentCode;
   function projectLearnerPaymentPage(value, root) {
@@ -896,33 +1040,33 @@ var PromotionHubCourseNetwork = (() => {
       if (!plain3(next)) break;
       value = next;
     }
-    if (!plain3(value) || value.KidId != null && id3(value.KidId) !== learner.kidId) return null;
+    if (!plain3(value) || value.KidId != null && id4(value.KidId) !== learner.kidId) return null;
     const groups = hubList(value.ListData, 200);
     if (!groups) return null;
     const documents = /* @__PURE__ */ new Map();
     for (const group of groups) {
-      if (!plain3(group) || group.KidId != null && id3(group.KidId) !== learner.kidId) continue;
-      const ct = code(group.ContractDepositNo ?? group.ContractNo ?? group.DepositNo), contractId = id3(group.ContractDepositId ?? group.ContractId ?? group.DepositId);
-      if (!ct || !contractId) continue;
-      if (ct === code(root.ContractNo ?? root.DepositNo) && contractId !== id3(root.ContractId ?? root.DepositId)) return null;
+      if (!plain3(group) || group.KidId != null && id4(group.KidId) !== learner.kidId) continue;
+      const ct2 = code(group.ContractDepositNo ?? group.ContractNo ?? group.DepositNo), contractId = id4(group.ContractDepositId ?? group.ContractId ?? group.DepositId);
+      if (!ct2 || !contractId) continue;
+      if (ct2 === code(root.ContractNo ?? root.DepositNo) && contractId !== id4(root.ContractId ?? root.DepositId)) return null;
       const lists = ["ListPayment", "ListPayments", "PaymentDetails", "ListPaymentDetails", "Payments"].map((k) => hubList(group[k], 500)).filter(Boolean);
       const rows = lists.length ? lists.find((a) => a.length) ?? [] : group.PaymentCode ? [group] : [];
       const payments = [], moves = [];
       for (const raw of rows) {
-        if (!plain3(raw) || raw.KidId != null && id3(raw.KidId) !== learner.kidId) continue;
+        if (!plain3(raw) || raw.KidId != null && id4(raw.KidId) !== learner.kidId) continue;
         const explicit = code(raw.ContractDepositNo ?? raw.ContractNo ?? raw.DepositNo);
-        if (explicit && explicit !== ct) continue;
-        const paymentCode = text4(raw.PaymentCode), paid = raw.IsComplete === true || raw.IsComplete !== false && /^paid$/i.test(text4(raw.StatusName ?? raw.Status ?? raw.PaymentStatusName));
+        if (explicit && explicit !== ct2) continue;
+        const paymentCode = text5(raw.PaymentCode), paid = raw.IsComplete === true || raw.IsComplete !== false && /^paid$/i.test(text5(raw.StatusName ?? raw.Status ?? raw.PaymentStatusName));
         const paidAmount = amount(raw.PaidAmount ?? raw.Amount), completeDate = invoiceDay(raw.CompleteDate ?? raw.PaymentDate);
         if (!/^[A-Z0-9]+-PAY-[A-Z0-9-]{3,30}$/i.test(paymentCode) || paidAmount === null) continue;
-        const method = text4(raw.PaymentMethodTypeName ?? raw.PaymentMethodName).slice(0, 200), type = text4(raw.PaymentTypeName ?? raw.PaymentType).slice(0, 200);
+        const method = text5(raw.PaymentMethodTypeName ?? raw.PaymentMethodName).slice(0, 200), type = text5(raw.PaymentTypeName ?? raw.PaymentType).slice(0, 200);
         const p = {
-          id: id3(raw.PaymentId),
+          id: id4(raw.PaymentId),
           code: paymentCode,
           amount: paidAmount,
           totalAmount: amount(raw.TotalAmount ?? raw.Amount),
           remaining: amount(raw.RemainAmount),
-          typeId: id3(raw.PaymentTypeId),
+          typeId: id4(raw.PaymentTypeId),
           type,
           method,
           scheduledDate: invoiceDay(raw.ScheduledDate),
@@ -932,14 +1076,14 @@ var PromotionHubCourseNetwork = (() => {
         };
         payments.push(p);
         const from = code(raw.RelatedContractDepositNo ?? raw.RelatedContractNo);
-        if (from && from !== ct && paid && paidAmount > 0 && completeDate && !/refund|moving[ -]?out|transfer[ -]?out/i.test(type)) moves.push({ from, to: ct, amount: paidAmount, date: completeDate, reference: paymentCode, direction: "in" });
+        if (from && from !== ct2 && paid && paidAmount > 0 && completeDate && !/refund|moving[ -]?out|transfer[ -]?out/i.test(type)) moves.push({ from, to: ct2, amount: paidAmount, date: completeDate, reference: paymentCode, direction: "in" });
       }
       if (!payments.length && !moves.length) continue;
-      const facts = projectHubContract({ ContractNo: ct, ContractId: contractId, LeadId: learner.leadId, KidId: learner.kidId, ListMovingIn: [], ListCourseInfo: [] }, { payments, paymentState: "read" });
+      const facts = projectHubContract({ ContractNo: ct2, ContractId: contractId, LeadId: learner.leadId, KidId: learner.kidId, ListMovingIn: [], ListCourseInfo: [] }, { payments, paymentState: "read" });
       if (!facts) continue;
       facts.discounts = null;
       facts.movements = { state: "read", rows: moves };
-      const prior = documents.get(ct);
+      const prior = documents.get(ct2);
       if (prior) {
         if (prior.contractId !== facts.contractId) return null;
         for (const p of facts.payments.rows) {
@@ -948,7 +1092,7 @@ var PromotionHubCourseNetwork = (() => {
           if (!old) prior.payments.rows.push(p);
         }
         prior.movements.rows.push(...moves);
-      } else documents.set(ct, facts);
+      } else documents.set(ct2, facts);
     }
     return { documents: [...documents.values()], count: groups.length, total: Number.isSafeInteger(value.TotalCount) && value.TotalCount >= 0 ? value.TotalCount : null };
   }
@@ -971,23 +1115,23 @@ var PromotionHubCourseNetwork = (() => {
     const known = /* @__PURE__ */ new Set([facts.ct]), related = [];
     for (let depth = 0; depth < 16 && known.size <= 32; depth++) {
       const before = known.size;
-      for (const ct of [...known]) for (const m of (ct === facts.ct ? result : docs.get(ct))?.movements?.rows ?? []) if (m.to === ct) known.add(m.from);
+      for (const ct2 of [...known]) for (const m of (ct2 === facts.ct ? result : docs.get(ct2))?.movements?.rows ?? []) if (m.to === ct2) known.add(m.from);
       if (before === known.size) break;
     }
-    for (const ct of known) if (ct !== facts.ct && docs.has(ct) && related.length < 32) related.push({ ...docs.get(ct), discounts: null });
+    for (const ct2 of known) if (ct2 !== facts.ct && docs.has(ct2) && related.length < 32) related.push({ ...docs.get(ct2), discounts: null });
     if (related.length) result = { ...result, relatedFinance: related };
     return validateHubContract(result) ? result : facts;
   }
 
   // src/core/hub-course-network.mjs
   var COURSE_NETWORK_CHANNEL = "promotion-hub/course-network/v1";
-  var HUB3 = "https://hub24.apollo.vn:7777";
-  var text5 = (v) => typeof v === "string" ? v.trim().replace(/\s+/g, " ") : "";
+  var HUB4 = "https://hub24.apollo.vn:7777";
+  var text6 = (v) => typeof v === "string" ? v.trim().replace(/\s+/g, " ") : "";
   var numberId = (v) => /^[1-9]\d{0,14}$/.test(String(v ?? "")) ? String(v) : null;
   function courseDetailEndpoint(value, detailURL, method = "GET") {
     try {
-      const detail = new URL(detailURL), deposit = /^\/deposit\//i.test(detail.pathname), documentId = hubDocumentId(detailURL, deposit ? "QA-DEP-000001" : "QA-CT-000001"), parameter = deposit ? "depositId" : "contractId", u = new URL(value, HUB3);
-      if (!documentId || String(method).toUpperCase() !== "GET" || u.origin !== HUB3 || u.username || u.password || u.hash || !(deposit ? /\/GetDepositDetail\/?$/i : /\/GetContractDetail\/?$/i).test(u.pathname) || u.searchParams.getAll(parameter).length !== 1 || u.searchParams.get(parameter) !== documentId) return null;
+      const detail = new URL(detailURL), deposit = /^\/deposit\//i.test(detail.pathname), documentId = hubDocumentId(detailURL, deposit ? "QA-DEP-000001" : "QA-CT-000001"), parameter = deposit ? "depositId" : "contractId", u = new URL(value, HUB4);
+      if (!documentId || String(method).toUpperCase() !== "GET" || u.origin !== HUB4 || u.username || u.password || u.hash || !(deposit ? /\/GetDepositDetail\/?$/i : /\/GetContractDetail\/?$/i).test(u.pathname) || u.searchParams.getAll(parameter).length !== 1 || u.searchParams.get(parameter) !== documentId) return null;
       if ([...u.searchParams.keys()].some((k) => /token|session|password|secret|credential|authorization|api.?key/i.test(k))) return null;
       const roles = u.searchParams.getAll("userRoleId");
       if (roles.length > 1 || roles.length && !/^(?:0|[1-9]\d{0,14})$/.test(roles[0])) return null;
@@ -1009,7 +1153,7 @@ var PromotionHubCourseNetwork = (() => {
   };
   var scalar = (obj, names, max = 200) => {
     const value = pick(obj, names);
-    return typeof value === "string" && text5(value).length <= max ? text5(value) || null : null;
+    return typeof value === "string" && text6(value).length <= max ? text6(value) || null : null;
   };
   function listValue(value, limit) {
     if (typeof value === "string" && value.length <= 128e3 && /^\s*\[/.test(value)) {
@@ -1040,14 +1184,14 @@ var PromotionHubCourseNetwork = (() => {
       }
       if (!list2.length) absent = true;
       for (const entry of list2) {
-        let value = typeof entry === "string" ? text5(entry) : scalar(entry, itemNames, 2e3);
+        let value = typeof entry === "string" ? text6(entry) : scalar(entry, itemNames, 2e3);
         if (!value) {
           invalid = true;
           continue;
         }
         const group = withGroup && scalar(entry, ["GroupDiscountName"], 2e3);
         if (group) {
-          const name3 = normalizeHubDiscount(value) ?? value, fold2 = (v) => text5(v).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+          const name3 = normalizeHubDiscount(value) ?? value, fold2 = (v) => text6(v).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
           value = fold2(name3).startsWith(fold2(group)) ? name3 : group + " - " + name3;
         }
         values.push(value);
@@ -1058,11 +1202,11 @@ var PromotionHubCourseNetwork = (() => {
   }
   function giftcodeValue(obj) {
     let result = offer(obj, ["GiftcodeNo", "GiftCodeNumber", "Giftcode"], ["ListGiftCode", "ListGiftcodes", "GiftCodes"], ["GiftcodeNo", "GiftCodeNumber", "GiftCode", "Code"]);
-    const keys2 = Object.keys(obj ?? {}), key = (name2) => keys2.find((k) => k.toLowerCase() === name2.toLowerCase()), id4 = key("GiftCodeId"), code2 = key("GiftCode");
+    const keys2 = Object.keys(obj ?? {}), key = (name2) => keys2.find((k) => k.toLowerCase() === name2.toLowerCase()), id5 = key("GiftCodeId"), code2 = key("GiftCode");
     const amounts = ["GiftCodeDiscount", "GiftCodeDiscountAmount", "GiftCodeDiscountAmountMax"].map(key).filter(Boolean);
     const hasAmount = amounts.some((k) => obj[k] != null && obj[k] !== "" && Number(obj[k]) !== 0);
-    if (result === "0" && (id4 && obj[id4] != null && Number(obj[id4]) > 0 || hasAmount)) result = null;
-    if (result == null && id4 && code2 && [null, 0, "0"].includes(obj[id4]) && [null, ""].includes(obj[code2]) && !hasAmount && ["ListGiftCode", "ListGiftcodes", "GiftCodes"].every((name2) => {
+    if (result === "0" && (id5 && obj[id5] != null && Number(obj[id5]) > 0 || hasAmount)) result = null;
+    if (result == null && id5 && code2 && [null, 0, "0"].includes(obj[id5]) && [null, ""].includes(obj[code2]) && !hasAmount && ["ListGiftCode", "ListGiftcodes", "GiftCodes"].every((name2) => {
       const raw = pick(obj, [name2]);
       return raw == null || listValue(raw, 100)?.length === 0;
     })) result = "0";
@@ -1074,7 +1218,7 @@ var PromotionHubCourseNetwork = (() => {
     let hours = pick(obj, ["HourWeekName", "HowweekName", "HowWeekName", "HoursPerWeek", "HourPerWeek", "HourWeek", "HoursWeek"]);
     if (typeof hours === "number" && hours > 0 && hours <= 168) hours = hours + " hrs/week";
     if (typeof hours === "string") {
-      hours = text5(hours).replace(/^(\d+(?:[.,]\d+)?)\s*(?:giờ\s*\/\s*tuần|hours?\s*per\s*week)$/i, (_, n) => n.replace(",", ".") + " hrs/week");
+      hours = text6(hours).replace(/^(\d+(?:[.,]\d+)?)\s*(?:giờ\s*\/\s*tuần|hours?\s*per\s*week)$/i, (_, n) => n.replace(",", ".") + " hrs/week");
       if (/^\d+(?:\.\d+)?$/.test(hours)) hours += " hrs/week";
     }
     if (typeof hours !== "string" || !/^\d+(?:\.\d+)?\s*(?:hrs?|hours?)\s*\/\s*week$/i.test(hours) || !(parseFloat(hours) > 0 && parseFloat(hours) <= 168)) hours = null;
@@ -1094,10 +1238,10 @@ var PromotionHubCourseNetwork = (() => {
     const root = contractRoot(value);
     if (root) {
       const lists = ["ListCourseInfo", "CourseInfos"].map((k) => listValue(pick(root, [k]), 20)).filter(Boolean), list2 = lists.find((l) => l.length) ?? lists[0] ?? [];
-      const id4 = pick(root, ["ContractId", "DepositId", "Id"]), ct = scalar(root, ["ContractNo", "ContractCode", "ContractNumber", "DepositNo", "DepositCode"]), student = scalar(root, ["StudentCode", "StudentNo", "StudentNumber", "KidCode"]);
-      if (id4 != null && !numberId(id4)) return null;
+      const id5 = pick(root, ["ContractId", "DepositId", "Id"]), ct2 = scalar(root, ["ContractNo", "ContractCode", "ContractNumber", "DepositNo", "DepositCode"]), student = scalar(root, ["StudentCode", "StudentNo", "StudentNumber", "KidCode"]);
+      if (id5 != null && !numberId(id5)) return null;
       const facts = projectHubContract(root), rootFields = fields(root), discountPending = ["ListDiscount", "Discounts"].some((k) => root[k] != null) && rootFields.discount == null;
-      return { source, contractId: id4 == null ? null : numberId(id4), ct: ct?.toUpperCase() ?? null, student, fields: rootFields, courses: list2.map((row) => fields(row)), ...discountPending ? { discountPending: true } : {}, ...facts ? { hubContract: facts } : {} };
+      return { source, contractId: id5 == null ? null : numberId(id5), ct: ct2?.toUpperCase() ?? null, student, fields: rootFields, courses: list2.map((row) => fields(row)), ...discountPending ? { discountPending: true } : {}, ...facts ? { hubContract: facts } : {} };
     }
     return null;
   }
@@ -1130,7 +1274,8 @@ var PromotionHubCourseNetwork = (() => {
       for (const key of ["courseFee", "hoursPerWeek", "package"]) values[key] = null;
       for (const key of ["giftcode", "discount"]) if (values[key] === "0") values[key] = null;
     }
-    const payload = coursePayload({ ...request, ...values, ...empty ? { courseState: "empty" } : {}, ...projection.hubContract ? { hubContract: projection.hubContract } : {}, ...projection.hubPolicy ? { hubPolicy: projection.hubPolicy } : {}, ...projection.hubPolicyError ? { hubPolicyError: projection.hubPolicyError } : {} }, request);
+    const mergedFacts = domPayload?.hubContract ? mergeHubFinanceFacts(projection.hubContract, domPayload.hubContract) : projection.hubContract;
+    const payload = coursePayload({ ...request, ...values, ...empty ? { courseState: "empty" } : {}, ...mergedFacts ? { hubContract: mergedFacts } : {}, ...projection.hubPolicy ? { hubPolicy: projection.hubPolicy } : {}, ...projection.hubPolicyError ? { hubPolicyError: projection.hubPolicyError } : {} }, request);
     return payload ? { payload, via: domPayload ? "network+dom" : "network" } : { error: "format" };
   }
   return __toCommonJS(hub_course_network_exports);

@@ -1,4 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import vm from 'node:vm';import {execFileSync} from 'node:child_process';
+import {HUB_BRIDGE_VERSION} from '../src/core/hub-bridge-version.mjs';
 const sites=['https://promotion-hub-2026.quanghuym24.chatgpt.site','https://promotion-hub-2026.roundskunk11.chatgpt.site','https://promotion-hub-2026.vercel.app'];
 test('both verified Site aliases can connect, while replies and page events stay on their requesting origin',()=>{
  for(const origin of sites){
@@ -28,8 +29,8 @@ test('downloadable Chrome bridge allows the exact production Vercel origin and k
   assert.ok(archive.core.includes(origin),origin+' missing from background origin allowlist');
  }
  assert.ok(manifest.host_permissions.includes('https://hub24.apollo.vn/*'));
- assert.equal(manifest.version,'1.6.20');
- assert.ok(archive.core.includes("const VERSION = '1.6.20'"));
+ assert.equal(manifest.version,HUB_BRIDGE_VERSION);
+ assert.ok(archive.core.includes("const VERSION = '"+HUB_BRIDGE_VERSION+"'"));
  assert.ok(!matches.includes('https://*.vercel.app/*'),'Do not allow unrelated Vercel tenants');
  assert.ok(!matches.includes('<all_urls>'));
 });

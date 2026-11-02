@@ -1,14 +1,14 @@
 # Tự điền Voucher từ Hub
 
-Cầu nối 1.6.4 dùng phiên Hub của người dùng trên Chrome/Edge. Website không đọc trực tiếp cookie hay mật khẩu và không gọi API đăng nhập. Trình duyệt kiểm thử hiện yêu cầu đăng nhập; kiểm tra tự động sử dụng dữ liệu giả và trang DOM mô phỏng, không xác nhận đã đọc tài khoản Hub thật.
+Voucher dùng chung cầu nối 1.6.21 với lấy Input và gắn link CT/DEP, dùng phiên Hub của người dùng trên Chrome/Edge. Website không đọc trực tiếp cookie hay mật khẩu và không gọi API đăng nhập. Trình duyệt kiểm thử hiện yêu cầu đăng nhập; kiểm tra tự động sử dụng dữ liệu giả và trang DOM mô phỏng, không xác nhận đã đọc tài khoản Hub thật.
 
 ## Luồng sử dụng
 
-1. Cập nhật tiện ích cầu nối 1.6.4, tải lại Promotion và các tab Hub.
+1. Nếu đã cài cầu nối 1.6.21 cho lấy Input hoặc gắn link, dùng luôn bản đó; không cài thêm cầu nối cũ cho Voucher. Tải lại Promotion và tab Hub đang mở. Nếu chưa có, tải ZIP hiện tại từ web, giải nén và cài hoặc cập nhật tiện ích.
    Bản 1.6.3 đọc cả đuôi `%`/`đ` trong thẻ thường, wrapper lồng hoặc bộ chọn đơn vị; phần đuôi hiển thị quyết định kiểu giảm. `12,5%` điền Tỷ lệ giảm 12,5; `2.000.000 Đ` điền Số tiền giảm 2000000. Không lấy đơn vị ở Minimum/Maximum. Khi chuyển kiểu giảm, ô số của kiểu cũ được xóa.
 2. Mở chi tiết CT, nhập Giftcode No. Student ID, tên học viên, center lấy từ các trường của CT đang mở khi sổ voucher còn trống. Nếu mở từ bảng Voucher, chỉ ghép hồ sơ khi mã có đúng một CT trong bộ nguồn.
 3. Voucher còn thiếu tự tra khi mở hồ sơ và cầu nối sẵn sàng. Nút **Tìm & tự điền từ Hub** đọc lại theo yêu cầu.
-4. Cầu nối mở `/giftcode/manage`, nhập mã đầy đủ vào ô tìm, mở rộng Apply date được nhận diện và bấm Search. Chỉ theo link chi tiết có trong dòng Voucher trả về.
+4. Cầu nối đọc `/giftcode/manage` trong khung nền của tab Hub đã mở, không tạo hay chuyển tab trình duyệt, nhập mã đầy đủ vào ô tìm, mở rộng Apply date được nhận diện và bấm Search. Chỉ theo link chi tiết có trong dòng Voucher trả về.
 5. Trang chi tiết phải xác nhận mã đầy đủ trong **List gift code** hoặc trường Giftcode No riêng. Code prefix và ô tìm kiếm không phải bằng chứng ghép mã. Nếu List gift code là link đọc riêng, chỉ theo link có trong trang và có ID cùng Voucher; giữ các thông số đã đọc từ trang cha. Danh sách phân trang được tìm bằng bộ lọc của chính bảng giftcode.
 6. Giá trị tự điền gồm tên voucher, phạm vi, ngày hiệu lực, kiểu/mức giảm, sàn/trần, mô tả và người tạo có trong Hub. Đọc ký hiệu ngay cạnh **Discount amount**: `15 %` → Phần trăm, tỷ lệ 15%; `2.000.000 đ` → Số tiền, 2.000.000 VND. Chấp nhận `%`, VND, VNĐ, đ, Đ và ₫; không tự xem số không có đơn vị là tiền. Không lấy đơn vị ở Minimum/Maximum hoặc suy từ tên/mã. Nếu không xác định rõ đơn vị thì dừng tự điền và báo cần kiểm tra.
 7. **Center / phạm vi** ưu tiên cột **Center code** của đúng dòng Giftcode đầy đủ; nếu dòng không có thì lấy danh sách Center code trong trang chi tiết, đọc tiếp các trang của chính bảng center. Nhiều mã được phân cách bằng dấu phẩy, tối đa 2.000 ký tự. Chỉ khi không có cột mã mới dùng Center/Region được chọn hoặc phạm vi ở dòng Voucher. Danh sách chưa đọc đủ sẽ dừng, không lưu một phần làm toàn bộ phạm vi. Student ID/tên riêng trên Hub, nếu có, phải khớp CT.
@@ -24,3 +24,7 @@ Cầu nối 1.6.4 dùng phiên Hub của người dùng trên Chrome/Edge. Websi
 - Cầu nối dùng một lượt Hub tại một thời điểm; đóng hồ sơ hoặc bấm Dừng tìm sẽ hủy lượt đang đọc.
 
 Kiểm thử bao gồm đọc điều khiển có nhãn trên trang chi tiết, nhập mã và Apply date ở trang quản lý, ghép đúng full code, dữ liệu cố định/phần trăm, Student ID khác, phản hồi cũ/sai mã, origin/link không hợp lệ, lưu nguồn và tách trạng thái Hub khỏi phê duyệt hồ sơ.
+
+## Kết nối dùng chung
+
+Phiên bản yêu cầu, thông báo và link tải Voucher, Input, gắn link, báo cáo lấy từ cùng nguồn phiên bản của web; bản ZIP dùng chính phiên bản đó. Giftcode cần khả năng `voucher`, `background-voucher` và `no-new-tabs`. Lỗi chưa kết nối, Hub đang bận, chưa có tab Hub hoặc hết thời gian chờ giữ đúng thông báo và giữ bản nháp; không quy tất cả thành yêu cầu cài cầu nối cũ.

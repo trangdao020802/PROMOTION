@@ -10,6 +10,8 @@ export function mergeChildFinancialFact(prior,next){
  if(!prior||prior.id!==next.id||prior.url!==next.url||!validateHubContract(prior.hubContract))return next;
  const missing=['payments','movements'].filter(k=>next.hubContract[k]?.state!=='read');
  const hubContract={...next.hubContract};
+ if(next.hubContract.upgrades===undefined&&prior.hubContract.upgrades)hubContract.upgrades=prior.hubContract.upgrades;
+ if(!hubContract.contractDate&&prior.hubContract.contractDate)hubContract.contractDate=prior.hubContract.contractDate;
  for(const k of missing)if(prior.hubContract[k]?.state==='read')hubContract[k]=prior.hubContract[k];
  if(hubContract.payments.state==='read')hubContract.payments={...hubContract.payments,rows:hubContract.payments.rows.map(p=>{
   const old=prior.hubContract.payments.rows.find(q=>q.code===p.code&&Math.abs(q.amount-p.amount)<=1);

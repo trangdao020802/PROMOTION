@@ -2,8 +2,9 @@ import {COURSE_FIELDS,missingContractInputs} from './hub-course.mjs';
 import {validateHubPolicy} from './hub-policy.mjs';
 import {validateHubContract} from './hub-contract.mjs';
 import {resolveTransferCourseInfo,courseSourceCandidate} from './course-info.mjs';
+import {upgradeSourceMissing} from './hub-upgrade.mjs';
 const columns={H:'courseFee',I:'hoursPerWeek',J:'package',K:'giftcode',L:'discount'};
-export const INPUT_READER_REVISION='transfer-course-v3';
+export const INPUT_READER_REVISION='transfer-course-v4-upgrade';
 export const inputRunRequiresRefresh=run=>!!run&&run.inputRevision!==INPUT_READER_REVISION;
 export const inputKey=(ct,student)=>String(ct)+'|'+String(student);
 export function inputTargets(rows,refresh=false,{policy=false,facts=false}={}){return rows.map(row=>{const required=[...new Set([...(refresh?['courseFee','hoursPerWeek','package','giftcode','discount']:[]),...missingContractInputs(row).map(k=>columns[k]),'giftcode','discount'])];return {ct:row.ct||row.cells.contractTotal,student:String(row.cells.F),required,...(policy?{policy:true}:{}),...(facts?{facts:true}:{})};});}
@@ -19,6 +20,6 @@ export function inputSourceMissing(source,target){
 }
 export function completeInputRun(run,ct,student,source){
  const key=inputKey(ct,student),target=run.targets.find(t=>inputKey(t.ct,t.student)===key);if(!target)throw Error('CT không thuộc lượt đọc đang lưu.');
- const missing=inputSourceMissing(source,target);return {run:{...run,completed:missing.length?run.completed:[...new Set([...run.completed,key])]},complete:!missing.length,missing};
+ const missing=[...inputSourceMissing(source,target),...(target.facts&&upgradeSourceMissing(source?.hubContract)?['upgradeSources']:[])];return {run:{...run,completed:missing.length?run.completed:[...new Set([...run.completed,key])]},complete:!missing.length,missing};
 }
 export function completedInputs(run,refresh){return run?.refresh===refresh&&!inputRunRequiresRefresh(run)?run.completed??[]:[];}

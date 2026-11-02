@@ -5,6 +5,7 @@ import {compareChildFacts} from '../core/child-hub-evidence.mjs';
 import {hubDocumentId} from '../core/hub-document.mjs';
 import {financeReadsComplete} from '../core/hub-invoice.mjs';
 import InvoiceEvidence from './InvoiceEvidence.tsx';
+import {upgradeEdges} from '../core/hub-upgrade.mjs';
 
 const read=async(path:string,options:any={})=>{
  const response=await localFetch(path,options),json=await response.json();
@@ -65,6 +66,7 @@ function OriginNode({row,ct,parentCt,datasetId,hubLinks,onHubSaved,onRead,onFact
  const counted=(r:any)=>verified.some((item:any)=>item.paymentCode===r.paymentCode);
  const audit=fact?compareChildFacts(fact,row):null;
  const related=fact?.hubContract?.movements?.rows?.some((m:any)=>m.from===ct&&m.to===parentCt);
+ const upgraded=upgradeEdges([fact?.hubContract,row.hubContract,...(row.hubContract?.relatedFinance??[])]).some((e:any)=>e.from===ct&&e.to===parentCt);
  const matchingTransfer=(row.reconciliation?.movementHistory??[]).some((m:any)=>m.from===ct&&m.to===parentCt);
  return <div className="hub-origin-node">
   <div className="hub-origin-head"><strong>{ct}</strong><small>CT nguồn chuyển tới {parentCt}</small></div>
@@ -82,8 +84,8 @@ function OriginNode({row,ct,parentCt,datasetId,hubLinks,onHubSaved,onRead,onFact
     <InvoiceEvidence payment={fact.hubContract.payments.rows[i]}/> ·
     {counted(p)?'Đã phân bổ có căn cứ trong tổng thu':audit?.payments[i]?.status==='matched'?'Đã có trong PaymentList (không cộng lại)':'CHECK · chờ E-Invoice và đường Transfer đủ căn cứ'}
    </p>)}
-   <p><strong>Chặng {ct} → {parentCt}:</strong> {related?'Có Moving-out trên Hub':matchingTransfer?'Có trong Transfer đã nhập':'CHECK · chưa chứng minh được mối liên kết Transfer'}.</p>
-   {fact.hubContract.movements?.state!=='read'&&<p className="child-hub-warning">Hub chưa trả Moving-out. Không tự tính tiền thu cho Contract tổng.</p>}
+   <p><strong>Chặng {ct} → {parentCt}:</strong> {upgraded?'Có liên kết Upgrade trên Hub':related?'Có Moving-out trên Hub':matchingTransfer?'Có trong Transfer đã nhập':'CHECK · chưa chứng minh được mối liên kết Transfer / Upgrade'}.</p>
+   {!upgraded&&fact.hubContract.movements?.state!=='read'&&<p className="child-hub-warning">Hub chưa trả Moving-out. Không tự tính tiền thu cho Contract tổng.</p>}
    {fact.hubContract.payments.state==='read'&&summary?.hubPaid===0&&<p className="child-hub-warning">CT này cũng chưa có khoản thu. Kiểm tra CT nguồn trước đó.</p>}
    {depth<12&&<UpstreamHubOrigins row={row} parentCt={ct} parentFact={fact} datasetId={datasetId} hubLinks={hubLinks} onHubSaved={onHubSaved} onRead={onRead} onFactsSaved={onFactsSaved} disabled={disabled} depth={depth+1} path={[...path,ct]} />}
   </>}
@@ -104,9 +106,9 @@ export default function UpstreamHubOrigins({row,parentCt,parentFact,datasetId,hu
  if(depth>12)return <p className="child-hub-warning">Chuỗi Transfer vượt 12 tầng. Cần đối chiếu thủ công.</p>;
  if(isOriginalPaymentSource(row,parentCt,parentFact,manual))return null;
  return <section className="hub-upstream-section"><h4>Truy ngược CT phát sinh hóa đơn · từ {parentCt}</h4>
-  <p>CT / DEP trung gian có thể chỉ có Moving-in. Gắn link nguồn để đọc tiếp trong nền. Hóa đơn nguồn có thể thuộc học viên khác; số tiền phải có đường chuyển vào hồ sơ này.</p>
+  <p>Đọc CT nguồn từ Moving-in, Transfer hoặc Upgrade from contract trong nền. Upgrade được đối chiếu với hóa đơn Paid gốc và ngày nâng cấp, kể cả Hub không hiển thị Moving-in/out.</p>
   {discovered.map(ct=><OriginNode key={ct} row={row} ct={ct} parentCt={parentCt} datasetId={datasetId} hubLinks={hubLinks} onHubSaved={onHubSaved} onRead={onRead} onFactsSaved={onFactsSaved} disabled={disabled} depth={depth} path={path} />)}
-  {!discovered.length&&<p className="child-hub-warning">Chưa biết CT chuyển vào. Nhập mã từ Moving-in hoặc lịch sử Transfer để tìm CT phát sinh tiền.</p>}
+  {!discovered.length&&<p className="child-hub-warning">Chưa biết CT nguồn. Kiểm tra Moving-in, lịch sử Transfer hoặc Upgrade from contract để tìm CT phát sinh tiền.</p>}
   <div className="hub-origin-link"><input aria-label={'Mã CT chuyển vào '+parentCt} value={input} disabled={disabled} onChange={e=>setInput(e.target.value)} placeholder="Nhập mã CT hoặc DEP nguồn" />
    <button type="button" disabled={disabled||!input.trim()} onClick={()=>void add()}>Thêm CT nguồn cần gắn link</button></div>
   {error&&<p role="alert" className="child-hub-warning">{error}</p>}

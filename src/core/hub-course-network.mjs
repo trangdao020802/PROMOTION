@@ -5,6 +5,8 @@ import {hubDocumentId} from './hub-document.mjs';
 export {contractRoot,projectContractPayments,projectHubContract,projectHubDisplayedTables,mergeDisplayedHubContract,hubDisplayedTablesFromDocument,mergeHubFinanceFacts} from './hub-contract.mjs';
 export {readHubPolicy} from './hub-policy.mjs';
 export {readDirectInvoices} from './hub-direct-invoice.mjs';
+export {upgradeLinksFromDocument,mergeUpgradeLinks,upgradeEdges} from './hub-upgrade.mjs';
+export {readUpgradeFinance} from './hub-upgrade-reader.mjs';
 export {projectLearnerPaymentPage,mergeLearnerFinance} from './hub-learner-payments.mjs';
 export {projectPaymentInvoice,mergePaymentInvoice,paymentInvoiceNumber,parseInvoiceText,validateInvoice,invoiceReadsComplete,eInvoiceKey,eInvoicePDFURL} from './hub-invoice.mjs';
 export const COURSE_NETWORK_CHANNEL='promotion-hub/course-network/v1';
@@ -105,5 +107,6 @@ export function parseContractDetailProjection(projection,expected,domPayload=nul
  }
  const empty=projection.courses.length===0;
  if(empty){for(const key of ['courseFee','hoursPerWeek','package'])values[key]=null;for(const key of ['giftcode','discount'])if(values[key]==='0')values[key]=null;}
- const payload=coursePayload({...request,...values,...(empty?{courseState:'empty'}:{}),...(projection.hubContract?{hubContract:projection.hubContract}:{}),...(projection.hubPolicy?{hubPolicy:projection.hubPolicy}:{}),...(projection.hubPolicyError?{hubPolicyError:projection.hubPolicyError}:{})},request);return payload?{payload,via:domPayload?'network+dom':'network'}:{error:'format'};
+ const mergedFacts=domPayload?.hubContract?mergeHubFinanceFacts(projection.hubContract,domPayload.hubContract):projection.hubContract;
+ const payload=coursePayload({...request,...values,...(empty?{courseState:'empty'}:{}),...(mergedFacts?{hubContract:mergedFacts}:{}),...(projection.hubPolicy?{hubPolicy:projection.hubPolicy}:{}),...(projection.hubPolicyError?{hubPolicyError:projection.hubPolicyError}:{})},request);return payload?{payload,via:domPayload?'network+dom':'network'}:{error:'format'};
 }
