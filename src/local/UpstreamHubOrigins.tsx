@@ -1,9 +1,9 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {localFetch} from './api.mjs';
-import {ctCode,upstreamCandidates,originPaymentSummary} from '../core/hub-upstream.mjs';
+import {ctCode,upstreamCandidates,originPaymentSummary,isOriginalPaymentSource} from '../core/hub-upstream.mjs';
 import {compareChildFacts} from '../core/child-hub-evidence.mjs';
 import {hubDocumentId} from '../core/hub-document.mjs';
-import {invoiceReadsComplete} from '../core/hub-invoice.mjs';
+import {financeReadsComplete} from '../core/hub-invoice.mjs';
 import InvoiceEvidence from './InvoiceEvidence.tsx';
 
 const read=async(path:string,options:any={})=>{
@@ -27,16 +27,17 @@ function OriginNode({row,ct,parentCt,datasetId,hubLinks,onHubSaved,onRead,onFact
    setStatus('Đang đọc hóa đơn gốc và Moving-out: '+ct);
    const current=await read('/api/hub-child-facts?'+params,{signal:ctrl.signal});
    if(ctrl.signal.aborted)return;
+   if(current.fact?.url===nextLink)setFact(current.fact);
    const scope=[datasetId,masterCt,ct,student,nextLink].join('|');
-   if(!force&&current.fact?.url===nextLink&&(invoiceReadsComplete(current.fact.hubContract)&&current.fact.hubContract?.movements?.state==='read'||attempted.current.has(scope))){
-    setFact(current.fact);setStatus('Đã có chứng cứ Hub lưu trước đó.');return;
+   if(!force&&current.fact?.url===nextLink&&(financeReadsComplete(current.fact.hubContract)||attempted.current.has(scope))){
+    setFact(current.fact);setStatus(financeReadsComplete(current.fact.hubContract)?'Đã đọc đủ chứng từ của CT này.':'Đã lưu phần đọc được; còn thiếu hóa đơn hoặc Moving. Bấm Đọc lại hóa đơn để tiếp tục.');return;
    }
-   attempted.current.add(scope);
    const payload=await onRead({ct,student,url:nextLink,readFinance:true,refreshFinance:force},(v:string)=>setStatus(v),ctrl.signal);
    if(ctrl.signal.aborted)return;
    if(!payload?.hubContract)throw Error('Chưa lấy được Payment Info của CT gốc. Kiểm tra link, phiên Hub và bấm Đọc lại.');
    const saved=await read('/api/hub-child-facts',{method:'PATCH',headers:{'Content-Type':'application/json'},
      body:JSON.stringify({datasetId,masterCt,student,ct,parentCt,url:nextLink,payload,version:current.version}),signal:ctrl.signal});
+   attempted.current.add(scope);
    for(const related of saved.relatedLinks??[])onHubSaved?.(related);
    setFact(saved.fact);await onFactsSaved?.();setStatus('Đã lưu chứng từ và tính lại đường chuyển tiền về CT tổng.');
   }catch(e:any){if(!ctrl.signal.aborted)setError(e?.message||'Hub chưa trả thông tin.');}
@@ -101,6 +102,7 @@ export default function UpstreamHubOrigins({row,parentCt,parentFact,datasetId,hu
   }catch(e:any){setError(e.message);}
  };
  if(depth>12)return <p className="child-hub-warning">Chuỗi Transfer vượt 12 tầng. Cần đối chiếu thủ công.</p>;
+ if(isOriginalPaymentSource(row,parentCt,parentFact,manual))return null;
  return <section className="hub-upstream-section"><h4>Truy ngược CT phát sinh hóa đơn · từ {parentCt}</h4>
   <p>CT / DEP trung gian có thể chỉ có Moving-in. Gắn link nguồn để đọc tiếp trong nền. Hóa đơn nguồn có thể thuộc học viên khác; số tiền phải có đường chuyển vào hồ sơ này.</p>
   {discovered.map(ct=><OriginNode key={ct} row={row} ct={ct} parentCt={parentCt} datasetId={datasetId} hubLinks={hubLinks} onHubSaved={onHubSaved} onRead={onRead} onFactsSaved={onFactsSaved} disabled={disabled} depth={depth} path={path} />)}

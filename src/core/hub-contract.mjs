@@ -2,7 +2,7 @@
 // prices or a second set of receipts to add to Export/PaymentList/Transfer.
 import {normalizeHubDiscount} from './hub-discount.mjs';
 import {hubDocumentCode} from './hub-document.mjs';
-import {invoiceReference,projectPaymentInvoice,validateInvoice,eInvoiceKey,mergePaymentInvoice} from './hub-invoice.mjs';
+import {invoiceReference,projectPaymentInvoice,validateInvoice,eInvoiceKey,mergePaymentInvoice,invoiceKeyFromURL} from './hub-invoice.mjs';
 export const HUB_CONTRACT_SCHEMA='apollo-hub-contract/v1';
 const plain=v=>!!v&&typeof v==='object'&&!Array.isArray(v);
 const text=v=>typeof v==='string'?v.trim().replace(/\s+/g,' '):'';
@@ -34,6 +34,7 @@ export function contractDiscountFacts(root){
  return result;
 }
 const invoiceEvidence=invoiceReference;
+const outgoingPayment=r=>Number(r?.PaymentTypeId)===8||/moving[ -]?out|transfer[ -]?out/i.test(text(r?.PaymentTypeName));
 export function projectContractPayments(value,contractId){
  let list=hubList(value,500);
  if(!list&&plain(value)){
@@ -43,6 +44,7 @@ export function projectContractPayments(value,contractId){
  if(!list)return null;
  const rows=[];
  for(const r of list){
+  if(plain(r)&&outgoingPayment(r))continue;
   if(!plain(r)||(r.ContractId??r.DepositId)!=null&&id(r.ContractId??r.DepositId)!==String(contractId)||!id(r.PaymentId)||number(r.Amount)===null)return null;
   const code=text(r.PaymentCode);if(code.length>150||code&&!/^[A-Za-z0-9][A-Za-z0-9_.:/-]*$/.test(code))return null;
   rows.push({id:id(r.PaymentId),code,amount:number(r.Amount),totalAmount:number(r.TotalAmount),remaining:number(r.RemainAmount),typeId:id(r.PaymentTypeId),type:text(r.PaymentTypeName).slice(0,200),method:text(r.PaymentMethodTypeName??r.PaymentMethodName).slice(0,200),scheduledDate:date(r.ScheduledDate),completeDate:date(r.CompleteDate),complete:typeof r.IsComplete==='boolean'?r.IsComplete:null,...projectPaymentInvoice(r)});
@@ -80,13 +82,14 @@ export function projectHubMovements(root){
   }
  }
  // Completed transfer rows identify their original CT/DEP, not new cash.
- const explicitIncoming=rows.filter(m=>m.direction==='in');
+ const explicitMoves=[...rows];
  for(const p of hubList(root.ListPayment,500)??[]){
-  const from=contractCode(p?.RelatedContractDepositNo),amount=number(p?.Amount),day=moveDay(p?.CompleteDate),reference=text(p?.PaymentCode);
-  if(!from||from===ct||p.IsComplete!==true||!amount||!day||/refund|moving[ -]?out|transfer[ -]?out/i.test(text(p.PaymentTypeName)))continue;
-  if(p.PaymentTypeId!==10&&!/transfer|deposit to contract/i.test(text(p.PaymentMethodTypeName)+' '+text(p.PaymentTypeName)))continue;
+  const other=contractCode(p?.RelatedContractDepositNo),amount=number(p?.Amount),day=moveDay(p?.TransferDate??p?.CompleteDate),reference=text(p?.PaymentCode),direction=outgoingPayment(p)?'out':'in';
+  if(!other||other===ct||p.IsComplete!==true||!(amount>0)||!day||/refund/i.test(text(p.PaymentTypeName)))continue;
+  if(direction==='in'&&p.PaymentTypeId!==10&&!/transfer|deposit to contract/i.test(text(p.PaymentMethodTypeName)+' '+text(p.PaymentTypeName)))continue;
   if(reference&&!/^[A-Za-z0-9][A-Za-z0-9_.:/-]*$/.test(reference))continue;
-  if(!explicitIncoming.some(m=>m.from===from&&m.to===ct&&m.date===day)&&!rows.some(m=>m.direction==='in'&&m.reference===reference&&m.from===from&&m.to===ct&&m.amount===amount&&m.date===day))rows.push({from,to:ct,amount,date:day,reference,direction:'in'});
+  const from=direction==='out'?ct:other,to=direction==='out'?other:ct;
+  if(!explicitMoves.some(m=>m.from===from&&m.to===to&&m.date===day)&&!rows.some(m=>m.direction===direction&&m.reference===reference&&m.from===from&&m.to===to&&m.amount===amount&&m.date===day))rows.push({from,to,amount,date:day,reference,direction});
   hasList=true;
  }
  return hasList?rows:null;
@@ -99,11 +102,13 @@ export function projectHubLearner(root){
 
 export function projectHubContract(root,{payments=null,paymentState='pending',capturedAt=new Date().toISOString()}={}){
  const result={schema:HUB_CONTRACT_SCHEMA,ct:text(root?.ContractNo??root?.ContractCode??root?.DepositNo??root?.DepositCode).toUpperCase(),contractId:id(root?.ContractId??root?.DepositId??root?.Id),capturedAt,discounts:contractDiscountFacts(root),payments:{state:paymentState==='pending'&&(projectContractPayments(root,id(root?.ContractId??root?.DepositId??root?.Id))?.length??0)>0?'read':paymentState,rows:payments??((projectContractPayments(root,id(root?.ContractId??root?.DepositId??root?.Id))?.length??0)>0?projectContractPayments(root,id(root?.ContractId??root?.DepositId??root?.Id)):[])},...(projectHubMovements(root)!==null?{movements:{state:'read',rows:projectHubMovements(root)}}:{movements:{state:'pending',rows:[]}})};
+ result.financeRevision=2;
  const learner=projectHubLearner(root);if(learner)result.learner=learner;
+ result.payments=withoutOutgoingPayments(result.payments,result.movements);
  return validateHubContract(result)?result:null;
 }
 export function validateHubContract(v,depth=0){
- if(!exact(v,['schema','ct','contractId','capturedAt','discounts','payments','movements','learner','relatedFinance'])||v.schema!==HUB_CONTRACT_SCHEMA||hubDocumentCode(v.ct)!==v.ct||id(v.contractId)!==v.contractId||typeof v.capturedAt!=='string'||!Number.isFinite(Date.parse(v.capturedAt)))return false;
+ if(!exact(v,['schema','ct','contractId','capturedAt','discounts','payments','movements','learner','relatedFinance','financeRevision'])||v.schema!==HUB_CONTRACT_SCHEMA||hubDocumentCode(v.ct)!==v.ct||id(v.contractId)!==v.contractId||typeof v.capturedAt!=='string'||!Number.isFinite(Date.parse(v.capturedAt))||v.financeRevision!==undefined&&v.financeRevision!==2)return false;
  if(v.learner!==undefined){const l=v.learner;if(!exact(l,['leadId','kidId','url'])||id(l.leadId)!==l.leadId||id(l.kidId)!==l.kidId||l.url!=='https://hub24.apollo.vn:7777/lead/detail/'+l.leadId+'?s='+l.kidId)return false;}
  if(v.relatedFinance!==undefined&&(depth>0||!v.learner||!hubList(v.relatedFinance,32)||new Set(v.relatedFinance.map(f=>f?.ct)).size!==v.relatedFinance.length||!v.relatedFinance.every(f=>f.ct!==v.ct&&f.discounts===null&&f.relatedFinance===undefined&&f.learner?.kidId===v.learner.kidId&&validateHubContract(f,depth+1))))return false;
  if(v.discounts!==null&&(!hubList(v.discounts,100)||!v.discounts.every(d=>exact(d,['label','groupId','discountId','type','percent','amount','months'])&&!!text(d.label)&&d.label.length<=2000&&['groupId','discountId'].every(k=>d[k]===null||id(d[k])===d[k])&&(d.type===null||[1,2,3].includes(d.type))&&['percent','amount','months'].every(k=>d[k]===null||number(d[k])===d[k]&&d[k]>=0&&d[k]<=(k==='percent'?100:k==='months'?120:1e13)))))return false;
@@ -137,6 +142,11 @@ const indexed=(headers,names)=>{
  for(const name of names){const i=headers.findIndex(h=>line(h).toLowerCase()===name);if(i>=0)return i;}
  return -1;
 };
+function withoutOutgoingPayments(payments,movements){
+ if(payments?.state!=='read')return payments;
+ const out=(movements?.rows??[]).filter(m=>m.direction==='out'&&m.reference);
+ return {...payments,rows:payments.rows.filter(p=>!out.some(m=>m.reference===p.code&&m.date===p.completeDate&&Math.abs(m.amount-p.amount)<=1))};
+}
 export function projectHubDisplayedTables(tables,ct){
  const current=contractCode(ct);if(!current||!Array.isArray(tables)||tables.length>100)return null;
  let payments=null,movements=null;
@@ -147,14 +157,15 @@ export function projectHubDisplayedTables(tables,ct){
   const pamount=indexed(headers,['payment amount']);
   if(pcode>=0&&paid>=0&&completed>=0&&pamount>=0){
    const values=[];
-   for(const r of rows){
+   for(const [rowIndex,r] of rows.entries()){
     if(!Array.isArray(r)||r.length<headers.length)continue;
     const code=line(r[pcode]),amount=vnd(r[paid]),total=vnd(r[pamount]),done=ddmmyyyy(r[completed]);
-    const invoiceRef=invoiceEvidence(r[indexed(headers,['invoice no','invoice number','e-invoice','e-invoice id'])]);
+    const linked=Array.isArray(table.invoices)?table.invoices.find(x=>x.row===rowIndex&&eInvoiceKey(x.key)):null;
+    const invoiceRef=invoiceEvidence(r[indexed(headers,['invoice no','invoice number','e-invoice','e-invoice id'])])??linked?.key;
     if(!/^[A-Z0-9]+-PAY-[A-Z0-9-]{3,30}$/i.test(code)||amount===null||total===null||amount<0||total<0||amount>total)continue;
-    values.push({id:null,code,amount,totalAmount:total,remaining:vnd(r[indexed(headers,['remain amount'])])??null,typeId:null,type:'Payment',method:line(r[indexed(headers,['payment method'])]).slice(0,200),scheduledDate:ddmmyyyy(r[indexed(headers,['scheduled date'])]),completeDate:done,complete:!!done&&amount>0,...(invoiceRef?{invoiceRef}:{})});
+    values.push({id:null,code,amount,totalAmount:total,remaining:vnd(r[indexed(headers,['remain amount'])])??null,typeId:null,type:'Payment',method:line(r[indexed(headers,['payment method'])]).slice(0,200),scheduledDate:ddmmyyyy(r[indexed(headers,['scheduled date'])]),completeDate:done,complete:!!done&&amount>0,...(invoiceRef?{invoiceRef}:{}),...(eInvoiceKey(invoiceRef)?{eInvoiceKey:invoiceRef}:{}),...([1,2].includes(linked?.version)?{eInvoiceVersion:linked.version}:{})});
    }
-   if(new Set(values.map(v=>v.code)).size===values.length)payments=values;
+   if(values.length&&new Set(values.map(v=>v.code)).size===values.length)payments=values;
   }
   const out=indexed(headers,['moving out amount']),to=indexed(headers,['transfer to','moving out to']),transferDate=indexed(headers,['transfer date','moving out date']);
   const inAmount=indexed(headers,['moving in amount']),from=indexed(headers,['moving in from','transfer from']),inDate=indexed(headers,['moving in date','transfer date']);
@@ -169,7 +180,7 @@ export function projectHubDisplayedTables(tables,ct){
     if(reference&&!/^[A-Za-z0-9][A-Za-z0-9_.:/-]*$/.test(reference))continue;
     list.push({from:direction==='out'?current:other,to:direction==='out'?other:current,amount:amt,date:day,reference,direction});
    }
-   movements=[...(movements??[]),...list];
+   if(list.length)movements=[...(movements??[]),...list];
   }
  }
  return {payments,movements};
@@ -185,7 +196,7 @@ export function mergeDisplayedHubContract(facts,tables,ct){
  const moves=[...(facts.movements?.rows??[]),...(extra.movements??[])];
  const distinct=[...new Map(moves.map(m=>[JSON.stringify([m.from,m.to,m.amount,m.date,m.reference,m.direction]),m])).values()];
  const movements=facts.movements?.state==='read'||extra.movements!==null?{state:'read',rows:distinct}:facts.movements??{state:'pending',rows:[]};
- const result={...facts,payments,movements};return validateHubContract(result)?result:facts;
+ const result={...facts,financeRevision:2,payments:withoutOutgoingPayments(payments,movements),movements};return validateHubContract(result)?result:facts;
 }
 export function mergeHubFinanceFacts(first,second){
  if(!validateHubContract(first)||!validateHubContract(second)||first.ct!==second.ct||first.contractId!==second.contractId)return first;
@@ -197,22 +208,39 @@ export function mergeHubFinanceFacts(first,second){
  }
  const values=[...(first.movements?.rows??[]),...(second.movements?.rows??[])],rows=[...new Map(values.map(m=>[JSON.stringify(m),m])).values()];
  const movements={state:first.movements?.state==='read'||second.movements?.state==='read'?'read':'pending',rows};
- const result={...first,payments,movements};return validateHubContract(result)?result:first;
+ const result={...first,payments:withoutOutgoingPayments(payments,movements),movements};return validateHubContract(result)?result:first;
 }
 
 // A Payment Info table can contain multiple header sections (Payment,
 // Moving-in, Moving-out). Preserve each section instead of using its last head.
-export function hubDisplayedTablesFromDocument(root){
+export function hubDisplayedTablesFromDocument(root,{staticDocument=false}={}){
  const result=[];
+ const visible=node=>!!node&&!node.hidden&&node.getAttribute?.('aria-hidden')!=='true'&&!node.closest?.('[hidden],[aria-hidden="true"],.ng-hide')&&(staticDocument||!node.getClientRects||node.getClientRects().length>0);
+ const value=node=>line((staticDocument?node.textContent:node.innerText??node.textContent)??'');
+ const normalized=v=>line(v).toLowerCase().replace(/moving[ -]+(in|out)/g,'moving $1').replace(/[?*]+$/,'').trim();
  for(const table of [...root.querySelectorAll('table')].slice(0,100)){
-  let headers=null,rows=[];
-  const flush=()=>{if(headers)result.push({headers,rows});rows=[];};
+  if(!visible(table))continue;
+  let headers=null,rows=[],invoices=[];
+  const flush=()=>{if(headers)result.push({headers,rows,...(invoices.length?{invoices}:{})});headers=null;rows=[];invoices=[];};
   for(const tr of [...table.querySelectorAll('tr')].slice(0,1000)){
-   if(tr.closest('table')!==table)continue;
-   const cells=[...tr.children].filter(n=>['TH','TD'].includes(n.tagName)),values=cells.map(n=>n.textContent??'');
-   const folded=values.map(v=>line(v).toLowerCase());
-   if(folded.includes('payment code')&&folded.some(v=>/amount/.test(v))){flush();headers=values;continue;}
-   if(headers&&cells.length===headers.length&&rows.length<300)rows.push(values);
+   if(tr.closest('table')!==table||!visible(tr))continue;
+   const cells=[...tr.children].filter(n=>['TH','TD'].includes(n.tagName)&&visible(n));
+   const expanded=cells.flatMap(n=>Array.from({length:Math.min(30,Math.max(1,Number(n.colSpan)||1))},()=>n)),values=expanded.map(value),folded=values.map(normalized);
+   const hasHeader=cells.some(n=>n.tagName==='TH')||folded.includes('payment code');
+   if(hasHeader){flush();if(folded.includes('payment code')&&folded.some(v=>/amount/.test(v)))headers=values;continue;}
+   if(cells.length===1&&/^(?:payment|moving[ -]?(?:in|out))$/i.test(value(cells[0]))){flush();continue;}
+   if(!headers||values.length!==headers.length||rows.length>=300)continue;
+   const invoiceIndex=indexed(headers.map(normalized),['e-invoice','e-invoice id','invoice no','invoice number']),cell=expanded[invoiceIndex];
+   if(cell){
+    const keys=new Set((value(cell).match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi)??[]).filter(eInvoiceKey));let version;
+    for(const a of [...cell.querySelectorAll?.('a')??[]])if(visible(a)){
+     const key=invoiceKeyFromURL(a.getAttribute?.('href'));if(key)keys.add(key);
+     const click=a.getAttribute?.('ng-click')??a.getAttribute?.('data-ng-click')??'',literal=/printEInvoice\(\s*['"]([0-9a-f-]{36})['"]\s*,\s*([12])\s*\)/i.exec(click);
+     if(literal&&eInvoiceKey(literal[1])){keys.add(literal[1]);version=Number(literal[2]);}
+    }
+    if(keys.size===1)invoices.push({row:rows.length,key:[...keys][0],...(version?{version}:{})});
+   }
+   rows.push(values);
   }
   flush();
  }

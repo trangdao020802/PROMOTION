@@ -4,6 +4,10 @@ const clean=v=>typeof v==='string'?v.trim().replace(/\s+/g,' '):'';
 export const invoiceNumber=v=>{const s=typeof v==='number'&&Number.isSafeInteger(v)?String(v):clean(v);return /^\d{1,20}$/.test(s)&&/[1-9]/.test(s)?s:null;};
 export const eInvoiceKey=v=>{const s=clean(v);return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s)?s:null;};
 export const invoiceReference=v=>invoiceNumber(v)??eInvoiceKey(v);
+export const eInvoicePDFURL=value=>{const key=eInvoiceKey(value);return key?'https://hub24.apollo.vn:7777/Downloads/EInvoice/'+key+'.pdf':null;};
+export function invoiceKeyFromURL(value){
+ try{const u=new URL(value,'https://hub24.apollo.vn:7777');if(u.origin!=='https://hub24.apollo.vn:7777'||u.username||u.password||u.search||u.hash)return null;const m=/^\/Downloads\/EInvoice\/([^/]+)\.pdf$/i.exec(u.pathname);return eInvoiceKey(m?.[1]);}catch{return null;}
+}
 export function invoiceDay(v){
  const s=clean(v);let day=/^(\d{4}-\d{2}-\d{2})(?:$|T| )/.exec(s)?.[1];
  const m=/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(s);
@@ -46,6 +50,7 @@ export function mergePaymentInvoice(row,extra){
 }
 export const paymentInvoiceNumber=p=>validateInvoice(p?.invoice)?p.invoice.number:invoiceNumber(p?.invoiceRef);
 export const invoiceReadsComplete=f=>f?.payments?.state==='read'&&f.payments.rows.every(p=>p.complete!==true||p.amount<=0||/transfer|moving/i.test(p.method+' '+p.type)||!!paymentInvoiceNumber(p));
+export const financeReadsComplete=f=>f?.financeRevision===2&&f.movements?.state==='read'&&invoiceReadsComplete(f);
 export const displayedInvoiceNo=value=>eInvoiceKey(value)?'Chưa đọc số hóa đơn':value||'Chưa có số VAT';
 export const invoiceLabel=p=>paymentInvoiceNumber(p)??invoiceNumber(p?.invoiceNumber)??displayedInvoiceNo(p?.vat??p?.invoiceRef);
 const folded=s=>s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[Đđ]/g,'d').toLowerCase();

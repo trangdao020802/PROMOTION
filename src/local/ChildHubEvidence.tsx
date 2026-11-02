@@ -4,7 +4,7 @@ import {compareChildFacts} from '../core/child-hub-evidence.mjs';
 import {hubDocumentCode} from '../core/hub-document.mjs';
 import UpstreamHubOrigins from './UpstreamHubOrigins.tsx';
 import InvoiceEvidence from './InvoiceEvidence.tsx';
-import {invoiceReadsComplete} from '../core/hub-invoice.mjs';
+import {financeReadsComplete} from '../core/hub-invoice.mjs';
 
 const money=(n:any)=>typeof n==='number'&&Number.isFinite(n)?n.toLocaleString('vi-VN')+' đ':'—';
 const date=(d:any)=>typeof d==='number'?new Date(Date.UTC(1899,11,30)+d*86400000).toLocaleDateString('vi-VN',{timeZone:'UTC'}):d?String(d).split('-').reverse().join('/'):'—';
@@ -29,10 +29,10 @@ export default function ChildHubEvidence({row,ct,datasetId,link,hubLinks,onHubSa
    setMessage('Đang đọc Payment Info của '+ct+' từ link đã gắn…');
    const current=await request('/api/hub-child-facts?'+query,{signal:task.signal});
    if(task.signal.aborted)return;
-   if(!force&&current.fact?.url===url&&(invoiceReadsComplete(current.fact?.hubContract)&&current.fact?.hubContract?.movements?.state==='read'||attempted.current.has(scope))){
-    setFact(current.fact);setMessage('Đã có dữ liệu Hub của đúng CT, không đọc lại.');return;
+   if(current.fact?.url===url)setFact(current.fact);
+   if(!force&&current.fact?.url===url&&(financeReadsComplete(current.fact?.hubContract)||attempted.current.has(scope))){
+    setFact(current.fact);setMessage(financeReadsComplete(current.fact.hubContract)?'Đã đọc đủ chứng từ của CT này.':'Đã lưu phần đọc được; còn thiếu hóa đơn hoặc Moving. Bấm Đọc lại chứng từ CT này để tiếp tục.');return;
    }
-   attempted.current.add(scope);
    const payload=await onRead({ct,student,url,readFinance:true,refreshFinance:force},(text:string)=>setMessage(String(text).slice(0,450)),task.signal);
    if(task.signal.aborted)return;
    if(!payload?.hubContract)throw Error('Hub chưa trả về Payment Info có định danh CT rõ ràng. Không tự ghi tiền từ trang không đủ căn cứ.');
@@ -40,6 +40,7 @@ export default function ChildHubEvidence({row,ct,datasetId,link,hubLinks,onHubSa
    const saved=await request('/api/hub-child-facts',{method:'PATCH',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({datasetId,masterCt,ct,student,url,payload,version:current.version}),signal:task.signal});
    if(task.signal.aborted)return;
+   attempted.current.add(scope);
    for(const related of saved.relatedLinks??[])onHubSaved?.(related);
    setFact(saved.fact);await onFactsSaved?.();setMessage(saved.fact.hubContract.payments.state==='read'?'Đã lưu Payment Info và tính lại đường chuyển tiền.':'Đã lưu phần đọc được; Payment còn thiếu, có thể đọc tiếp nguồn trước đó.');
   }catch(e:any){if(!task.signal.aborted){setProblem(e.message||'Không đọc được Hub.');setMessage('Không thay đổi bảng thu khi đọc lỗi.');}}

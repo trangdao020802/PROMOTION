@@ -29,6 +29,12 @@ export function upstreamCandidates(row,parentCt,parentHubFact=null,manual=[]){
  const forbidden=new Set([ctCode(row?.ct??row?.cells?.contractTotal),parent]);
  return unique([...fromLedger,...fromHub,...manual]).filter(ct=>!forbidden.has(ct));
 }
+export function isOriginalPaymentSource(row,parentCt,parentHubFact=null,manual=[]){
+ const ct=ctCode(parentCt),facts=parentHubFact?.hubContract;
+ if(!ct||facts?.ct!==ct||facts.payments?.state!=='read'||upstreamCandidates(row,ct,parentHubFact,manual).length)return false;
+ const outgoing=new Set((facts.movements?.rows??[]).filter(m=>m.direction==='out').map(m=>m.reference));
+ return facts.payments.rows.some(p=>p.complete===true&&p.amount>0&&p.completeDate&&!outgoing.has(p.code)&&p.typeId!=='10'&&!/transfer|moving|deposit to contract|^other$/i.test((p.method+' '+p.type).trim()));
+}
 export function originPaymentSummary(facts){
  const seen=new Set(),results=[];
  for(const fact of facts??[]){

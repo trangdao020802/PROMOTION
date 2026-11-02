@@ -135,20 +135,28 @@ test('Learner Payments is read by the exact source KidId, cached per learner, an
  const result=r.messages.filter(m=>m.type==='course').at(-1);assert.ok(result);assert.equal(result.projection.hubContract.relatedFinance[0].payments.rows[0].invoice.number,'0000514');
  assert.ok(!JSON.stringify(result).includes('PRIVATE-DO-NOT-COPY'));assert.equal(r.calls.length,0);assert.equal(r.context.location.href,origin+'/home');
 });
-test('a source E-Invoice is read through the existing GET service and its PDF result is bound to job and FKey',async()=>{
+test('a source E-Invoice uses its direct download link and binds the PDF result to job and FKey',async()=>{
  const bytes=new TextEncoder().encode('%PDF-qa-protocol-fixture');
  const r=mainRuntime({fetcher:async()=>({ok:true,headers:{get:()=> 'application/pdf'},body:{getReader:()=>{let done=false;return {read:async()=>done?{done:true}:(done=true,{done:false,value:bytes}),cancel:async()=>{}};}}})});
- const key='12345678-1234-4567-89ab-123456789abc',calls=[],root={...raw(),StudentCode:'QA-OTHER-PAYER',CenterId:3};
+ const key='12345678-1234-4567-89ab-123456789abc',calls=[],root={...raw(),StudentCode:'QA-OTHER-PAYER'};
  const service={getContractDetail:()=>Promise.resolve(root),getContractPayment:()=>Promise.resolve([{PaymentId:17,PaymentCode:'QA2506-PAY-000071',Amount:4725000,TotalAmount:4725000,IsComplete:true,CompleteDate:'2025-06-27',EInvoiceFKey:key,EInvoiceVersion:2}]),printEInvoice:params=>{calls.push(params);return Promise.resolve({PdfUrl:origin+'/Content/qa.pdf'});}};
  r.context.crypto={randomUUID:()=> 'qa-pdf-ticket'};r.context.document={querySelector:()=>({})};r.context.window.angular={element:()=>({injector:()=>({get:name=>name==='$rootScope'?{sessionInfo:{UserRoleId:51},$apply:()=>assert.fail('No model writes')}:service})})};
  r.send({type:'read-course',course:{...course,readFinance:true,readPolicy:false}});await drain();
- const packet=r.messages.find(m=>m.type==='invoice-pdf');assert.ok(packet);assert.equal(calls[0].key,key);assert.equal(calls[0].centerId,3);assert.equal(calls[0].version,2);
+ const packet=r.messages.find(m=>m.type==='invoice-pdf');assert.ok(packet);assert.equal(calls.length,0);assert.equal(r.calls[0].url,origin+'/Downloads/EInvoice/'+key+'.pdf');
  const invoice={number:'0000424',date:'2025-06-27',amount:4725000,source:'e-invoice-pdf',conflicts:[]};
  r.send({type:'invoice-pdf-result',ticket:packet.ticket,key:'wrong-key',invoice});await drain();assert.ok(!r.messages.some(m=>m.type==='course'));
  r.send({type:'invoice-pdf-result',ticket:packet.ticket,key,invoice});await drain();
  const result=r.messages.find(m=>m.type==='course');assert.equal(result.projection.hubContract.payments.rows[0].invoice.number,'0000424');
  assert.equal(result.projection.hubContract.payments.rows[0].invoice.date,'2025-06-27');assert.equal(result.projection.hubContract.payments.rows[0].invoice.amount,4725000);
  assert.equal(r.calls.length,1);assert.equal(r.calls[0].options.credentials,'same-origin');assert.ok(!JSON.stringify(result).includes('/Content/qa.pdf'));assert.ok(!JSON.stringify(result).includes('PRIVATE-DO-NOT-COPY'));assert.equal(r.context.location.href,origin+'/home');
+});
+test('an unavailable direct download retains the authenticated PrintEInvoice fallback when CenterId exists',async()=>{
+ const bytes=new TextEncoder().encode('%PDF-qa-protocol-fixture'),key='12345678-1234-4567-89ab-123456789abc',calls=[];
+ const r=mainRuntime({fetcher:async url=>url.includes('/Downloads/EInvoice/')?{ok:false}:{ok:true,headers:{get:()=> 'application/pdf'},body:{getReader:()=>{let done=false;return {read:async()=>done?{done:true}:(done=true,{done:false,value:bytes}),cancel:async()=>{}};}}}});
+ const service={getContractDetail:()=>Promise.resolve({...raw(),CenterId:3}),getContractPayment:()=>Promise.resolve([{PaymentId:17,PaymentCode:'QA2506-PAY-000071',Amount:4725000,TotalAmount:4725000,IsComplete:true,CompleteDate:'2025-06-27',EInvoiceFKey:key,EInvoiceVersion:2}]),printEInvoice:p=>{calls.push(p);return Promise.resolve({PdfUrl:origin+'/Content/qa.pdf'});}};
+ r.context.crypto={randomUUID:()=> 'qa-fallback-ticket'};r.context.document={querySelector:()=>({})};r.context.window.angular={element:()=>({injector:()=>({get:name=>name==='$rootScope'?{sessionInfo:{UserRoleId:51}}:service})})};
+ r.send({type:'read-course',course:{...course,readFinance:true,readPolicy:false}});await drain();const packet=r.messages.find(m=>m.type==='invoice-pdf');assert.ok(packet);assert.equal(calls.length,1);assert.equal(calls[0].key,key);assert.equal(calls[0].centerId,3);
+ r.send({type:'invoice-pdf-result',ticket:packet.ticket,key,invoice:{number:'0000301',date:'2025-06-27',amount:4725000,source:'e-invoice-pdf',conflicts:[]}});await drain();assert.ok(r.messages.some(m=>m.type==='course'));assert.equal(r.calls.length,2);assert.equal(r.context.location.href,origin+'/home');
 });
 test('a payment lookup timeout preserves course/discount input and ignores a late payment response',async()=>{
  const r=mainRuntime(),timers=[],doc={querySelector:()=>({})};let resolvePayment;

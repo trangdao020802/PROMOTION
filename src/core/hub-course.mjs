@@ -52,7 +52,7 @@ export function coursePageFromDocument(root,{staticDocument=false,readFinance=fa
   if(key==='discount'&&!normalizeHubDiscount(value,{wrappedOnly:label(node.textContent)==='discount'}))continue;
   if(text(value))pairs.push({label:node.textContent,value:key==='discount'?String(value).trim():text(value)});
  }
- return {titles:query(root,'h1,h2,h3,h4,h5,h6,[role="heading"],.page-title,.content-header,.breadcrumb').filter(visible).map(e=>e.textContent),pairs,...(readFinance?{financeTables:hubDisplayedTablesFromDocument(root)}:{})};
+ return {titles:query(root,'h1,h2,h3,h4,h5,h6,[role="heading"],.page-title,.content-header,.breadcrumb').filter(visible).map(e=>e.textContent),pairs,...(readFinance?{financeTables:hubDisplayedTablesFromDocument(root,{staticDocument})}:{})};
 }
 export function courseFailure(reason,fields=[]){
  const messages={identity:'Không xác minh được duy nhất mã CT trên tiêu đề hoặc trường Contract code / Contract No.',student:'Student ID trên Hub không khớp học viên đang đối chiếu.',conflict:'Có nhiều giá trị khác nhau cho cùng trường Course info.',empty:'Chưa tìm thấy trường Course info có nhãn đọc được trên Hub.',format:'Định dạng dữ liệu Course info chưa hợp lệ.',loading:'Hub vẫn đang tải Course info khi hết thời gian chờ.',navigation:'Hub đã chuyển khỏi URL chi tiết CT được yêu cầu.'};

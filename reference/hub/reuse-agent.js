@@ -6,9 +6,24 @@
  const visible=e=>!e.hidden&&e.getAttribute?.('aria-hidden')!=='true'&&(!e.getClientRects||e.getClientRects().length>0);
  const post=(j,type,extra={})=>window.postMessage({channel,type,id:j.id,...extra},P.HUB);
  function stop(j){
-  if(job!==j)return;job=null;clearInterval(j.timer);clearTimeout(j.routeTimer);clearTimeout(j.settleTimer);j.observer?.disconnect();j.abort?.abort();post(j,'stop');j.frame?.remove();
+  if(job!==j)return;job=null;clearInterval(j.timer);clearTimeout(j.routeTimer);clearTimeout(j.settleTimer);j.observer?.disconnect();j.abort?.abort();j.invoiceAbort?.abort();post(j,'stop');j.frame?.remove();
  }
  function finish(j,result){if(job!==j)return;stop(j);void chrome.runtime.sendMessage({...result,type:'agent-complete',id:j.id,agentKey}).catch(()=>{});}
+ function finishCourse(j,payload){
+  if(job!==j||j.finishing)return;
+  if(!j.course?.readFinance){finish(j,{payload});return;}
+  j.finishing=true;clearTimeout(j.routeTimer);clearTimeout(j.settleTimer);j.observer?.disconnect();
+  j.invoiceAbort=new AbortController();
+  void (async()=>{let reader;
+   const hubContract=await N.readDirectInvoices(payload.hubContract,{fetch:typeof fetch==='function'?fetch:null,signal:j.invoiceAbort.signal,isCurrent:()=>job===j,
+    readPDF:async(bytes,options)=>{reader??=await import(chrome.runtime.getURL('invoice-pdf.mjs'));return reader.readInvoicePDF(bytes,options);}});
+   payload={...payload,hubContract};
+   if(job===j){
+    try{if(j.frame?.contentDocument&&j.frame.contentWindow.location.href===j.course.url){const current=C.parseCoursePage({...C.coursePageFromDocument(j.frame.contentDocument,{readFinance:true}),url:j.course.url},j.course);if(current.payload?.hubContract)payload={...payload,hubContract:N.mergeHubFinanceFacts(payload.hubContract,current.payload.hubContract)};}}catch{}
+    const validated=C.coursePayload(payload,j.course);finish(j,validated?{payload:validated}:C.courseFailure('format'));
+   }
+  })();
+ }
  const failure=(j,code,message)=>finish(j,{error:true,code,message});
  function discover(root,url){
   const fields=[];
@@ -37,7 +52,7 @@
    if(root.querySelector('input[type="password"]')){failure(j,'hub_login','Đăng nhập trong tab Hub đang mở rồi bấm lấy tiếp.');return;}
    if(j.course){const parsed=C.parseCoursePage({...C.coursePageFromDocument(root,{staticDocument:true,readFinance:j.course.readFinance}),url},j.course),result=j.projection?N.parseContractDetailProjection(j.projection,j.course,parsed.payload):parsed;
     if(result.error&&['student','conflict'].includes(result.error)){finish(j,C.courseFailure(result.error));return;}
-    if(result.payload&&C.courseReadComplete(result.payload)){finish(j,{payload:result.payload});return;}
+    if(result.payload&&C.courseReadComplete(result.payload)){finishCourse(j,result.payload);return;}
    }else{
     const anchors=[...root.querySelectorAll('table tbody a[href]')].map(a=>({text:a.textContent.trim(),href:new URL(a.getAttribute('href'),url).href})),links=[];
     for(const ct of j.codes){const result=I.selectIndexCandidate(anchors,ct);if(result.status==='conflict'){failure(j,'mismatch','Mã CT / DEP khớp nhiều ID; chưa lưu link.');return;}if(result.status==='found')links.push({ct,url:result.url});}
@@ -63,7 +78,7 @@
   return network?.payload?network:parsed;
  }
  function inspect(j){
-  if(job!==j)return;
+  if(job!==j||j.finishing)return;
   const expired=Date.now()>=j.deadline;
   if(!j.frame){if(expired){if(j.course)finish(j,C.courseFailure('loading'));else failure(j,'hub_timeout','Hub chưa trả dữ liệu. Bấm lấy tiếp để đọc CT còn thiếu.');}return;}
   let root,url;
@@ -82,7 +97,7 @@
    const result=courseResult(j,root,url),signature=JSON.stringify(result);
    if(signature!==j.signature){j.signature=signature;j.stableAt=Date.now();clearTimeout(j.settleTimer);j.settleTimer=setTimeout(()=>inspect(j),350);}
    const complete=result.payload&&C.courseReadComplete(result.payload);
-   if(result.payload&&complete||expired){finish(j,result.payload?{payload:result.payload}:C.courseFailure(result.error,result.fields));return;}
+   if(result.payload&&complete||expired){if(result.payload)finishCourse(j,result.payload);else finish(j,C.courseFailure(result.error,result.fields));return;}
   }else{
    if(j.codes[0].includes('-DEP-')&&!j.fields){const fields=discover(root,url);if(fields&&!I.indexURLMatches(url,j.codes,j.id,fields)){j.fields=fields;j.loaded=false;j.frame.src=I.indexURL(j.codes,j.id,fields);return;}}
    if(!I.indexURLMatches(url,j.codes,j.id,j.fields)){failure(j,'index_navigation','Hub không giữ đúng tháng / loại hồ sơ cần đọc; chưa lưu link.');return;}
@@ -119,7 +134,7 @@
    if(m.projection.ct&&m.projection.ct!==j.course.ct||m.projection.contractId&&m.projection.contractId!==j.course.url.replace(/\/$/,'').split('/').pop()){finish(j,C.courseFailure('identity'));return;}
    j.projection=m.projection;
    if(child&&typeof m.route==='string'&&m.route===new URL(m.projection.source).pathname)post(j,'learn-route',{course:j.course,source:N.courseDetailEndpoint(m.projection.source,j.course.url)});
-   if(result.payload&&C.courseReadComplete(result.payload)){finish(j,{payload:result.payload});return;}
+   if(result.payload&&C.courseReadComplete(result.payload)){finishCourse(j,result.payload);return;}
    clearTimeout(j.routeTimer);readPage(j);inspect(j);
   }
   if(m.type==='index'&&child&&!j.course&&Array.isArray(m.pairs)&&m.pairs.length<=I.INDEX_LIMIT&&Array.isArray(m.conflicts)&&m.conflicts.length<=I.INDEX_LIMIT){

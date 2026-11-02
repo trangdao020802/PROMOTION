@@ -1,3 +1,11 @@
+## Bản 1.6.20 · CT gốc và link PDF trực tiếp
+
+CT đã có Payment thu gốc và không có CT/DEP chuyển vào được dừng truy ngược; không hiện ô bắt nhập thêm CT nguồn. Dòng Moving-out (kể cả loại 8 trong API) không còn là Payment thu. Bộ đọc tách từng bảng/đầu mục, xử lý cột gộp và lấy mã E-Invoice từ đúng ô, link PDF hoặc lệnh in.
+
+Đọc trực tiếp `https://hub24.apollo.vn:7777/Downloads/EInvoice/<EInvoiceFKey>.pdf` trong nền trước. Luồng đọc từ DOM cũng đọc PDF, không cần CenterId/controller. Nếu đường dẫn trực tiếp chưa trả PDF, luồng API giữ cách dùng PrintEInvoice khi có ngữ cảnh hợp lệ. E-Invoice trong hồ sơ là link PDF có thể mở thủ công.
+
+Dữ liệu cũ đọc thiếu hoặc dùng bộ đọc trước không được coi là hoàn tất; tự thử đọc lại một lượt và giữ phần đã lưu khi lỗi. Chỉ báo đã đọc đủ khi khoản thu, E-Invoice và Moving cần thiết đã được đọc.
+
 # Đọc số hóa đơn từ Hub · cầu nối 1.6.19
 
 Trong chi tiết hồ sơ, mở **Liên kết CT / DEP trên Hub**, gắn link nguồn và bấm **Đọc lại hóa đơn**. Cập nhật tiện ích lên 1.6.19 rồi tải lại Promotion và tab Hub đang đăng nhập trước khi đọc.

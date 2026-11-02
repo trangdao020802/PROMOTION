@@ -1,3 +1,7 @@
+## Cập nhật 1.6.20 · Dừng đúng CT gốc, đọc PDF E-Invoice trực tiếp
+
+Ẩn khối nhập thêm nguồn ở CT có khoản thu gốc và không có Moving-in; tách Moving-out khỏi Payment. Đọc link `/Downloads/EInvoice/<FKey>.pdf` trong nền từ cả API và DOM, không bắt buộc CenterId; đọc lại bản lưu thiếu, giữ dữ liệu đã có. Cập nhật cầu nối 1.6.20 rồi tải lại Promotion và tab Hub. [Chi tiết](docs/invoice-evidence.md).
+
 ## Cập nhật 1.6.19 · Số hóa đơn và Learner Payments
 
 Đọc lịch sử Payments theo Lead/Kid của CT, truy CT/DEP nguồn khác học sinh và đọc số hóa đơn, ngày phát hành, tổng tiền từ E-Invoice PDF trong nền. Giữ riêng UUID, không cộng lại transfer; dữ liệu đã lưu được giữ khi đọc thiếu. Cập nhật cầu nối 1.6.19, tải lại Promotion và tab Hub. Xem [hướng dẫn chứng từ](docs/invoice-evidence.md).

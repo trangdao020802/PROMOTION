@@ -79,7 +79,7 @@
   return String.fromCharCode(...bytes.slice(0,5))==='%PDF-'?bytes.buffer:null;
  }
  async function addInvoicePDF(projection,root,client,request,signal,jobId){
-  if(!request.readFinance||!projection?.hubContract||!client?.invoice||!root?.CenterId||signal.aborted)return;
+  if(!request.readFinance||!projection?.hubContract||signal.aborted)return;
   const started=Date.now();let tried=0;
   for(const row of projection.hubContract.payments.rows){
    if(signal.aborted||Date.now()-started>5000||tried>=4)break;
@@ -87,9 +87,13 @@
    if(!key||row.complete!==true||row.amount<=0||row.invoice?.date&&row.invoice?.amount!==null)continue;
    tried++;const ctrl=new AbortController(),stop=()=>ctrl.abort(),timer=setTimeout(stop,4000);signal.addEventListener('abort',stop,{once:true});
    try{
-    const result=await bounded(client.invoice({key,centerId:root.CenterId,...(row.eInvoiceVersion?{version:row.eInvoiceVersion}:{})}),1300);
-    if(!result||result.Error||typeof result.PdfUrl!=='string'||ctrl.signal.aborted)continue;
-    const bytes=await invoiceBytes(result.PdfUrl,ctrl.signal);if(!bytes)continue;
+    let bytes=null;
+    try{bytes=await invoiceBytes(N.eInvoicePDFURL(key),ctrl.signal);}catch{}
+    if(!bytes&&client?.invoice&&root?.CenterId&&!ctrl.signal.aborted){
+     const result=await bounded(client.invoice({key,centerId:root.CenterId,...(row.eInvoiceVersion?{version:row.eInvoiceVersion}:{})}),1300);
+     if(result&&!result.Error&&typeof result.PdfUrl==='string')bytes=await invoiceBytes(result.PdfUrl,ctrl.signal);
+    }
+    if(!bytes||ctrl.signal.aborted)continue;
     const ticket=crypto.randomUUID();
     const parsed=new Promise(resolve=>{pdfPending.set(ticket,{jobId,key,resolve});});
     publish({type:'invoice-pdf',id:jobId,ct:request.ct,ticket,key,bytes});
