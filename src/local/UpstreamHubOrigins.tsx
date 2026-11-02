@@ -31,7 +31,7 @@ function OriginNode({row,ct,parentCt,datasetId,hubLinks,onHubSaved,onRead,onFact
    if(current.fact?.url===nextLink)setFact(current.fact);
    const scope=[datasetId,masterCt,ct,student,nextLink].join('|');
    if(!force&&current.fact?.url===nextLink&&(financeReadsComplete(current.fact.hubContract)||attempted.current.has(scope))){
-    setFact(current.fact);setStatus(financeReadsComplete(current.fact.hubContract)?'Đã đọc đủ chứng từ của CT này.':'Đã lưu phần đọc được; còn thiếu hóa đơn hoặc Moving. Bấm Đọc lại hóa đơn để tiếp tục.');return;
+    setFact(current.fact);setStatus(financeReadsComplete(current.fact.hubContract)?'Đã đọc đủ chứng từ của CT này.':'Đã giữ phần chứng từ đã đọc. Xem kết quả phân bổ và căn cứ còn thiếu bên dưới.');return;
    }
    const payload=await onRead({ct,student,url:nextLink,readFinance:true,refreshFinance:force},(v:string)=>setStatus(v),ctrl.signal);
    if(ctrl.signal.aborted)return;
@@ -63,7 +63,8 @@ function OriginNode({row,ct,parentCt,datasetId,hubLinks,onHubSaved,onRead,onFact
  };
  const summary=fact?originPaymentSummary([fact]):null;
  const verified=(row?.reconciliation?.hubSupplement?.receipts??[]).filter((r:any)=>r.origin===ct);
- const counted=(r:any)=>verified.some((item:any)=>item.paymentCode===r.paymentCode);
+ const allocation=(r:any)=>verified.find((item:any)=>item.paymentCode===r.paymentCode);
+ const pending=(row?.reconciliation?.hubSupplement?.pending??[]).filter((p:any)=>p.origin===ct||p.from===ct&&p.to===parentCt);
  const audit=fact?compareChildFacts(fact,row):null;
  const related=fact?.hubContract?.movements?.rows?.some((m:any)=>m.from===ct&&m.to===parentCt);
  const upgraded=upgradeEdges([fact?.hubContract,row.hubContract,...(row.hubContract?.relatedFinance??[])]).some((e:any)=>e.from===ct&&e.to===parentCt);
@@ -82,9 +83,10 @@ function OriginNode({row,ct,parentCt,datasetId,hubLinks,onHubSaved,onRead,onFact
    {summary?.payments.map((p:any,i:number)=><p key={i}>
     <strong>{p.paymentCode}</strong> · {V(p.amount)} · {p.complete?'Đã thanh toán trên Hub':'Chưa xác minh Paid'}.
     <InvoiceEvidence payment={fact.hubContract.payments.rows[i]}/> ·
-    {counted(p)?'Đã phân bổ có căn cứ trong tổng thu':audit?.payments[i]?.status==='matched'?'Đã có trong PaymentList (không cộng lại)':'CHECK · chờ E-Invoice và đường Transfer đủ căn cứ'}
+    {allocation(p)?.allocated>0?'Đã phân bổ '+V(allocation(p).allocated)+' vào tổng thu CT tổng':allocation(p)?'Đã xác minh nguồn tiền về CT tổng; chưa tách riêng số phân bổ':audit?.payments[i]?.status==='matched'?'Có trong PaymentList; chưa xác nhận phân bổ vào CT tổng':'CHECK · chưa có phân bổ từ hóa đơn gốc tới CT tổng'}
    </p>)}
    <p><strong>Chặng {ct} → {parentCt}:</strong> {upgraded?'Có liên kết Upgrade trên Hub':related?'Có Moving-out trên Hub':matchingTransfer?'Có trong Transfer đã nhập':'CHECK · chưa chứng minh được mối liên kết Transfer / Upgrade'}.</p>
+   {pending.length>0&&<ul className="evidence-warnings">{[...new Set<string>(pending.map((p:any)=>p.reason))].map(reason=><li key={reason}>{reason}</li>)}</ul>}
    {!upgraded&&fact.hubContract.movements?.state!=='read'&&<p className="child-hub-warning">Hub chưa trả Moving-out. Không tự tính tiền thu cho Contract tổng.</p>}
    {fact.hubContract.payments.state==='read'&&summary?.hubPaid===0&&<p className="child-hub-warning">CT này cũng chưa có khoản thu. Kiểm tra CT nguồn trước đó.</p>}
    {depth<12&&<UpstreamHubOrigins row={row} parentCt={ct} parentFact={fact} datasetId={datasetId} hubLinks={hubLinks} onHubSaved={onHubSaved} onRead={onRead} onFactsSaved={onFactsSaved} disabled={disabled} depth={depth+1} path={[...path,ct]} />}

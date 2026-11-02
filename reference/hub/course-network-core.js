@@ -28,6 +28,7 @@ var PromotionHubCourseNetwork = (() => {
     hubDisplayedTablesFromDocument: () => hubDisplayedTablesFromDocument,
     invoiceReadsComplete: () => invoiceReadsComplete,
     mergeDisplayedHubContract: () => mergeDisplayedHubContract,
+    mergeHubContractDate: () => mergeHubContractDate,
     mergeHubFinanceFacts: () => mergeHubFinanceFacts,
     mergeLearnerFinance: () => mergeLearnerFinance,
     mergePaymentInvoice: () => mergePaymentInvoice,
@@ -676,6 +677,11 @@ var PromotionHubCourseNetwork = (() => {
   function projectHubLearner(root) {
     const leadId = id3(root?.LeadId), kidId = id3(root?.KidId);
     return leadId && kidId ? { leadId, kidId, url: "https://hub24.apollo.vn:7777/lead/detail/" + leadId + "?s=" + kidId } : null;
+  }
+  function mergeHubContractDate(facts, info) {
+    if (!validateHubContract(facts) || facts.contractDate || !plain2(info) || id3(info.ContractId) !== facts.contractId || info.ContractNo != null && text3(info.ContractNo).toUpperCase() !== facts.ct) return facts;
+    const contractDate = upgradeDate(info.CreatedDate);
+    return contractDate ? { ...facts, contractDate } : facts;
   }
   function projectHubContract(root, { payments = null, paymentState = "pending", capturedAt = (/* @__PURE__ */ new Date()).toISOString() } = {}) {
     const result = { schema: HUB_CONTRACT_SCHEMA, ct: text3(root?.ContractNo ?? root?.ContractCode ?? root?.DepositNo ?? root?.DepositCode).toUpperCase(), contractId: id3(root?.ContractId ?? root?.DepositId ?? root?.Id), capturedAt, discounts: contractDiscountFacts(root), payments: { state: paymentState === "pending" && (projectContractPayments(root, id3(root?.ContractId ?? root?.DepositId ?? root?.Id))?.length ?? 0) > 0 ? "read" : paymentState, rows: payments ?? ((projectContractPayments(root, id3(root?.ContractId ?? root?.DepositId ?? root?.Id))?.length ?? 0) > 0 ? projectContractPayments(root, id3(root?.ContractId ?? root?.DepositId ?? root?.Id)) : []) }, ...projectHubMovements(root) !== null ? { movements: { state: "read", rows: projectHubMovements(root) } } : { movements: { state: "pending", rows: [] } } };

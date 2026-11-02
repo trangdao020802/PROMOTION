@@ -10,6 +10,7 @@ import {financeBundle} from './hub-finance-bundle.mjs';
 import {paymentInvoiceNumber,eInvoiceKey} from './hub-invoice.mjs';
 import {upgradeEdges} from './hub-upgrade.mjs';
 import {upgradeFunding} from './hub-upgrade-funding.mjs';
+import {validateHubPolicy} from './hub-policy.mjs';
 const day=value=>typeof value==='number'?value:(Date.parse(String(value)+'T00:00:00Z')-Date.UTC(1899,11,30))/86400000;
 const positive=value=>typeof value==='number'&&Number.isFinite(value)&&value>0;
 const signature=m=>JSON.stringify([m.from,m.to,Math.floor(m.date)]);
@@ -18,7 +19,14 @@ export function hubFundingSources(input,{datasetId,facts=[],links=[]}={}){
  const urls=new Map(links.map(l=>[l.ct,l.url]));
  const parents=facts.filter(f=>f.datasetId===datasetId&&code(f.masterCt)?.includes('-CT-')&&f.student&&code(f.ct)&&
   f.id===childFactKey(f)&&urls.get(f.ct)===f.url&&hubDocumentId(f.url,f.ct)===f.hubContract?.contractId&&
-  validateHubContract(f.hubContract)&&f.hubContract.ct===f.ct);
+  validateHubContract(f.hubContract)&&f.hubContract.ct===f.ct).map(f=>{
+   // GetContractInfo supplies CreatedDate for the policy read even when
+   // GetContractDetail / displayed financial tables omit it. Reuse only the
+   // validated date of this exact document; never its payment or invoice date.
+   const p=f.hubPolicy;
+   return !f.hubContract.contractDate&&validateHubPolicy(p)&&p.ct===f.ct&&String(p.contractId)===f.hubContract.contractId
+    ?{...f,hubContract:{...f.hubContract,contractDate:p.createdDate}}:f;
+  });
  const valid=[...parents];
  for(const parent of parents)for(const doc of financeBundle(parent.hubContract)){
   if(urls.has(doc.ct)&&urls.get(doc.ct)!==doc.url)continue;
@@ -86,7 +94,8 @@ export function hubFundingSources(input,{datasetId,facts=[],links=[]}={}){
  }
  const combined={...input,cashSources:[...(input.cashSources??[]),{rows:addedCash}],transferSources:[...transfers,{rows:addedMoves}]};
  const allocation=upgradeFunding(combined,upgrades);addedMoves.push(...allocation.moves);pending.push(...allocation.pending);
- return {input:combined,cash:addedCash,moves:addedMoves,pending,meta,changed:!!(addedCash.length||addedMoves.length||blocked.size||pending.length)};
+ const observedPayments=unique(valid.flatMap(f=>f.hubContract.payments.rows.map(p=>f.ct+'|'+p.code)));
+ return {input:combined,cash:addedCash,moves:addedMoves,pending,meta,observedPayments,changed:!!(addedCash.length||addedMoves.length||blocked.size||pending.length)};
 }
 export function attachHubFunding(model,{datasetId,facts,links}){
  if(!model.input)return;
@@ -96,7 +105,7 @@ export function attachHubFunding(model,{datasetId,facts,links}){
  model.extensions.accounts=buildAccounts(extra.input,{contractSummaries:true});
  delete model.contractSettlements;
  const refreshed=buildContractGroups(model,extra.input,{paymentTrace:true});
- const codes=new Set(extra.cash.map(r=>r.payment)),groups=[];
+ const observed=new Set(extra.observedPayments),groups=[];
  for(const fresh of refreshed){
   const old=prior.get(fresh.id);
   const group=old?{...old,...fresh,cells:{...fresh.cells,...Object.fromEntries(['T','U','V','X'].map(k=>[k,old.cells[k]]))},export:old.export}:fresh;
@@ -106,7 +115,7 @@ export function attachHubFunding(model,{datasetId,facts,links}){
   const codesInPath=new Set([group.ct,...(group.account.movementHistory??[]).flatMap(m=>[m.from,m.to])]);
   group.warnings=unique([...group.warnings,...extra.pending.filter(p=>p.from&&(codesInPath.has(p.from)||codesInPath.has(p.to))||p.origin&&codesInPath.has(p.origin)).map(p=>p.reason)]);
   const allocations=paymentAllocations({...group,cells:{...group.cells,contractTotal:group.ct},reconciliation:group.account});
-  const receipts=allocations.invoices.filter(r=>codes.has(r.receipt.payment)).map(r=>({origin:r.receipt.contract,paymentCode:r.receipt.payment,invoiceRef:r.receipt.vat,paid:r.receipt.amount,allocated:r.amount,
+  const receipts=allocations.invoices.filter(r=>observed.has(r.receipt.contract+'|'+r.receipt.payment)).map(r=>({origin:r.receipt.contract,paymentCode:r.receipt.payment,invoiceRef:r.receipt.vat,paid:r.receipt.amount,allocated:r.amount,
    completeDate:new Date(Date.UTC(1899,11,30)+r.receipt.date*86400000).toISOString().slice(0,10),path:r.paths[0]??[]}));
   group.account.hubSupplement={ledger:true,amount:group.account.net-base,receipts,pending:extra.pending,status:'hub-backed'};
  }

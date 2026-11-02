@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {projectHubContract,validateHubContract} from '../src/core/hub-contract.mjs';
+import {projectHubContract,validateHubContract,mergeHubContractDate} from '../src/core/hub-contract.mjs';
 import {parseCoursePage} from '../src/core/hub-course.mjs';
 import {upgradeLinksFromDocument,upgradeEdges,upgradeSourceMissing} from '../src/core/hub-upgrade.mjs';
 import {readUpgradeFinance} from '../src/core/hub-upgrade-reader.mjs';
@@ -14,21 +14,32 @@ import {policyData} from '../scripts/policy-data.mjs';
 import {parseDate} from '../src/core/source-parser.mjs';
 import {build} from 'esbuild';
 import vm from 'node:vm';
+import {hubFixture} from './helpers/hub-policy-fixture.mjs';
 const master='QA2610-CT-000902',origin='QA2609-CT-000901',student='QA-UPGRADE',datasetId='qa-upgrade';
 const url=id=>'https://hub24.apollo.vn:7777/contract/detail/'+id;
 const payment=(id,ct,amount,date)=>({PaymentId:id,ContractId:ct,PaymentCode:'QA-PAY-'+id,Amount:amount,RemainAmount:0,TotalAmount:amount,IsComplete:true,PaymentTypeId:2,PaymentTypeName:'Payment',PaymentMethodTypeName:'Online Payments',CompleteDate:date,InvoiceNo:'0000'+id,InvoiceDate:date,InvoiceAmount:amount});
 const masterFacts=()=>projectHubContract({ContractId:902,ContractNo:master,CreatedDate:'2026-10-20',UpgradeFromContractId:901,ListCourseInfo:[],ListPayment:[payment(902,902,29100000,'2026-10-20')],ListMovingIn:[],ListMovingOut:[]});
 const originFacts=()=>projectHubContract({ContractId:901,ContractNo:origin,CreatedDate:'2026-09-08',UpgradeToContractId:902,UpgradeToContractNo:master,ListCourseInfo:[],ListPayment:[payment(901,901,9600000,'2026-09-08')],ListMovingIn:[],ListMovingOut:[]});
 async function savedFacts(){const f=await readUpgradeFinance(masterFacts(),async link=>{assert.equal(link.id,'901');return originFacts();});assert.ok(validateHubContract(f));return f;}
-function fixture({history=false}={}){
+function fixture({history=false,bundleOnly=false}={}){
  const c={B:'QA CENTER',C:'QA1',D:'QA-PAY-902',E:master,R:student,S:'HỒ SƠ KIỂM THỬ',O:parseDate('2026-10-20'),P:'0000902',I:'Paid',F:'Payment',G:'New',X:'ATLS',Z:'ATLS - New Price 2026 - Layer 1',AA:'3 hrs/week',AB:'12 months',AO:'0',AQ:'0',AH:'Online Payments',AC:38700000,AD:0,AE:0,AF:29100000,AG:150};
  const records=[{sourceKey:'p',sourceRow:2,cells:c}];
  if(history)records.push({sourceKey:'p',sourceRow:3,cells:{...c,D:'QA-PAY-901',E:origin,O:parseDate('2026-09-08'),P:'0000901',AF:9600000}});
  const bundle={kind:'source-bundle-v1',scope:{from:'2026-10-01',to:'2026-10-31',center:''},cutoff:parseDate('2026-10-31'),records,cash:records,transfers:[],exports:[{sourceKey:'e',sourceRow:2,ct:master,student,target:38700000,paid:38700000,courseFee:c.Z,hoursPerWeek:c.AA,package:c.AB,totalHours:150,contractType:'New',center:'QA1'}],sources:['payment','export','transfer'].map((role,i)=>({key:['p','e','t'][i],role,fileIndex:i,fileName:'QA-'+role+'.xlsx',sheetName:'QA',headerRow:1,rowCount:records.length}))};
+ if(bundleOnly)return bundle;
  const model=buildModel(bundle,policyData());model.dataset={id:datasetId};return model;
 }
 function context(f){return {datasetId,facts:[{id:childFactKey({datasetId,masterCt:master,ct:master,student}),datasetId,masterCt:master,ct:master,student,url:url(902),hubContract:f}],links:[{ct:master,url:url(902)}]};}
 const calculated=model=>new AuditEngine(model).calculate({id:'CT::'+master});
+test('Upgrade metadata takes only CreatedDate from the exact receiving CT, preserving existing facts',()=>{
+ const f=masterFacts();f.contractDate=null;
+ const info={ContractId:902,ContractNo:master,CreatedDate:'2026-10-20T10:00:00',FinalAmount:1,Phone:'PRIVATE-DO-NOT-COPY'};
+ const result=mergeHubContractDate(f,info);
+ assert.equal(result.contractDate,'2026-10-20');assert.ok(validateHubContract(result));assert.equal(result.payments,f.payments);
+ assert.ok(!JSON.stringify(result).includes('PRIVATE-DO-NOT-COPY'));assert.equal(f.contractDate,null);
+ for(const patch of [{ContractId:901},{ContractNo:origin},{CreatedDate:'2026-02-30'},{CreatedDate:null}])assert.equal(mergeHubContractDate(f,{...info,...patch}),f);
+ assert.equal(mergeHubContractDate(masterFacts(),info).contractDate,'2026-10-20');
+});
 test('Upgrade from ID reads the original contract, binds its CT, and discovers it without Moving-in/out',async()=>{
  const initial=masterFacts();assert.equal(initial.upgrades[0].ct,null);assert.ok(upgradeSourceMissing(initial));
  const f=await savedFacts();assert.equal(f.upgrades[0].ct,origin);assert.equal(f.relatedFinance.length,1);assert.equal(upgradeSourceMissing(f),false);
@@ -43,12 +54,61 @@ test('a 9.6m original Paid invoice funds the upgraded master once, alongside 29.
  assert.equal(after.reconciliation.transferIn,9600000);assert.equal(after.reconciliation.movementHistory[0].kind,'Upgrade');
  assert.equal(after.receipts.find(r=>r.contract===origin).vat,'0000901');
  attachHubFunding(model,context(f));assert.equal(calculated(model).cells.W,38700000);
+ assert.equal(calculated(model).reconciliation.hubSupplement.receipts[0].allocated,9600000);
+});
+test('separately saved Upgrade evidence uses the receiving CT date already read with its Hub policy',()=>{
+ const f=masterFacts();f.contractDate=null;f.upgrades[0].ct=origin;f.upgrades[0].date=null;
+ const ctx=context(f),policy=hubFixture({ct:master,contractId:902,offers:false}).policy;
+ ctx.facts[0].hubPolicy=policy;
+ const child={datasetId,masterCt:master,ct:origin,student,url:url(901),hubContract:originFacts()};child.id=childFactKey(child);
+ ctx.facts.push(child);ctx.links.push({ct:origin,url:url(901)});
+ const model=fixture();attachHubFunding(model,ctx);const after=calculated(model);
+ assert.equal(after.cells.W,38700000);assert.equal(after.cells.AC,0);
+ assert.equal(after.reconciliation.transferIn,9600000);
+ assert.equal(after.reconciliation.movementHistory[0].date,parseDate(policy.createdDate));
+ assert.equal(after.reconciliation.hubSupplement.receipts[0].allocated,9600000);
+ assert.equal(f.contractDate,null,'calculation must not overwrite the saved read');
+ attachHubFunding(model,ctx);assert.equal(calculated(model).cells.W,38700000);
+});
+test('an absent, invalid or differently bound policy cannot supply an Upgrade date',()=>{
+ for(const patch of [null,{ct:'QA2610-CT-000999'},{contractId:999},{createdDate:'2026-11-20'},{createdDate:'invalid'}]){
+  const f=masterFacts();f.contractDate=null;f.upgrades[0].ct=origin;f.upgrades[0].date=null;
+  const ctx=context(f),child={datasetId,masterCt:master,ct:origin,student,url:url(901),hubContract:originFacts()};child.id=childFactKey(child);
+  if(patch)ctx.facts[0].hubPolicy={...hubFixture({ct:master,contractId:902,offers:false}).policy,...patch};
+  ctx.facts.push(child);ctx.links.push({ct:origin,url:url(901)});
+  const model=fixture();attachHubFunding(model,ctx);const after=calculated(model);
+  assert.equal(after.cells.W,29100000);assert.ok(after.reconciliation.hubSupplement.pending.some(p=>p.from===origin&&p.to===master));
+ }
+});
+test('loading saved browser sources passes the receiving policy date into the funding ledger',async()=>{
+ const f=masterFacts();f.contractDate=null;f.upgrades[0].ct=origin;f.upgrades[0].date=null;
+ const child={datasetId,masterCt:master,ct:origin,student,url:url(901),hubContract:originFacts()};child.id=childFactKey(child);
+ const saved={id:master+'|'+student,ct:master,student,url:url(902),hubContract:f,hubPolicy:hubFixture({ct:master,contractId:902,offers:false}).policy,courseFee:'ATLS - New Price 2026 - Layer 1',hoursPerWeek:'3 hrs/week',package:'12 months',giftcode:'0',discount:'0'};
+ const state={datasets:[{id:datasetId,bundle:fixture({bundleOnly:true})}],settings:[child],links:[{ct:master,url:url(902)},{ct:origin,url:url(901)}],courseSources:[saved]};
+ const compiled=await build({entryPoints:[new URL('../src/local/api.mjs',import.meta.url).pathname],bundle:true,write:false,format:'cjs',platform:'node',target:'es2022',plugins:[{name:'qa-browser-storage',setup(b){
+  b.onResolve({filter:/db\.mjs$/},()=>({path:'db',namespace:'qa'}));
+  b.onLoad({filter:/.*/,namespace:'qa'},()=>({contents:'export const all=async name=>qa.stores[name]??[];export const get=async(name,id)=>(qa.stores[name]??[]).find(x=>x.id===id);export const put=async()=>{};export const versioned=async()=>{};export const activatePolicy=async()=>{};',loader:'js'}));
+ }}]});
+ const scope={qa:{stores:state},module:{exports:{}},console,URL,URLSearchParams,Date,crypto,TextEncoder,TextDecoder,Response,Blob,setTimeout,clearTimeout,fetch:async()=>new Response(JSON.stringify(policyData()))};
+ // Run the real loadWorkbook/buildModel path with synthetic saved sources.
+ vm.runInContext(compiled.outputFiles[0].text,vm.createContext(scope));
+ const loaded=await scope.module.exports.loadWorkbook(datasetId),row=calculated(loaded);
+ assert.equal(row.cells.W,38700000);assert.equal(row.reconciliation.transferIn,9600000);
+ assert.equal(saved.hubContract.contractDate,null);
 });
 test('historical PaymentList and a source course row do not create duplicate money or a second active course',async()=>{
  const model=fixture({history:true}),f=await savedFacts();assert.equal(model.contractGroups.length,2);
  attachHubFunding(model,context(f));assert.equal(calculated(model).cells.W,38700000);
  assert.equal(model.contractGroups.length,1);assert.ok(model.contractGroups[0].sourceContracts.includes(origin));
  assert.equal(model.contractGroups[0].receipts.length,2);
+ assert.equal(calculated(model).reconciliation.hubSupplement.receipts[0].allocated,9600000);
+});
+test('Upgrade only allocates the remaining invoice balance after other recorded outflows',async()=>{
+ for(const out of [3000000,9600000]){
+  const model=fixture(),f=await savedFacts();
+  model.input.transferSources.push({rows:[{type:'Transfer',from:origin,to:'QA2610-CT-000904',date:parseDate('2026-10-25'),out,amount:out,fromStudent:student,toStudent:student,ref:{file:'QA Transfer'}}]});
+  attachHubFunding(model,context(f));assert.equal(calculated(model).cells.W,38700000-out);
+ }
 });
 test('an existing Transfer path is authoritative and is never duplicated by its Upgrade link',async()=>{
  const model=fixture(),f=await savedFacts();model.input.transferSources.push({rows:[{type:'Transfer',from:origin,to:master,date:parseDate('2026-10-20'),out:9600000,amount:9600000,fromStudent:student,toStudent:student,ref:{file:'QA Transfer'}}]});

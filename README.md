@@ -1,3 +1,7 @@
+## Cộng tiền Upgrade từ chứng từ đã lưu · v40
+
+Khi GetContractDetail thiếu ngày, cầu nối 1.6.22 đọc riêng ngày tạo CT nhận từ dịch vụ GetContractInfoForUpdate đang có của Hub, kể cả khi tắt lấy chính sách giá. Sổ tiền cũng tận dụng ngày từ chính sách đã lưu sau khi khớp mã CT, ID và link. Hóa đơn Paid gốc được phân bổ vào CT tổng một lần, kể cả đã có PaymentList lịch sử; khoản đã chuyển nơi khác không được dùng lại. Chi tiết hồ sơ hiển thị số tiền thực sự được phân bổ và lý do còn CHECK. Cập nhật cầu nối, tải lại Hub/Promotion và đọc lại CT tổng nếu thiếu ngày; dữ liệu đã đủ thì bấm **Tính lại chứng từ đã lưu**. [Căn cứ và cách tính](docs/hub-upgrade-funding.md).
+
 ## Kiểm tra chính sách cập nhật và giờ tặng · v39
 
 Chặn dòng giá có khóa Package khác số tháng/tuần, gồm cả bản cũ đã lưu; không dùng gói 18 tháng dưới khóa 36. Discount trùng mức nền/trộn kỳ chờ sửa nhãn, số tháng tặng sai chờ tính giờ. Gói 36 chia đôi Q4 tặng đúng 2 tuần trả thẳng theo B25/G111; Bảng giá, RULE, CALC và mẫu XLSX dùng chung đơn vị. Trường `straightWeeks` và ô Tuần tặng trả thẳng cho phép cập nhật chính sách mới ngay trên web. [Cách cập nhật](docs/policy-updates.md) · [Giờ tặng](docs/extra-hours.md).

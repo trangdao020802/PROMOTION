@@ -2,7 +2,7 @@ import {courseRequest,coursePayload,COURSE_FIELDS} from './hub-course.mjs';
 import {normalizeHubDiscount} from './hub-discount.mjs';
 import {contractRoot,projectHubContract,mergeHubFinanceFacts} from './hub-contract.mjs';
 import {hubDocumentId} from './hub-document.mjs';
-export {contractRoot,projectContractPayments,projectHubContract,projectHubDisplayedTables,mergeDisplayedHubContract,hubDisplayedTablesFromDocument,mergeHubFinanceFacts} from './hub-contract.mjs';
+export {contractRoot,projectContractPayments,projectHubContract,projectHubDisplayedTables,mergeDisplayedHubContract,hubDisplayedTablesFromDocument,mergeHubFinanceFacts,mergeHubContractDate} from './hub-contract.mjs';
 export {readHubPolicy} from './hub-policy.mjs';
 export {readDirectInvoices} from './hub-direct-invoice.mjs';
 export {upgradeLinksFromDocument,mergeUpgradeLinks,upgradeEdges} from './hub-upgrade.mjs';

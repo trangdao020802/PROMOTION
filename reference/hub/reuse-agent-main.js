@@ -47,6 +47,17 @@
   return body+decoder.decode();
  }
  const fetchJSON=async(url,signal)=>JSON.parse(await fetchBody(url,signal));
+ async function addUpgradeDate(projection,client,signal){
+  const facts=projection?.hubContract;
+  if(!facts||facts.contractDate||!facts.upgrades?.some(l=>l.direction==='from')||!client?.policy?.info||signal.aborted)return;
+  let pending;const stop=()=>{try{pending?.abort?.();}catch{}};
+  signal.addEventListener('abort',stop,{once:true});
+  try{
+   pending=client.policy.info({contractId:facts.contractId});
+   const info=await bounded(pending,1200);
+   if(!signal.aborted)projection.hubContract=N.mergeHubContractDate(facts,info);
+  }catch{}finally{stop();signal.removeEventListener('abort',stop);}
+ }
  async function addLearnerFinance(projection,root,client,signal,request){
   const learner=projection?.hubContract?.learner;if(!learner||!client?.learnerPayments||signal.aborted)return;
   const key=client.role+'|'+learner.leadId+'|'+learner.kidId;
@@ -127,6 +138,7 @@
     if(!facts||facts.contractId!==link.id||link.ct&&facts.ct!==link.ct)return null;
     const expected={...request,ct:facts.ct,url:link.url,readFinance:true},source={hubContract:facts};
     await addDisplayedFinance(source,expected,ctrl.signal);
+    await addUpgradeDate(source,client,ctrl.signal);
     await addInvoicePDF(source,root,client,{...request,readFinance:true},ctrl.signal,jobId);
     return source.hubContract;
    }finally{clearTimeout(timer);signal.removeEventListener('abort',stop);}
@@ -209,6 +221,7 @@
     const projection=source&&N.projectContractDetail(value,source,request.url),root=N.contractRoot(value);
     if(projection&&root){const rawPayments=await paymentRead,payments=N.projectContractPayments(rawPayments,contractId),facts=N.projectHubContract({...root,...(Array.isArray(rawPayments)?{ListPayment:rawPayments}:{})},{payments,paymentState:payments?'read':'unavailable'});if(facts)projection.hubContract=facts;}
     await addDisplayedFinance(projection,request,signal);
+    await addUpgradeDate(projection,client,signal);
     await addLearnerFinance(projection,root,client,signal,request);
     await addUpgradeFinance(projection,client,signal,request,m.id);
     await addInvoicePDF(projection,root,client,request,signal,m.id);

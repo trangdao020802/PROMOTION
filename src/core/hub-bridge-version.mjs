@@ -1,5 +1,5 @@
 // One release number for the web's Hub tools and downloadable bridge.
-export const HUB_BRIDGE_VERSION='1.6.21';
+export const HUB_BRIDGE_VERSION='1.6.22';
 
 export function bridgeVersionAtLeast(value,minimum=HUB_BRIDGE_VERSION){
  const parse=v=>/^(0|[1-9]\d{0,4})\.(0|[1-9]\d{0,4})\.(0|[1-9]\d{0,4})$/.test(String(v))?String(v).split('.').map(Number):null;

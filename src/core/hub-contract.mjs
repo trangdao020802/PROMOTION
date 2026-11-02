@@ -101,6 +101,14 @@ export function projectHubLearner(root){
  return leadId&&kidId?{leadId,kidId,url:'https://hub24.apollo.vn:7777/lead/detail/'+leadId+'?s='+kidId}:null;
 }
 
+// GetContractInfoForUpdate is also the read-only source of CreatedDate. An
+// Upgrade must be dated even when no price/promotion lookup is requested.
+export function mergeHubContractDate(facts,info){
+ if(!validateHubContract(facts)||facts.contractDate||!plain(info)||id(info.ContractId)!==facts.contractId||info.ContractNo!=null&&text(info.ContractNo).toUpperCase()!==facts.ct)return facts;
+ const contractDate=upgradeDate(info.CreatedDate);
+ return contractDate?{...facts,contractDate}:facts;
+}
+
 export function projectHubContract(root,{payments=null,paymentState='pending',capturedAt=new Date().toISOString()}={}){
  const result={schema:HUB_CONTRACT_SCHEMA,ct:text(root?.ContractNo??root?.ContractCode??root?.DepositNo??root?.DepositCode).toUpperCase(),contractId:id(root?.ContractId??root?.DepositId??root?.Id),capturedAt,discounts:contractDiscountFacts(root),payments:{state:paymentState==='pending'&&(projectContractPayments(root,id(root?.ContractId??root?.DepositId??root?.Id))?.length??0)>0?'read':paymentState,rows:payments??((projectContractPayments(root,id(root?.ContractId??root?.DepositId??root?.Id))?.length??0)>0?projectContractPayments(root,id(root?.ContractId??root?.DepositId??root?.Id)):[])},...(projectHubMovements(root)!==null?{movements:{state:'read',rows:projectHubMovements(root)}}:{movements:{state:'pending',rows:[]}})};
  result.financeRevision=3;

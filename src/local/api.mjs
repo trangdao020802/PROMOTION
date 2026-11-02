@@ -62,7 +62,7 @@ async function rememberLearnerFinance(hubContract,context){
 }
 async function attachVerifiedHubFunding(model,sources=[]){
  const [settings,links]=await Promise.all([all('settings'),all('links')]);
- const datasetId=model.dataset?.id??model.hash,masterFacts=sources.filter(s=>validateHubContract(s.hubContract)&&model.contractGroups.some(g=>g.ct===s.ct&&String(g.cells.F)===s.student)).map(s=>({datasetId,masterCt:s.ct,ct:s.ct,student:s.student,url:s.url,hubContract:s.hubContract,id:childFactKey({datasetId,masterCt:s.ct,ct:s.ct,student:s.student})}));
+ const datasetId=model.dataset?.id??model.hash,masterFacts=sources.filter(s=>validateHubContract(s.hubContract)&&model.contractGroups.some(g=>g.ct===s.ct&&String(g.cells.F)===s.student)).map(s=>({datasetId,masterCt:s.ct,ct:s.ct,student:s.student,url:s.url,hubContract:s.hubContract,hubPolicy:s.hubPolicy,id:childFactKey({datasetId,masterCt:s.ct,ct:s.ct,student:s.student})}));
  attachHubFunding(model,{datasetId,facts:[...settings.filter(x=>typeof x.id==='string'&&x.id.startsWith('hub-child-fact:')),...masterFacts],links});
 }
 
