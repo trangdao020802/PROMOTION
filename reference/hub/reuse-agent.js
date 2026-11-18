@@ -25,6 +25,18 @@
   })();
  }
  const failure=(j,code,message)=>finish(j,{error:true,code,message});
+ const hasDetailFinance=payload=>payload?.hubContract?.payments?.state==='read'||!!payload?.hubContract?.outgoingPayments?.length;
+ function needsDepositTable(j,payload){
+  const facts=payload?.hubContract;
+  return j.course?.readFinance&&j.course.ct.includes('-DEP-')&&!facts?.outgoingPayments?.length&&
+   !facts?.movements?.rows?.some(m=>m.direction==='out'&&/-PAY-/i.test(m.reference));
+ }
+ function finishKnownFinance(j){
+  if(!j.course?.readFinance||!j.projection)return false;
+  const result=N.parseContractDetailProjection(j.projection,j.course);
+  if(!C.courseReadComplete(result.payload)&&!hasDetailFinance(result.payload))return false;
+  finishCourse(j,result.payload);return true;
+ }
  function discover(root,url){
   const fields=[];
   for(const form of root.querySelectorAll('form')){
@@ -52,7 +64,7 @@
    if(root.querySelector('input[type="password"]')){failure(j,'hub_login','Đăng nhập trong tab Hub đang mở rồi bấm lấy tiếp.');return;}
    if(j.course){const parsed=C.parseCoursePage({...C.coursePageFromDocument(root,{staticDocument:true,readFinance:j.course.readFinance}),url},j.course),result=j.projection?N.parseContractDetailProjection(j.projection,j.course,parsed.payload):parsed;
     if(result.error&&['student','conflict'].includes(result.error)){finish(j,C.courseFailure(result.error));return;}
-    if(result.payload&&C.courseReadComplete(result.payload)){finishCourse(j,result.payload);return;}
+    if(result.payload&&C.courseReadComplete(result.payload)&&(!needsDepositTable(j,result.payload)||hasDetailFinance(parsed.payload))){finishCourse(j,result.payload);return;}
    }else{
     const anchors=[...root.querySelectorAll('table tbody a[href]')].map(a=>({text:a.textContent.trim(),href:new URL(a.getAttribute('href'),url).href})),links=[];
     for(const ct of j.codes){const result=I.selectIndexCandidate(anchors,ct);if(result.status==='conflict'){failure(j,'mismatch','Mã CT / DEP khớp nhiều ID; chưa lưu link.');return;}if(result.status==='found')links.push({ct,url:result.url});}
@@ -73,6 +85,7 @@
  }
  function courseResult(j,root,url){
   const parsed=C.parseCoursePage({...C.coursePageFromDocument(root,{readFinance:j.course.readFinance}),url},j.course);
+  j.detailFinanceRead=hasDetailFinance(parsed.payload);
   const network=j.projection&&N.parseContractDetailProjection(j.projection,j.course,parsed.payload);
   if(network?.error&&['student','conflict'].includes(network.error))return network;
   return network?.payload?network:parsed;
@@ -80,10 +93,10 @@
  function inspect(j){
   if(job!==j||j.finishing)return;
   const expired=Date.now()>=j.deadline;
-  if(!j.frame){if(expired){if(j.course)finish(j,C.courseFailure('loading'));else failure(j,'hub_timeout','Hub chưa trả dữ liệu. Bấm lấy tiếp để đọc CT còn thiếu.');}return;}
+  if(!j.frame){if(expired&&!finishKnownFinance(j)){if(j.course)finish(j,C.courseFailure('loading'));else failure(j,'hub_timeout','Hub chưa trả dữ liệu. Bấm lấy tiếp để đọc CT còn thiếu.');}return;}
   let root,url;
-  try{root=j.frame.contentDocument;url=j.frame.contentWindow.location.href;}catch{if(j.loaded||expired)failure(j,'hub_frame_unavailable','Hub yêu cầu đăng nhập hoặc không cho phép đọc trong nền. Kiểm tra tab Hub đang mở rồi thử lại; không tạo tab mới.');return;}
-  if(!root||url==='about:blank'){if(expired){if(j.course)finish(j,C.courseFailure('loading'));else failure(j,'hub_frame_unavailable','Hub chưa cho phép đọc trong nền. Kiểm tra tab Hub rồi thử lại; không tạo tab mới.');}return;}
+  try{root=j.frame.contentDocument;url=j.frame.contentWindow.location.href;}catch{if((j.loaded||expired)&&!finishKnownFinance(j))failure(j,'hub_frame_unavailable','Hub yêu cầu đăng nhập hoặc không cho phép đọc trong nền. Kiểm tra tab Hub đang mở rồi thử lại; không tạo tab mới.');return;}
+  if(!root||url==='about:blank'){if(expired&&!finishKnownFinance(j)){if(j.course)finish(j,C.courseFailure('loading'));else failure(j,'hub_frame_unavailable','Hub chưa cho phép đọc trong nền. Kiểm tra tab Hub rồi thử lại; không tạo tab mới.');}return;}
   if(root!==j.observedRoot&&typeof MutationObserver==='function'){
    j.observer?.disconnect();j.observedRoot=root;
    j.observer=new MutationObserver(()=>{if(!j.inspectQueued){j.inspectQueued=true;Promise.resolve().then(()=>{j.inspectQueued=false;inspect(j);});}});
@@ -96,7 +109,7 @@
    if(j.activatedRoot!==root){j.activatedRoot=root;j.frame.contentWindow.postMessage({channel,type:'activate',id:j.id,course:j.course},P.HUB);}
    const result=courseResult(j,root,url),signature=JSON.stringify(result);
    if(signature!==j.signature){j.signature=signature;j.stableAt=Date.now();clearTimeout(j.settleTimer);j.settleTimer=setTimeout(()=>inspect(j),350);}
-   const complete=result.payload&&C.courseReadComplete(result.payload);
+   const complete=result.payload&&C.courseReadComplete(result.payload)&&(!needsDepositTable(j,result.payload)||j.detailFinanceRead);
    if(result.payload&&complete||expired){if(result.payload)finishCourse(j,result.payload);else finish(j,C.courseFailure(result.error,result.fields));return;}
   }else{
    if(j.codes[0].includes('-DEP-')&&!j.fields){const fields=discover(root,url);if(fields&&!I.indexURLMatches(url,j.codes,j.id,fields)){j.fields=fields;j.loaded=false;j.frame.src=I.indexURL(j.codes,j.id,fields);return;}}
@@ -131,10 +144,13 @@
    if(!m.projection||!N.courseDetailEndpoint(m.projection.source,j.course.url))return;
    const result=N.parseContractDetailProjection(m.projection,j.course);
    if(result.error&&['student','conflict'].includes(result.error)){finish(j,C.courseFailure(result.error));return;}
-   if(m.projection.ct&&m.projection.ct!==j.course.ct||m.projection.contractId&&m.projection.contractId!==j.course.url.replace(/\/$/,'').split('/').pop()){finish(j,C.courseFailure('identity'));return;}
-   j.projection=m.projection;
+   if(m.projection.ct&&m.projection.ct!==j.course.ct||m.projection.contractId&&m.projection.contractId!==N.hubDocumentId(j.course.url,j.course.ct)){finish(j,C.courseFailure('identity'));return;}
+   // The fallback frame can report the same detail response with fewer facts.
+   // Keep invoice numbers already read from the owning document or learner.
+   const earlier=j.projection?.hubContract,current=m.projection.hubContract;
+   j.projection=earlier&&current&&j.course.readFinance?{...m.projection,hubContract:N.mergeHubFinanceFacts(earlier,current,{appendPayments:true})}:m.projection;
    if(child&&typeof m.route==='string'&&m.route===new URL(m.projection.source).pathname)post(j,'learn-route',{course:j.course,source:N.courseDetailEndpoint(m.projection.source,j.course.url)});
-   if(result.payload&&C.courseReadComplete(result.payload)){finishCourse(j,result.payload);return;}
+   if(!child&&result.payload&&C.courseReadComplete(result.payload)&&!needsDepositTable(j,result.payload)){finishCourse(j,result.payload);return;}
    clearTimeout(j.routeTimer);readPage(j);inspect(j);
   }
   if(m.type==='index'&&child&&!j.course&&Array.isArray(m.pairs)&&m.pairs.length<=I.INDEX_LIMIT&&Array.isArray(m.conflicts)&&m.conflicts.length<=I.INDEX_LIMIT){
@@ -155,7 +171,7 @@
   }
   if(m.type!=='hub-agent-run'||job||typeof m.id!=='string'||!/^\w[\w-]{0,79}$/.test(m.id)){respond({error:'Tab Hub đang bận hoặc yêu cầu không hợp lệ.'});return;}
   const course=m.kind==='course'&&C.courseRequest(m.course),special=['voucher','report'].includes(m.kind);let codes,targetURL;
-  try{if(special){if(m.kind==='voucher'){if(!V.voucherRequest(m.voucher))throw Error();targetURL=V.HUB_VOUCHERS;}else {if(!Object.hasOwn(R.HUB_REPORTS,m.report)||!R.reportPeriod(m.month))throw Error();targetURL=R.reportURL(m.report,m.month,50);}}else if(!course){const groups=I.indexGroups(m.codes);if(groups.length!==1)throw Error();codes=groups[0].codes;}}catch{respond({error:'Yêu cầu đọc Hub không hợp lệ.'});return;}
+  try{if(special){if(m.kind==='voucher'){const voucher=V.voucherRequest(m.voucher);if(!voucher)throw Error();targetURL=voucher.url||V.voucherSearchURL(voucher,m.searchFields)||V.HUB_VOUCHERS;}else {if(!Object.hasOwn(R.HUB_REPORTS,m.report)||!R.reportPeriod(m.month))throw Error();targetURL=R.reportURL(m.report,m.month,50);}}else if(!course){const groups=I.indexGroups(m.codes);if(groups.length!==1)throw Error();codes=groups[0].codes;}}catch{respond({error:'Yêu cầu đọc Hub không hợp lệ.'});return;}
   const duration=special?Math.min(Number(m.duration)||300000,m.kind==='report'?R.reportRenderMs(m.report)+120000:300000):course?14_000:30_000;
   job={id:m.id,kind:m.kind,special,targetURL,report:m.report,month:m.month,course:course||null,codes,duration,deadline:Date.now()+duration};const j=job;
   j.timer=setInterval(()=>inspect(j),1000);respond({accepted:true});

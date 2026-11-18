@@ -75,10 +75,11 @@
      if(path!=='/giftcode/manage'){await finish({type:'voucher-failure',reason:'unsupported'});return;}
      const input=keyword();
      if(!input){if(Date.now()>deadline)await finish({type:'voucher-failure',reason:'unsupported'});return;}
-     if(!job.searchApplied&&!searched){
+     if(!searched&&(!job.searchApplied||V.giftcodeKey(input.value)!==code)){
       const root=document,buttons=[...root.querySelectorAll('button,input[type="submit"],input[type="button"],a')].filter(e=>visible(e)&&/^(?:search|tìm kiếm)$/i.test(text(e)||e.value||''));
       if(buttons.length!==1){if(Date.now()>deadline)await finish({type:'voucher-failure',reason:'unsupported'});return;}
-      const result=await send({type:'voucher-search-applied',code});if(!result?.apply)return;
+      const fields=V.observedVoucherSearch(input,location.href);
+      const result=await send({type:'voucher-search-applied',code,...(fields?{fields}:{})});if(!result?.apply)return;
       searched=true;setInput(input,code);
       // Apply-date filters are observed on this listing. Widen only those
       // recognized search controls; never inspect or submit record edit forms.
@@ -86,11 +87,11 @@
       buttons[0].click();lastChange=Date.now();return;
      }
      if(V.giftcodeKey(input.value)!==code){if(Date.now()>deadline)await finish({type:'voucher-failure',reason:'filters'});return;}
-     if(!busy()&&Date.now()-lastChange>600){const rows=listRows(),choice=V.voucherListChoice(rows);if(choice){await finish({type:'voucher-detail',row:choice.record});return;}if(rows.length>1){await finish({type:'voucher-failure',reason:'ambiguous'});return;}}
+     if(!busy()&&Date.now()-lastChange>250){const rows=listRows(),choice=V.voucherListChoice(rows);if(choice){await finish({type:'voucher-detail',row:choice.record});return;}if(rows.length>1){await finish({type:'voucher-failure',reason:'ambiguous'});return;}}
     }else if(job.stage==='voucher-detail'||job.stage==='voucher-codes'){
      const inCodes=job.stage==='voucher-codes';
      if(inCodes?V.voucherCodesURL(location.href,job.url)!==job.codesUrl:V.voucherDetailURL(location.href)!==job.url){await finish({type:'voucher-failure',reason:'unsupported'});return;}
-     if(busy()||Date.now()-lastChange<600){if(Date.now()>deadline)await finish({type:'voucher-failure',reason:'timeout'});return;}
+     if(busy()||Date.now()-lastChange<250){if(Date.now()>deadline)await finish({type:'voucher-failure',reason:'timeout'});return;}
      const centers=centerPairs();if(centers.error){await finish({type:'voucher-failure',reason:centers.error});return;}if(centers.pending){if(Date.now()>deadline)await finish({type:'voucher-failure',reason:'centers'});return;}
      const page={url:job.url,pairs:[...(inCodes?job.detailPairs:pairs()),...centers.pairs],giftcodes:giftcodeRows(),list:job.list},result=V.parseVoucherDetail(page,job.voucher);
      if(result.payload&&!busy()){await finish({type:'voucher-complete',payload:result.payload});return;}
@@ -107,6 +108,6 @@
     if(Date.now()>deadline)await finish({type:'voucher-failure',reason:'timeout'});
    }catch{await finish({type:'voucher-failure',reason:'unsupported'});}finally{inspecting=false;}
   };
-  const timer=setInterval(inspect,750),observer=new MutationObserver(records=>{if(records.some(r=>r.target.closest?.('table')||[...r.addedNodes].some(n=>n.nodeType===1&&(n.matches?.('table')||n.querySelector?.('table')))))lastChange=Date.now();void inspect();});observer.observe(document.documentElement,{childList:true,subtree:true});void inspect();
+  const timer=setInterval(inspect,250),observer=new MutationObserver(records=>{if(records.some(r=>r.target.closest?.('table')||[...r.addedNodes].some(n=>n.nodeType===1&&(n.matches?.('table')||n.querySelector?.('table')))))lastChange=Date.now();void inspect();});observer.observe(document.documentElement,{childList:true,subtree:true});void inspect();
  }).catch(()=>{});
 })();

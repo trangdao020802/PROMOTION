@@ -42,13 +42,15 @@ test('compare missing PaymentList and Transfer without turning Hub evidence into
 test('read-only Hub amounts and imported source transactions compare without double-counting a multi-hop transfer',()=>{
  const fact=childFactInput({datasetId:'qa',masterCt:master,ct:child,student,url,payload:payload()});
  const row={ct:master,cells:{F:student},
- receipts:[{payment:payment.PaymentCode,vat:'0000514',amount:4725000}],
+ receipts:[{payment:payment.PaymentCode,contract:child,vat:'0000514',amount:4725000,date:'2025-06-27',verified:true}],
  reconciliation:{movementHistory:[
   {from:child,to:master,amount:4725000,invoiceBacked:true,refs:[{file:'Transfer PaymentList'}]},
   {from:'QA2610-DEP-0033554',to:child,amount:4725000,invoiceBacked:true,refs:[{file:'Transfer PaymentList'}]}
  ]}};
  const result=compareChildFacts(fact,row);
  assert.equal(result.payments[0].status,'matched');assert.equal(result.payments[0].invoice,'0000514');
+ const otherDocument={...row,receipts:[{...row.receipts[0],contract:master}]};
+ assert.equal(compareChildFacts(fact,otherDocument).payments[0].invoice,null);
  assert.equal(result.missingPayments,0);assert.equal(result.missingTransfers,0);
  assert.equal(result.hubMoves[0].sourceMatched,true);assert.equal(result.transfers.length,2);
  assert.equal(result.payments.reduce((s,p)=>s+(p.sourceAmount??0),0),4725000);

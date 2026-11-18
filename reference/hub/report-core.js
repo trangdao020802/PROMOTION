@@ -47,7 +47,7 @@ var PromotionHubReports = (() => {
   var HUB_REPORTS = Object.freeze({
     transfer: { path: "/report/TransferPaymentList", regionKey: "region", label: "Transfer PaymentList", dateField: "Transfer date" },
     export: { path: "/report/PaymentByCourse", regionKey: "regionId", label: "Payment By Course", dateField: "Contract full date" },
-    payment: { path: "/report/PaymentList", regionKey: "region", label: "PaymentList", dateField: "Invoice date", centers: "87_66_27_59_74_36_95_67_44_45_78" }
+    payment: { path: "/report/PaymentList", regionKey: "region", label: "PaymentList", dateField: "Invoice date", centers: "87_66_27_59_74_78_36_95_67_44_45_99_70_23" }
   });
   function reportPeriod(month) {
     if (typeof month !== "string" || !/^20\d{2}-(?:0[1-9]|1[0-2])$/.test(month)) return null;

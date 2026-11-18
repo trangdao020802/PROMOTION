@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
-import {voucherRequest,voucherDetailURL,voucherCodesURL,parseVoucherDetail,voucherPayload,withVoucherProfile,mergeHubVoucher,voucherRecordProfile,profileForVoucherCode,hubDiscountUnit,hubPercentNumber,readHubDiscountUnit} from '../src/core/hub-voucher.mjs';
+import {voucherRequest,voucherDetailURL,voucherCodesURL,voucherSearchURL,voucherSearchFields,observedVoucherSearch,parseVoucherDetail,voucherPayload,withVoucherProfile,mergeHubVoucher,voucherRecordProfile,profileForVoucherCode,hubDiscountUnit,hubPercentNumber,readHubDiscountUnit} from '../src/core/hub-voucher.mjs';
 import {EMPTY_VOUCHER,voucherInput,validateVoucher} from '../src/core/vouchers.mjs';
 import {readHubVoucher} from '../src/local/hub-voucher-bridge.mjs';
 import {HUB_BRIDGE_VERSION} from '../src/core/hub-bridge-version.mjs';
@@ -89,17 +89,80 @@ test('Voucher provenance allows only observed read/detail routes on the exact Hu
  assert.ok(voucherCodesURL('/giftcode/listgiftcode/12345',url));assert.ok(voucherCodesURL('/giftcode/codes?giftcodeId=12345',url));assert.equal(voucherCodesURL('/giftcode/listgiftcode/99999',url),null);assert.equal(voucherCodesURL('https://example.com/giftcode/listgiftcode/12345',url),null);
  assert.equal(voucherPayload({...payload(),code:'OTHER'},{code}),null);assert.equal(voucherPayload({...payload(),rate:5},{code}),null);
 });
-function bridgeWindow({capabilities=voucherCapabilities,wrong=false,version=HUB_BRIDGE_VERSION,earlierReady=null,silent=false,failure=null}={}){
+function bridgeWindow({capabilities=voucherCapabilities,wrong=false,version=HUB_BRIDGE_VERSION,earlierReady=null,silent=false,failure=null,deferVoucher=false}={}){
  const listeners=new Set(),target={requests:[],location:{origin:'https://promotion-hub-2026.roundskunk11.chatgpt.site'},addEventListener:(type,fn)=>listeners.add(fn),removeEventListener:(type,fn)=>listeners.delete(fn),postMessage:m=>{
   target.requests.push(m);
   if(m.direction!=='request'||m.action==='cancel')return;
   const reply=extra=>{for(const fn of [...listeners])fn({source:target,origin:target.location.origin,data:{channel:m.channel,direction:'response',id:m.id,...extra}});};
   queueMicrotask(()=>{
    if(m.action==='ping'){if(earlierReady)reply({type:'ready',...earlierReady});if(!silent)reply({type:'ready',version,capabilities});}
-   else reply(failure?{type:'error',...failure}:{type:'voucher-result',payload:wrong?{...payload(),code:'OTHER'}:payload()});
+   else {
+    const complete=()=>reply(target.failure||failure?{type:'error',...(target.failure||failure)}:{type:'voucher-result',payload:wrong?{...payload(),code:'OTHER'}:payload()});
+    if(deferVoucher)target.completeVoucher=complete;else complete();
+   }
   });
  }};return target;
 }
+test('a recently verified full code fills from memory while explicit refresh reads its observed detail URL',async()=>{
+ const target=bridgeWindow();
+ const first=await readHubVoucher(code,{window:target,timeoutMs:100});first.rate=.99;
+ const cached=await readHubVoucher(' '+code.toLowerCase()+' ',{window:target,timeoutMs:100});
+ assert.equal(cached.rate,.15);assert.equal(cached.checkedAt,payload().checkedAt);
+ assert.equal(target.requests.filter(request=>request.action==='voucher').length,1);
+ await readHubVoucher(code,{window:target,force:true,timeoutMs:100});
+ const reads=target.requests.filter(request=>request.action==='voucher');
+ assert.equal(reads.length,2);assert.equal(reads[1].voucher.url,url);
+ target.failure={code:'voucher_unit',message:'Discount amount no longer has a unit'};
+ await assert.rejects(readHubVoucher(code,{window:target,force:true,timeoutMs:100}),e=>e.code==='voucher_unit');
+ await assert.rejects(readHubVoucher(code,{window:target,timeoutMs:100}),e=>e.code==='voucher_unit');
+ assert.equal(target.requests.filter(request=>request.action==='voucher').length,4);
+});
+test('expired verified values are read again from their detail URL',async t=>{
+ let now=Date.now();t.mock.method(Date,'now',()=>now);
+ const target=bridgeWindow();await readHubVoucher(code,{window:target,timeoutMs:100});
+ now+=5*60_000+1;
+ await readHubVoucher(code,{window:target,timeoutMs:100});
+ const reads=target.requests.filter(request=>request.action==='voucher');
+ assert.equal(reads.length,2);assert.equal(reads[1].voucher.url,url);
+});
+test('only an observed read-only listing form can supply fields for a filtered first load',()=>{
+ const dates={name:'applyDate',type:'text',value:'01-11-2026 to 30-11-2026'};
+ const form={getAttribute:key=>key==='method'?'get':key==='action'?'/giftcode/manage':null,querySelectorAll:()=>[dates]};
+ const input={name:'s',form};
+ const fields=observedVoucherSearch(input,'https://hub24.apollo.vn:7777/giftcode/manage');
+ assert.deepEqual(fields,{keyword:'s',dateRange:'applyDate',separator:'-',join:' to '});
+ const search=new URL(voucherSearchURL({code:'QA-CODE & EXACT'},fields));
+ assert.equal(search.pathname,'/giftcode/manage');assert.equal(search.searchParams.get('s'),'QA-CODE & EXACT');
+ assert.equal(search.searchParams.get('applyDate'),'01-01-2000 to 31-12-2099');
+ for(const action of ['/giftcode/update/12345','https://example.com/giftcode/manage'])assert.equal(observedVoucherSearch({...input,form:{...form,getAttribute:key=>key==='action'?action:'get'}},search.href),null);
+ assert.equal(observedVoucherSearch({...input,form:{...form,getAttribute:key=>key==='method'?'post':'/giftcode/manage'}},search.href),null);
+ assert.equal(voucherSearchFields({keyword:'password'}),null);assert.equal(voucherSearchFields({keyword:'s',secret:'token'}),null);
+ assert.equal(voucherSearchURL({code},{keyword:'s',dateRange:'applyDate'}),null);
+});
+test('identical lookups share one live job while each reader can cancel independently',async()=>{
+ const target=bridgeWindow({deferVoucher:true}),firstController=new AbortController();
+ const first=readHubVoucher(code,{window:target,signal:firstController.signal,timeoutMs:500});
+ const second=readHubVoucher(code,{window:target,timeoutMs:500});
+ for(let i=0;i<12;i++)await Promise.resolve();
+ assert.equal(target.requests.filter(request=>request.action==='voucher').length,1);
+ firstController.abort();await assert.rejects(first,e=>e.code==='cancelled');
+ assert.equal(target.requests.filter(request=>request.action==='cancel').length,0);
+ target.completeVoucher();assert.equal((await second).rate,.15);
+});
+test('the last reader cancelling releases the bridge and a late old reply cannot fill its replacement',async()=>{
+ const target=bridgeWindow({deferVoucher:true}),controller=new AbortController();
+ const first=readHubVoucher(code,{window:target,signal:controller.signal,timeoutMs:500});
+ for(let i=0;i<12;i++)await Promise.resolve();
+ const oldReply=target.completeVoucher;
+ controller.abort();await assert.rejects(first,e=>e.code==='cancelled');
+ assert.equal(target.requests.filter(request=>request.action==='cancel').length,1);
+ const replacement=readHubVoucher(code,{window:target,timeoutMs:500});
+ for(let i=0;i<12;i++)await Promise.resolve();
+ let finished=false;replacement.then(()=>{finished=true;});oldReply();
+ for(let i=0;i<12;i++)await Promise.resolve();assert.equal(finished,false);
+ target.completeVoucher();assert.equal((await replacement).rate,.15);
+ assert.equal(target.requests.filter(request=>request.action==='voucher').length,2);
+});
 test('the Site bridge requires Voucher capability and validates returned identity',async()=>{
  assert.equal((await readHubVoucher(code,{window:bridgeWindow(),timeoutMs:100})).rate,.15);
  for(const options of [{capabilities:[]},{capabilities:['voucher']},{version:'1.6.0'},{version:'1.6.14'},{version:'1.6.19'},{version:'invalid'}]){
@@ -133,4 +196,34 @@ test('the extension binds silent Voucher replies to its one managed frame, full 
  await send({type:'voucher-complete',payload:payload(),frameKey:'wrong'},codesUrl);assert.ok(r.store.job);
  const mismatch=await send({type:'voucher-complete',payload:{...payload(),code:'OTHER'}},codesUrl);assert.ok(mismatch.error);assert.ok(r.store.job);
  await send({type:'voucher-complete',payload:payload()},codesUrl);assert.equal(r.store.job,undefined);assert.ok(r.messages.some(m=>m.type==='voucher-result'));assert.deepEqual(r.mutations,[]);
+});
+test('a saved detail link skips listing search and still verifies the complete code and frame',async()=>{
+ const r=backgroundRuntime();
+ await r.send({type:'voucher-start',id:'qa-direct',voucher:{code,url}});
+ assert.equal(r.store.job.stage,'voucher-detail');assert.equal(r.store.job.detailUrl,url);
+ const send=(message,path=url)=>r.send({frameJob:'qa-direct',frameKey:'qa-agent',id:'qa-direct',...message},20,path,{frameId:4,documentId:'qa-direct-frame'});
+ await send({type:'context'});
+ await send({type:'voucher-complete',payload:{...payload(),code:'OTHER'}});assert.ok(r.store.job);
+ await send({type:'voucher-complete',payload:payload()},url.replace('12345','99999'));assert.ok(r.store.job);
+ await send({type:'voucher-complete',payload:payload()});
+ assert.equal(r.store.job,undefined);assert.ok(r.messages.some(message=>message.type==='voucher-result'));
+ assert.deepEqual(r.mutations,[]);
+ assert.equal(voucherRequest({code,url:'https://example.com/giftcode/detail/12345'}),null);
+ assert.equal(parseVoucherDetail(page({giftcodes:[]}),{code,url}).error,'code_unconfirmed');
+});
+test('subsequent full codes reuse observed listing fields without loading the unfiltered list',async()=>{
+ const r=backgroundRuntime(),manage='https://hub24.apollo.vn:7777/giftcode/manage';
+ await r.send({type:'voucher-start',id:'qa-learn',voucher:{code}});
+ const binding={frameJob:'qa-learn',frameKey:'qa-agent'};
+ const send=message=>r.send({...binding,id:'qa-learn',...message},20,manage,{frameId:4,documentId:'qa-learn-frame'});
+ await send({type:'context'});
+ await send({type:'voucher-search-applied',code,fields:{keyword:'s',dateRange:'applyDate',separator:'-',join:' to '}});
+ assert.equal(r.store.voucherSearch.keyword,'s');
+ await r.send({type:'cancel',id:'qa-learn'});
+ await r.send({type:'voucher-start',id:'qa-next',voucher:{code:'QA-NEXT-20'}});
+ assert.equal(r.store.job.searchApplied,true);assert.equal(r.store.job.stage,'voucher-search');
+ assert.equal(r.store.job.searchFields.keyword,'s');
+ const run=r.messages.find(message=>message.type==='hub-agent-run'&&message.id==='qa-next');
+ const url=new URL(voucherSearchURL(run.voucher,run.searchFields));assert.equal(url.searchParams.get('s'),'QA-NEXT-20');
+ assert.deepEqual(r.mutations,[]);
 });

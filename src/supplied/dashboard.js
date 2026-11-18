@@ -296,7 +296,7 @@ var Ae = `https://hub24.apollo.vn:7777`, je = 9e4;
 function Me(e2) {
   return e2 === `payment` ? 30 * 6e4 : je;
 }
-var Y = Object.freeze({ transfer: { path: `/report/TransferPaymentList`, regionKey: `region`, label: `Transfer PaymentList`, dateField: `Transfer date` }, export: { path: `/report/PaymentByCourse`, regionKey: `regionId`, label: `Payment By Course`, dateField: `Contract full date` }, payment: { path: `/report/PaymentList`, regionKey: `region`, label: `PaymentList`, dateField: `Invoice date`, centers: `87_66_27_59_74_36_95_67_44_45_78` } });
+var Y = Object.freeze({ transfer: { path: `/report/TransferPaymentList`, regionKey: `region`, label: `Transfer PaymentList`, dateField: `Transfer date` }, export: { path: `/report/PaymentByCourse`, regionKey: `regionId`, label: `Payment By Course`, dateField: `Contract full date` }, payment: { path: `/report/PaymentList`, regionKey: `region`, label: `PaymentList`, dateField: `Invoice date`, centers: `87_66_27_59_74_78_36_95_67_44_45_99_70_23` } });
 function Ne(e2) {
   if (typeof e2 != `string` || !/^20\d{2}-(?:0[1-9]|1[0-2])$/.test(e2)) return null;
   let [t2, n2] = e2.split(`-`).map(Number), r2 = new Date(Date.UTC(t2, n2, 0)).getUTCDate();

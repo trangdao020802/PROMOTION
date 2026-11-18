@@ -30,6 +30,7 @@ var PromotionHubVoucher = (() => {
     hubPercentNumber: () => hubPercentNumber,
     hubVoucherStatus: () => hubVoucherStatus,
     mergeHubVoucher: () => mergeHubVoucher,
+    observedVoucherSearch: () => observedVoucherSearch,
     parseVoucherDetail: () => parseVoucherDetail,
     profileForVoucherCode: () => profileForVoucherCode,
     readHubDiscountUnit: () => readHubDiscountUnit,
@@ -40,6 +41,8 @@ var PromotionHubVoucher = (() => {
     voucherPayload: () => voucherPayload,
     voucherRecordProfile: () => voucherRecordProfile,
     voucherRequest: () => voucherRequest,
+    voucherSearchFields: () => voucherSearchFields,
+    voucherSearchURL: () => voucherSearchURL,
     withVoucherProfile: () => withVoucherProfile
   });
   var HUB_VOUCHERS = "https://hub24.apollo.vn:7777/giftcode/manage";
@@ -48,9 +51,60 @@ var PromotionHubVoucher = (() => {
   var fold = (value) => text(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d").toLowerCase();
   var giftcodeKey = (value) => text(value).toUpperCase();
   function voucherRequest(value) {
-    if (!value || typeof value !== "object" || Object.keys(value).some((k) => k !== "code") || typeof value.code !== "string") return null;
-    const code = giftcodeKey(value.code);
-    return code && code !== "0" && code.length <= 150 && !/[\x00-\x1f\x7f]/.test(value.code) ? { code } : null;
+    if (!value || typeof value !== "object" || Object.keys(value).some((k) => !["code", "url"].includes(k)) || typeof value.code !== "string") return null;
+    const code = giftcodeKey(value.code), url = value.url === void 0 ? null : voucherDetailURL(value.url);
+    if (!code || code === "0" || code.length > 150 || /[\x00-\x1f\x7f]/.test(value.code) || value.url !== void 0 && !url) return null;
+    return { code, ...url ? { url } : {} };
+  }
+  function voucherSearchFields(value) {
+    if (!value || typeof value !== "object" || Object.keys(value).some((key) => !["keyword", "dateRange", "separator", "join", "start", "end"].includes(key))) return null;
+    const name = (value2) => typeof value2 === "string" && /^[A-Za-z][A-Za-z0-9_]{0,49}$/.test(value2) && !/token|session|pass|auth|secret|credential/i.test(value2);
+    if (!name(value.keyword)) return null;
+    if (value.dateRange) {
+      if (!name(value.dateRange) || value.keyword === value.dateRange || !["-", "/"].includes(value.separator) || ![" to ", " - "].includes(value.join) || value.start || value.end) return null;
+      return { keyword: value.keyword, dateRange: value.dateRange, separator: value.separator, join: value.join };
+    }
+    if (value.start || value.end) {
+      if (!name(value.start) || !name(value.end) || (/* @__PURE__ */ new Set([value.keyword, value.start, value.end])).size !== 3 || value.separator || value.join) return null;
+      return { keyword: value.keyword, start: value.start, end: value.end };
+    }
+    return Object.keys(value).length === 1 ? { keyword: value.keyword } : null;
+  }
+  function voucherSearchURL(expected, fields) {
+    const request = voucherRequest(expected), observed = voucherSearchFields(fields);
+    if (!request || !observed) return null;
+    const url = new URL(HUB_VOUCHERS);
+    url.searchParams.set(observed.keyword, request.code);
+    if (observed.dateRange) {
+      const s = observed.separator;
+      url.searchParams.set(observed.dateRange, `01${s}01${s}2000${observed.join}31${s}12${s}2099`);
+    }
+    if (observed.start) {
+      url.searchParams.set(observed.start, "2000-01-01");
+      url.searchParams.set(observed.end, "2099-12-31");
+    }
+    return url.href;
+  }
+  function observedVoucherSearch(input, url) {
+    const form = input?.form || input?.closest?.("form");
+    if (!form) return null;
+    try {
+      const action = new URL(form.getAttribute("action") || url, url);
+      if ((form.getAttribute("method") || "get").toLowerCase() !== "get" || action.origin !== HUB || action.pathname.toLowerCase() !== "/giftcode/manage" || action.username || action.password || action.hash) return null;
+    } catch {
+      return null;
+    }
+    const fields = { keyword: input.name };
+    const inputs = [...form.querySelectorAll("input")].filter((control) => control !== input && ["text", "date"].includes(control.type) && !/token|session|pass|auth|secret|credential/i.test(control.name));
+    const range = inputs.map((control) => ({ control, match: /^\s*\d{2}([-\/])\d{2}\1\d{4}( to | - )\d{2}\1\d{2}\1\d{4}\s*$/.exec(control.value ?? "") })).filter((item) => item.match);
+    if (range.length > 1) return null;
+    if (range.length === 1) return voucherSearchFields({ ...fields, dateRange: range[0].control.name, separator: range[0].match[1], join: range[0].match[2] });
+    const starts = inputs.filter((control) => /^(?:startDate|fromDate)$/i.test(control.name)), ends = inputs.filter((control) => /^(?:endDate|toDate)$/i.test(control.name));
+    if (starts.length || ends.length) {
+      if (starts.length !== 1 || ends.length !== 1 || ![starts[0], ends[0]].every((control) => control.type === "date" || /^\d{4}-\d{2}-\d{2}$/.test(control.value))) return null;
+      return voucherSearchFields({ ...fields, start: starts[0].name, end: ends[0].name });
+    }
+    return voucherSearchFields(fields);
   }
   function voucherDetailURL(value) {
     try {
@@ -173,7 +227,7 @@ var PromotionHubVoucher = (() => {
   var payloadFields = /* @__PURE__ */ new Set(["code", "url", "label", "center", "startDate", "endDate", "type", "amount", "rate", "minimum", "maximum", "status", "creator", "description", "studentId", "studentName", "checkedAt"]);
   function voucherPayload(value, expected, url) {
     const request = voucherRequest(expected), detail = voucherDetailURL(value?.url);
-    if (!request || !value || typeof value !== "object" || Object.keys(value).some((k) => !payloadFields.has(k)) || giftcodeKey(value.code) !== request.code || !detail || url && detail !== voucherDetailURL(url)) return null;
+    if (!request || !value || typeof value !== "object" || Object.keys(value).some((k) => !payloadFields.has(k)) || giftcodeKey(value.code) !== request.code || !detail || request.url && detail !== request.url || url && detail !== voucherDetailURL(url)) return null;
     for (const key of ["label", "center", "startDate", "endDate", "creator", "description", "studentId", "studentName", "checkedAt"]) if (typeof value[key] !== "string" || value[key].length > (key === "center" ? 2e3 : key === "description" ? 1500 : 200)) return null;
     if (value.startDate && hubDate(value.startDate) !== value.startDate || value.endDate && hubDate(value.endDate) !== value.endDate || value.startDate && value.endDate && value.startDate > value.endDate) return null;
     if (!["", "amount", "percent"].includes(value.type) || !["ACTIVE", "CLOSED", "INACTIVE", "UNKNOWN"].includes(value.status)) return null;
@@ -183,7 +237,7 @@ var PromotionHubVoucher = (() => {
   }
   function parseVoucherDetail(page, expected) {
     const request = voucherRequest(expected), url = voucherDetailURL(page?.url);
-    if (!request || !url) return { error: "identity" };
+    if (!request || !url || request.url && request.url !== url) return { error: "identity" };
     const pairs = page.pairs ?? [], values = {};
     for (const pair of pairs) {
       const key = voucherLabel(pair.label);

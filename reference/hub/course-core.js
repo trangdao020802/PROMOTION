@@ -211,6 +211,14 @@ var PromotionHubCourse = (() => {
     }
   }
 
+  // src/core/hub-payment-kind.mjs
+  var hubPaymentType = (p) => String(p?.PaymentTypeName || p?.PaymentType || p?.type || "").trim();
+  var outgoingHubPayment = (p) => Number(p?.PaymentTypeId ?? p?.typeId) === 8 || /\b(?:moving|transfer)[\s-]*out\b/i.test(hubPaymentType(p));
+  function internalHubPayment(p) {
+    const type = hubPaymentType(p);
+    return outgoingHubPayment(p) || Number(p?.PaymentTypeId ?? p?.typeId) === 10 || /^other$/i.test(type) || /transfer|moving|deposit[\s-]+to[\s-]+contract/i.test(type + " " + String(p?.method ?? ""));
+  }
+
   // src/core/hub-upgrade.mjs
   var HUB2 = "https://hub24.apollo.vn:7777";
   var text2 = (v) => typeof v === "string" ? v.trim().replace(/\s+/g, " ") : "";
@@ -318,6 +326,11 @@ var PromotionHubCourse = (() => {
     return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s) ? s : null;
   };
   var invoiceReference = (v) => invoiceNumber(v) ?? eInvoiceKey(v);
+  function paymentReceiptReference(value, invoiceColumn = false) {
+    const marked = typeof value === "string" && /\(E-Invoice\)\s*$/i.test(value);
+    const ref = marked ? value.replace(/\s*\(E-Invoice\)\s*$/i, "") : value;
+    return invoiceColumn || marked ? invoiceReference(ref) : eInvoiceKey(ref);
+  }
   function invoiceKeyFromURL(value) {
     try {
       const u = new URL(value, "https://hub24.apollo.vn:7777");
@@ -340,8 +353,9 @@ var PromotionHubCourse = (() => {
     return !!v && typeof v === "object" && !Array.isArray(v) && Object.keys(v).every((k) => ["number", "date", "amount", "source", "conflicts"].includes(k)) && invoiceNumber(v.number) === v.number && (v.date === null || invoiceDay(v.date) === v.date) && (v.amount === null || money(v.amount) === v.amount) && ["payment-api", "learner-payments", "e-invoice-pdf"].includes(v.source) && Array.isArray(v.conflicts) && v.conflicts.length <= 4 && v.conflicts.every((k) => ["number", "date", "amount", "key"].includes(k));
   }
   function projectPaymentInvoice(raw, source = "payment-api") {
-    const key = eInvoiceKey(raw?.EInvoiceFKey ?? raw?.EInvoiceGuid ?? raw?.EInvoiceId ?? raw?.EInvoice);
-    let number2 = invoiceNumber(raw?.InvoiceNo ?? raw?.InvoiceNumber);
+    const receipt = paymentReceiptReference(raw?.ReceiptNo);
+    const key = [raw?.EInvoiceFKey, raw?.EInvoiceGuid, raw?.EInvoiceId, raw?.EInvoice, receipt].map(eInvoiceKey).find(Boolean);
+    let number2 = [raw?.InvoiceNo, raw?.InvoiceNumber, raw?.EInvoiceNo, receipt].map(invoiceNumber).find(Boolean);
     if (!number2 && key && typeof raw.EInvoiceCode === "string") {
       const suffix = raw.EInvoiceCode.split(key + "_");
       if (suffix.length === 2) number2 = invoiceNumber(suffix[1]);
@@ -358,22 +372,28 @@ var PromotionHubCourse = (() => {
     const a = row.invoice, b = extra?.invoice;
     let invoice = a ?? b;
     const conflicts = [...a?.conflicts ?? [], ...b?.conflicts ?? []];
+    const numberA = a?.number ?? invoiceNumber(row.invoiceRef), numberB = b?.number ?? invoiceNumber(extra?.invoiceRef);
+    const numberConflict = !!numberA && !!numberB && numberA.replace(/^0+/, "") !== numberB.replace(/^0+/, "");
+    if (numberConflict) conflicts.push("number");
     if (a && b) {
-      if (a.number.replace(/^0+/, "") !== b.number.replace(/^0+/, "")) conflicts.push("number");
       if (a.date && b.date && a.date !== b.date) conflicts.push("date");
       if (a.amount !== null && b.amount !== null && Math.abs(a.amount - b.amount) > 1) conflicts.push("amount");
       invoice = { ...a, number: b.source === "e-invoice-pdf" ? b.number : a.number, date: a.date ?? b.date, amount: a.amount ?? b.amount, source: b.source === "e-invoice-pdf" ? b.source : a.source };
     }
-    if (row.eInvoiceKey && extra?.eInvoiceKey && row.eInvoiceKey !== extra.eInvoiceKey) conflicts.push("key");
+    const keyA = row.eInvoiceKey ?? eInvoiceKey(row.invoiceRef), keyB = extra?.eInvoiceKey ?? eInvoiceKey(extra?.invoiceRef);
+    if (keyA && keyB && keyA.toLowerCase() !== keyB.toLowerCase()) conflicts.push("key");
+    if (!invoice && numberConflict) invoice = { number: numberA, date: null, amount: null, source: "payment-api" };
+    if (invoice && !numberConflict && numberA && numberB) invoice = { ...invoice, number: numberA.length >= numberB.length ? numberA : numberB };
     if (invoice) invoice = { ...invoice, conflicts: [...new Set(conflicts)] };
     return {
       ...row,
       ...!row.invoiceRef && extra?.invoiceRef ? { invoiceRef: extra.invoiceRef } : {},
-      ...!row.eInvoiceKey && extra?.eInvoiceKey ? { eInvoiceKey: extra.eInvoiceKey } : {},
+      ...!row.eInvoiceKey && (keyA || keyB) ? { eInvoiceKey: keyA ?? keyB } : {},
       ...!row.eInvoiceVersion && extra?.eInvoiceVersion ? { eInvoiceVersion: extra.eInvoiceVersion } : {},
       ...invoice ? { invoice } : {}
     };
   }
+  var HUB_FINANCE_REVISION = 4;
 
   // src/core/hub-contract.mjs
   var HUB_CONTRACT_SCHEMA = "apollo-hub-contract/v1";
@@ -408,24 +428,47 @@ var PromotionHubCourse = (() => {
     return result;
   }
   var invoiceEvidence = invoiceReference;
-  var outgoingPayment = (r) => Number(r?.PaymentTypeId) === 8 || /moving[ -]?out|transfer[ -]?out/i.test(text3(r?.PaymentTypeName));
-  function projectContractPayments(value, contractId) {
-    let list2 = hubList(value, 500);
-    if (!list2 && plain2(value)) {
-      if ((value.ContractId ?? value.DepositId) != null && id3(value.ContractId ?? value.DepositId) !== String(contractId)) return null;
-      for (const key of ["ListPayment", "Data", "data", "Result", "result"]) {
-        list2 = hubList(value[key], 500);
-        if (list2) break;
+  var paymentOwner = (v) => v.ContractDepositId ?? v.ContractId ?? v.DepositId;
+  var hasPaymentOwner = (v, owner) => owner == null || paymentOwner(v) == null || id3(paymentOwner(v)) === String(owner);
+  function paymentList(value, owner) {
+    for (let depth = 0; depth < 3; depth++) {
+      if (typeof value === "string" && value.length <= 1e6) {
+        try {
+          value = JSON.parse(value);
+        } catch {
+          return null;
+        }
       }
+      const list2 = hubList(value, 500);
+      if (list2) return list2.every((r) => plain2(r) && hasPaymentOwner(r, owner)) ? list2 : null;
+      if (!plain2(value) || !hasPaymentOwner(value, owner)) return null;
+      value = value.ListPayment ?? value.ListPayments ?? value.Data ?? value.data ?? value.Result ?? value.result;
     }
+    return null;
+  }
+  var paidAmount = (p) => number(p?.PaidAmount ?? p?.Amount);
+  var paymentCode = (value) => /^[A-Z0-9]+-PAY-[A-Z0-9-]{3,30}$/i.test(text3(value)) ? text3(value).toUpperCase() : null;
+  var outgoingKey = (p) => JSON.stringify([p.code, p.amount, p.date]);
+  function mergeHubOutgoingPayments(...lists) {
+    return [...new Map(lists.flat().map((p) => [outgoingKey(p), p])).values()].slice(0, 500);
+  }
+  function outgoingFromRaw(rows) {
+    return mergeHubOutgoingPayments(rows.flatMap((p) => {
+      if (!outgoingHubPayment(p) || p.IsComplete !== true) return [];
+      const code = paymentCode(p.PaymentCode), date2 = moveDay(p.TransferDate ?? p.CompleteDate ?? p.PaymentDate), amount = paidAmount(p);
+      return code && date2 && amount > 0 ? [{ code, amount, date: date2 }] : [];
+    }));
+  }
+  function projectContractPayments(value, contractId) {
+    const list2 = paymentList(value, contractId);
     if (!list2) return null;
     const rows = [];
     for (const r of list2) {
-      if (plain2(r) && outgoingPayment(r)) continue;
-      if (!plain2(r) || (r.ContractId ?? r.DepositId) != null && id3(r.ContractId ?? r.DepositId) !== String(contractId) || !id3(r.PaymentId) || number(r.Amount) === null) return null;
+      if (outgoingHubPayment(r)) continue;
+      if (!id3(r.PaymentId) || paidAmount(r) === null) return null;
       const code = text3(r.PaymentCode);
       if (code.length > 150 || code && !/^[A-Za-z0-9][A-Za-z0-9_.:/-]*$/.test(code)) return null;
-      rows.push({ id: id3(r.PaymentId), code, amount: number(r.Amount), totalAmount: number(r.TotalAmount), remaining: number(r.RemainAmount), typeId: id3(r.PaymentTypeId), type: text3(r.PaymentTypeName).slice(0, 200), method: text3(r.PaymentMethodTypeName ?? r.PaymentMethodName).slice(0, 200), scheduledDate: date(r.ScheduledDate), completeDate: date(r.CompleteDate), complete: typeof r.IsComplete === "boolean" ? r.IsComplete : null, ...projectPaymentInvoice(r) });
+      rows.push({ id: id3(r.PaymentId), code, amount: paidAmount(r), totalAmount: number(r.TotalAmount), remaining: number(r.RemainAmount), typeId: id3(r.PaymentTypeId), type: hubPaymentType(r).slice(0, 200), method: text3(r.PaymentMethodTypeName || r.PaymentMethodName).slice(0, 200), scheduledDate: moveDay(r.ScheduledDate), completeDate: moveDay(r.CompleteDate ?? r.PaymentDate), complete: typeof r.IsComplete === "boolean" ? r.IsComplete : null, ...projectPaymentInvoice(r) });
     }
     return new Set(rows.map((r) => r.id)).size === rows.length ? rows : null;
   }
@@ -438,7 +481,7 @@ var PromotionHubCourse = (() => {
     const candidate = match[3] + "-" + match[2] + "-" + match[1];
     return Number.isFinite(Date.parse(candidate)) && (/* @__PURE__ */ new Date(candidate + "T00:00:00Z")).toISOString().slice(0, 10) === candidate ? candidate : null;
   };
-  function projectHubMovements(root) {
+  function projectHubMovements(root, extraPayments = []) {
     if (!plain2(root)) return null;
     const ct2 = contractCode(root.ContractNo ?? root.ContractCode ?? root.DepositNo ?? root.DepositCode);
     if (!ct2) return null;
@@ -465,10 +508,11 @@ var PromotionHubCourse = (() => {
       }
     }
     const explicitMoves = [...rows];
-    for (const p of hubList(root.ListPayment, 500) ?? []) {
-      const other = contractCode(p?.RelatedContractDepositNo), amount = number(p?.Amount), day2 = moveDay(p?.TransferDate ?? p?.CompleteDate), reference = text3(p?.PaymentCode), direction = outgoingPayment(p) || ct2.includes("-DEP-") && /deposit[ -]+to[ -]+contract/i.test(text3(p?.PaymentTypeName)) ? "out" : "in";
-      if (!other || other === ct2 || p.IsComplete !== true || !(amount > 0) || !day2 || /refund/i.test(text3(p.PaymentTypeName))) continue;
-      if (direction === "in" && p.PaymentTypeId !== 10 && !/transfer|deposit to contract/i.test(text3(p.PaymentMethodTypeName) + " " + text3(p.PaymentTypeName))) continue;
+    for (const p of [...paymentList(root, id3(root.ContractId ?? root.DepositId ?? root.Id)) ?? [], ...extraPayments]) {
+      const type = hubPaymentType(p), other = contractCode(p.RelatedContractDepositNo ?? p.RelatedContractNo ?? p.RelatedDepositNo), amount = paidAmount(p), day2 = moveDay(p.TransferDate ?? p.CompleteDate ?? p.PaymentDate), reference = text3(p.PaymentCode);
+      const direction = outgoingHubPayment(p) || ct2.includes("-DEP-") && /deposit[ -]+to[ -]+contract/i.test(type) ? "out" : "in";
+      if (!other || other === ct2 || p.IsComplete !== true || !(amount > 0) || !day2 || /refund/i.test(type)) continue;
+      if (direction === "in" && !internalHubPayment({ ...p, method: p.PaymentMethodTypeName || p.PaymentMethodName })) continue;
       if (reference && !/^[A-Za-z0-9][A-Za-z0-9_.:/-]*$/.test(reference)) continue;
       const from = direction === "out" ? ct2 : other, to = direction === "out" ? other : ct2;
       if (!explicitMoves.some((m) => m.from === from && m.to === to && m.date === day2) && !rows.some((m) => m.direction === direction && m.reference === reference && m.from === from && m.to === to && m.amount === amount && m.date === day2)) rows.push({ from, to, amount, date: day2, reference, direction });
@@ -480,18 +524,35 @@ var PromotionHubCourse = (() => {
     const leadId = id3(root?.LeadId), kidId = id3(root?.KidId);
     return leadId && kidId ? { leadId, kidId, url: "https://hub24.apollo.vn:7777/lead/detail/" + leadId + "?s=" + kidId } : null;
   }
-  function projectHubContract(root, { payments = null, paymentState = "pending", capturedAt = (/* @__PURE__ */ new Date()).toISOString() } = {}) {
-    const result = { schema: HUB_CONTRACT_SCHEMA, ct: text3(root?.ContractNo ?? root?.ContractCode ?? root?.DepositNo ?? root?.DepositCode).toUpperCase(), contractId: id3(root?.ContractId ?? root?.DepositId ?? root?.Id), capturedAt, discounts: contractDiscountFacts(root), payments: { state: paymentState === "pending" && (projectContractPayments(root, id3(root?.ContractId ?? root?.DepositId ?? root?.Id))?.length ?? 0) > 0 ? "read" : paymentState, rows: payments ?? ((projectContractPayments(root, id3(root?.ContractId ?? root?.DepositId ?? root?.Id))?.length ?? 0) > 0 ? projectContractPayments(root, id3(root?.ContractId ?? root?.DepositId ?? root?.Id)) : []) }, ...projectHubMovements(root) !== null ? { movements: { state: "read", rows: projectHubMovements(root) } } : { movements: { state: "pending", rows: [] } } };
-    result.financeRevision = 3;
+  function projectHubContract(root, { payments = null, paymentResponse, paymentState = "pending", capturedAt = (/* @__PURE__ */ new Date()).toISOString() } = {}) {
+    const contractId = id3(root?.ContractId ?? root?.DepositId ?? root?.Id);
+    const detailPayments = projectContractPayments(root, contractId);
+    const endpointPayments = payments ?? projectContractPayments(paymentResponse, contractId);
+    const rows = detailPayments?.length ? mergePaymentRows(detailPayments, endpointPayments ?? [], true) : endpointPayments ?? [];
+    const responseRows = paymentList(paymentResponse, contractId) ?? [];
+    const moves = projectHubMovements(root, responseRows);
+    const outgoingPayments = outgoingFromRaw([...paymentList(root, contractId) ?? [], ...responseRows]);
+    const result = {
+      schema: HUB_CONTRACT_SCHEMA,
+      ct: text3(root?.ContractNo ?? root?.ContractCode ?? root?.DepositNo ?? root?.DepositCode).toUpperCase(),
+      contractId,
+      capturedAt,
+      discounts: contractDiscountFacts(root),
+      payments: { state: endpointPayments !== null || detailPayments?.length ? "read" : paymentState, rows },
+      movements: { state: moves === null ? "pending" : "read", rows: moves ?? [] },
+      ...outgoingPayments.length ? { outgoingPayments } : {},
+      financeRevision: HUB_FINANCE_REVISION
+    };
     result.contractDate = upgradeDate(root?.CreatedDate ?? root?.CreatedTime);
     result.upgrades = projectUpgradeLinks(root);
     const learner = projectHubLearner(root);
     if (learner) result.learner = learner;
-    result.payments = withoutOutgoingPayments(result.payments, result.movements);
+    result.payments = withoutOutgoingPayments(result.payments, result.movements, outgoingPayments);
     return validateHubContract(result) ? result : null;
   }
   function validateHubContract(v, depth = 0) {
-    if (!exact(v, ["schema", "ct", "contractId", "capturedAt", "discounts", "payments", "movements", "learner", "relatedFinance", "financeRevision", "upgrades", "contractDate"]) || v.schema !== HUB_CONTRACT_SCHEMA || hubDocumentCode(v.ct) !== v.ct || id3(v.contractId) !== v.contractId || typeof v.capturedAt !== "string" || !Number.isFinite(Date.parse(v.capturedAt)) || v.financeRevision !== void 0 && ![2, 3].includes(v.financeRevision)) return false;
+    if (!exact(v, ["schema", "ct", "contractId", "capturedAt", "discounts", "payments", "movements", "learner", "relatedFinance", "financeRevision", "upgrades", "contractDate", "outgoingPayments"]) || v.schema !== HUB_CONTRACT_SCHEMA || hubDocumentCode(v.ct) !== v.ct || id3(v.contractId) !== v.contractId || typeof v.capturedAt !== "string" || !Number.isFinite(Date.parse(v.capturedAt)) || v.financeRevision !== void 0 && ![2, 3, HUB_FINANCE_REVISION].includes(v.financeRevision)) return false;
+    if (v.outgoingPayments !== void 0 && (!hubList(v.outgoingPayments, 500) || !v.outgoingPayments.every((p2) => exact(p2, ["code", "amount", "date"]) && paymentCode(p2.code) === p2.code && number(p2.amount) === p2.amount && p2.amount > 0 && moveDay(p2.date) === p2.date && p2.date))) return false;
     if (v.upgrades !== void 0 && (!validUpgradeLinks(v.upgrades) || v.upgrades.some((r) => r.id === v.contractId || r.ct === v.ct))) return false;
     if (v.contractDate !== void 0 && v.contractDate !== null && upgradeDate(v.contractDate) !== v.contractDate) return false;
     if (v.learner !== void 0) {
@@ -533,29 +594,62 @@ var PromotionHubCourse = (() => {
     }
     return -1;
   };
-  function withoutOutgoingPayments(payments, movements) {
+  function mergePaymentRows(primary, extra, append = false) {
+    const compatible = (a, b) => a.code && a.code.toUpperCase() === b.code.toUpperCase() && Math.abs(a.amount - b.amount) <= 1 && (!a.completeDate || !b.completeDate || a.completeDate === b.completeDate);
+    const rows = primary.map((p) => {
+      const matches = extra.filter((q2) => compatible(p, q2));
+      if (matches.length !== 1) return p;
+      const q = matches[0];
+      const type = internalHubPayment(q) || !p.type || /^payment$/i.test(p.type) && q.type ? q.type : p.type;
+      return mergePaymentInvoice({ ...p, type, typeId: p.typeId ?? q.typeId, method: p.method || q.method, completeDate: p.completeDate ?? q.completeDate, complete: p.complete ?? q.complete }, q);
+    });
+    return append ? [...rows, ...extra.filter((q) => !primary.some((p) => p.id && p.id === q.id || p.code && p.code.toUpperCase() === q.code.toUpperCase()))] : rows;
+  }
+  function withoutOutgoingPayments(payments, movements, observed = []) {
     if (payments?.state !== "read") return payments;
+    const typed = new Set(observed.map((m) => m.code));
     const out = (movements?.rows ?? []).filter((m) => m.direction === "out" && m.reference);
-    return { ...payments, rows: payments.rows.filter((p) => !out.some((m) => m.reference === p.code && m.date === p.completeDate && Math.abs(m.amount - p.amount) <= 1)) };
+    const rows = payments.rows.filter((p) => !outgoingHubPayment(p) && !typed.has(p.code.toUpperCase()) && !out.some((m) => m.reference.toUpperCase() === p.code.toUpperCase() && m.date === p.completeDate && Math.abs(m.amount - p.amount) <= 1));
+    return { ...payments, rows };
+  }
+  var receiptHeaders = ["invoice no", "invoice number", "e-invoice", "e-invoice id", "receipt no", "receipt number"];
+  function mergeMovementRows(first, second, acrossViews = false) {
+    const exactKey = (m) => JSON.stringify([m.from, m.to, m.date, m.amount, m.direction, m.reference]);
+    const byReference = (rows) => [...new Map(rows.map((m) => [exactKey(m), m])).values()];
+    if (!acrossViews) return byReference([...first, ...second]);
+    const groups = /* @__PURE__ */ new Map();
+    for (const [index, list2] of [byReference(first), byReference(second)].entries()) for (const m of list2) {
+      const key = JSON.stringify([m.from, m.to, m.date, m.amount, m.direction]);
+      if (!groups.has(key)) groups.set(key, [[], []]);
+      groups.get(key)[index].push(m);
+    }
+    return [...groups.values()].flatMap(([a, b]) => b.length > a.length || b.length === a.length && b.filter((m) => m.reference).length > a.filter((m) => m.reference).length ? b : a);
   }
   function projectHubDisplayedTables(tables, ct2) {
     const current = contractCode(ct2);
     if (!current || !Array.isArray(tables) || tables.length > 100) return null;
     let payments = null, movements = null;
+    const outgoing = [];
     for (const table of tables) {
       if (!Array.isArray(table?.headers) || !Array.isArray(table.rows) || table.rows.length > 300) continue;
       const headers = table.headers.map((value) => line(value).toLowerCase().replace(/[?*]+$/, "").replace(/moving[ -]+(in|out)/g, "moving $1").trim()), rows = table.rows;
       const pcode = indexed(headers, ["payment code"]), paid = indexed(headers, ["paid amount"]), completed = indexed(headers, ["completed date"]);
       const pamount = indexed(headers, ["payment amount"]);
       if (pcode >= 0 && paid >= 0 && completed >= 0 && pamount >= 0) {
-        const values = [];
+        const values = [], typeIndex = indexed(headers, ["payment type"]), invoiceIndex = indexed(headers, receiptHeaders);
         for (const [rowIndex, r] of rows.entries()) {
           if (!Array.isArray(r) || r.length < headers.length) continue;
-          const code = line(r[pcode]), amount = vnd(r[paid]), total = vnd(r[pamount]), done = ddmmyyyy(r[completed]);
+          const code = paymentCode(r[pcode]), amount = vnd(r[paid]), total = vnd(r[pamount]), done = ddmmyyyy(r[completed]);
+          if (!code || amount === null || total === null || amount < 0 || total < 0 || amount > total) continue;
+          const type = line(r[typeIndex]).slice(0, 200) || "Payment";
+          if (outgoingHubPayment({ type })) {
+            if (done && amount > 0) outgoing.push({ code, amount, date: done });
+            continue;
+          }
           const linked = Array.isArray(table.invoices) ? table.invoices.find((x) => x.row === rowIndex && eInvoiceKey(x.key)) : null;
-          const invoiceRef = invoiceEvidence(r[indexed(headers, ["invoice no", "invoice number", "e-invoice", "e-invoice id"])]) ?? linked?.key;
-          if (!/^[A-Z0-9]+-PAY-[A-Z0-9-]{3,30}$/i.test(code) || amount === null || total === null || amount < 0 || total < 0 || amount > total) continue;
-          values.push({ id: null, code, amount, totalAmount: total, remaining: vnd(r[indexed(headers, ["remain amount"])]) ?? null, typeId: null, type: "Payment", method: line(r[indexed(headers, ["payment method"])]).slice(0, 200), scheduledDate: ddmmyyyy(r[indexed(headers, ["scheduled date"])]), completeDate: done, complete: !!done && amount > 0, ...invoiceRef ? { invoiceRef } : {}, ...eInvoiceKey(invoiceRef) ? { eInvoiceKey: invoiceRef } : {}, ...[1, 2].includes(linked?.version) ? { eInvoiceVersion: linked.version } : {} });
+          const invoiceRef = paymentReceiptReference(r[invoiceIndex], !!headers[invoiceIndex] && !headers[invoiceIndex].startsWith("receipt ")) ?? linked?.key;
+          const invoiceKey = linked?.key ?? eInvoiceKey(invoiceRef);
+          values.push({ id: null, code, amount, totalAmount: total, remaining: vnd(r[indexed(headers, ["remain amount"])]) ?? null, typeId: null, type, method: line(r[indexed(headers, ["payment method"])]).slice(0, 200), scheduledDate: ddmmyyyy(r[indexed(headers, ["scheduled date"])]), completeDate: done, complete: !!done && amount > 0, ...invoiceRef ? { invoiceRef } : {}, ...invoiceKey ? { eInvoiceKey: invoiceKey } : {}, ...[1, 2].includes(linked?.version) ? { eInvoiceVersion: linked.version } : {} });
         }
         if (values.length && new Set(values.map((v) => v.code)).size === values.length) payments = values;
       }
@@ -575,7 +669,7 @@ var PromotionHubCourse = (() => {
         if (list2.length) movements = [...movements ?? [], ...list2];
       }
     }
-    return { payments, movements };
+    return { payments, movements, ...outgoing.length ? { outgoingPayments: mergeHubOutgoingPayments(outgoing) } : {} };
   }
   function mergeDisplayedHubContract(facts, tables, ct2) {
     if (!validateHubContract(facts) || facts.ct !== ct2) return null;
@@ -583,15 +677,12 @@ var PromotionHubCourse = (() => {
     if (!extra) return facts;
     const payments = facts.payments.state === "read" && facts.payments.rows.length ? {
       ...facts.payments,
-      rows: facts.payments.rows.map((row) => {
-        const match = extra.payments?.find((item) => item.code === row.code && Math.abs(item.amount - row.amount) <= 1);
-        return match ? mergePaymentInvoice(row, match) : row;
-      })
+      rows: mergePaymentRows(facts.payments.rows, extra.payments ?? [], true)
     } : extra.payments !== null ? { state: "read", rows: extra.payments } : facts.payments;
-    const moves = [...facts.movements?.rows ?? [], ...extra.movements ?? []];
-    const distinct = [...new Map(moves.map((m) => [JSON.stringify([m.from, m.to, m.amount, m.date, m.reference, m.direction]), m])).values()];
-    const movements = facts.movements?.state === "read" || extra.movements !== null ? { state: "read", rows: distinct } : facts.movements ?? { state: "pending", rows: [] };
-    const result = { ...facts, payments: withoutOutgoingPayments(payments, movements), movements };
+    const rows = mergeMovementRows(facts.movements?.rows ?? [], extra.movements ?? [], true);
+    const movements = facts.movements?.state === "read" || extra.movements !== null ? { state: "read", rows } : facts.movements ?? { state: "pending", rows: [] };
+    const outgoing = mergeHubOutgoingPayments(facts.outgoingPayments ?? [], extra.outgoingPayments ?? []);
+    const result = { ...facts, payments: withoutOutgoingPayments(payments, movements, outgoing), movements, ...outgoing.length ? { outgoingPayments: outgoing } : {} };
     return validateHubContract(result) ? result : facts;
   }
   function hubDisplayedTablesFromDocument(root, { staticDocument = false } = {}) {
@@ -623,7 +714,7 @@ var PromotionHubCourse = (() => {
           continue;
         }
         if (!headers || values.length !== headers.length || rows.length >= 300) continue;
-        const invoiceIndex = indexed(headers.map(normalized), ["e-invoice", "e-invoice id", "invoice no", "invoice number"]), cell = expanded[invoiceIndex];
+        const invoiceIndex = indexed(headers.map(normalized), receiptHeaders), cell = expanded[invoiceIndex];
         if (cell) {
           const keys2 = new Set((value(cell).match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi) ?? []).filter(eInvoiceKey));
           let version;
@@ -651,7 +742,7 @@ var PromotionHubCourse = (() => {
   var label = (v) => text4(v).replace(/[\s:*]+$/, "").replace(/\s*\/\s*/g, "/").toLowerCase();
   var courseLabel = (v) => COURSE_LABELS[label(v)] ?? null;
   var COURSE_FIELDS = ["courseFee", "hoursPerWeek", "package", "giftcode", "discount", "groupKoc", "contractType"];
-  var courseReadComplete = (payload) => !!payload && (payload.readFinance ? payload.hubContract?.payments?.state === "read" || payload.hubContract?.movements?.state === "read" : payload.courseState === "empty" || ["courseFee", "hoursPerWeek", "package", "giftcode", "discount"].every((k) => payload[k] != null));
+  var courseReadComplete = (payload) => !!payload && (payload.readFinance ? payload.hubContract?.payments?.state === "read" || payload.hubContract?.movements?.state === "read" || !!payload.hubContract?.outgoingPayments?.length : payload.courseState === "empty" || ["courseFee", "hoursPerWeek", "package", "giftcode", "discount"].every((k) => payload[k] != null));
   var COURSE_LABELS = {
     "price name": "courseFee",
     "course fee koc": "courseFee",

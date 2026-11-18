@@ -7,6 +7,11 @@ const clean=v=>typeof v==='string'?v.trim().replace(/\s+/g,' '):'';
 export const invoiceNumber=v=>{const s=typeof v==='number'&&Number.isSafeInteger(v)?String(v):clean(v);return /^\d{1,20}$/.test(s)&&/[1-9]/.test(s)?s:null;};
 export const eInvoiceKey=v=>{const s=clean(v);return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s)?s:null;};
 export const invoiceReference=v=>invoiceNumber(v)??eInvoiceKey(v);
+export function paymentReceiptReference(value,invoiceColumn=false){
+ const marked=typeof value==='string'&&/\(E-Invoice\)\s*$/i.test(value);
+ const ref=marked?value.replace(/\s*\(E-Invoice\)\s*$/i,''):value;
+ return invoiceColumn||marked?invoiceReference(ref):eInvoiceKey(ref);
+}
 export const eInvoicePDFURL=value=>{const key=eInvoiceKey(value);return key?'https://hub24.apollo.vn:7777/Downloads/EInvoice/'+key+'.pdf':null;};
 export function invoiceKeyFromURL(value){
  try{const u=new URL(value,'https://hub24.apollo.vn:7777');if(u.origin!=='https://hub24.apollo.vn:7777'||u.username||u.password||u.search||u.hash)return null;const m=/^\/Downloads\/EInvoice\/([^/]+)\.pdf$/i.exec(u.pathname);return eInvoiceKey(m?.[1]);}catch{return null;}
@@ -24,8 +29,9 @@ export function validateInvoice(v){
   Array.isArray(v.conflicts)&&v.conflicts.length<=4&&v.conflicts.every(k=>['number','date','amount','key'].includes(k));
 }
 export function projectPaymentInvoice(raw,source='payment-api'){
- const key=eInvoiceKey(raw?.EInvoiceFKey??raw?.EInvoiceGuid??raw?.EInvoiceId??raw?.EInvoice);
- let number=invoiceNumber(raw?.InvoiceNo??raw?.InvoiceNumber);
+ const receipt=paymentReceiptReference(raw?.ReceiptNo);
+ const key=[raw?.EInvoiceFKey,raw?.EInvoiceGuid,raw?.EInvoiceId,raw?.EInvoice,receipt].map(eInvoiceKey).find(Boolean);
+ let number=[raw?.InvoiceNo,raw?.InvoiceNumber,raw?.EInvoiceNo,receipt].map(invoiceNumber).find(Boolean);
  // Hub's EInvoiceCode explicitly contains its FKey followed by _<InvoiceNo>.
  // Only accept the complete observed shape bound to this exact FKey.
  if(!number&&key&&typeof raw.EInvoiceCode==='string'){
@@ -39,21 +45,27 @@ export function projectPaymentInvoice(raw,source='payment-api'){
 export function mergePaymentInvoice(row,extra){
  const a=row.invoice,b=extra?.invoice;let invoice=a??b;
  const conflicts=[...(a?.conflicts??[]),...(b?.conflicts??[])];
+ const numberA=a?.number??invoiceNumber(row.invoiceRef),numberB=b?.number??invoiceNumber(extra?.invoiceRef);
+ const numberConflict=!!numberA&&!!numberB&&numberA.replace(/^0+/,'')!==numberB.replace(/^0+/,'');
+ if(numberConflict)conflicts.push('number');
  if(a&&b){
-  if(a.number.replace(/^0+/,'')!==b.number.replace(/^0+/,''))conflicts.push('number');
   if(a.date&&b.date&&a.date!==b.date)conflicts.push('date');
   if(a.amount!==null&&b.amount!==null&&Math.abs(a.amount-b.amount)>1)conflicts.push('amount');
   invoice={...a,number:b.source==='e-invoice-pdf'?b.number:a.number,date:a.date??b.date,amount:a.amount??b.amount,source:b.source==='e-invoice-pdf'?b.source:a.source};
  }
- if(row.eInvoiceKey&&extra?.eInvoiceKey&&row.eInvoiceKey!==extra.eInvoiceKey)conflicts.push('key');
+ const keyA=row.eInvoiceKey??eInvoiceKey(row.invoiceRef),keyB=extra?.eInvoiceKey??eInvoiceKey(extra?.invoiceRef);
+ if(keyA&&keyB&&keyA.toLowerCase()!==keyB.toLowerCase())conflicts.push('key');
+ if(!invoice&&numberConflict)invoice={number:numberA,date:null,amount:null,source:'payment-api'};
+ if(invoice&&!numberConflict&&numberA&&numberB)invoice={...invoice,number:numberA.length>=numberB.length?numberA:numberB};
  if(invoice)invoice={...invoice,conflicts:[...new Set(conflicts)]};
  return {...row,...(!row.invoiceRef&&extra?.invoiceRef?{invoiceRef:extra.invoiceRef}:{}),
-  ...(!row.eInvoiceKey&&extra?.eInvoiceKey?{eInvoiceKey:extra.eInvoiceKey}:{}),
+  ...(!row.eInvoiceKey&&(keyA||keyB)?{eInvoiceKey:keyA??keyB}:{}),
   ...(!row.eInvoiceVersion&&extra?.eInvoiceVersion?{eInvoiceVersion:extra.eInvoiceVersion}:{}),...(invoice?{invoice}:{})};
 }
 export const paymentInvoiceNumber=p=>validateInvoice(p?.invoice)?p.invoice.number:invoiceNumber(p?.invoiceRef);
 export const invoiceReadsComplete=f=>f?.payments?.state==='read'&&f.payments.rows.every(p=>p.complete!==true||p.amount<=0||internalHubPayment(p)||!!paymentInvoiceNumber(p));
-export const financeReadsComplete=f=>f?.financeRevision===3&&f.movements?.state==='read'&&!upgradeSourceMissing(f)&&invoiceReadsComplete(f);
+export const HUB_FINANCE_REVISION=4;
+export const financeReadsComplete=f=>f?.financeRevision===HUB_FINANCE_REVISION&&f.movements?.state==='read'&&!upgradeSourceMissing(f)&&invoiceReadsComplete(f);
 export const displayedInvoiceNo=value=>eInvoiceKey(value)?'Chưa đọc số hóa đơn':value||'Chưa có số VAT';
 export const invoiceLabel=p=>paymentInvoiceNumber(p)??invoiceNumber(p?.invoiceNumber)??displayedInvoiceNo(p?.vat??p?.invoiceRef);
 const folded=s=>s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[Đđ]/g,'d').toLowerCase();

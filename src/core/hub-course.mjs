@@ -9,7 +9,7 @@ const text=v=>String(v??'').trim().replace(/\s+/g,' ');
 const label=v=>text(v).replace(/[\s:*]+$/,'').replace(/\s*\/\s*/g,'/').toLowerCase();
 export const courseLabel=v=>COURSE_LABELS[label(v)]??null;
 export const COURSE_FIELDS=['courseFee','hoursPerWeek','package','giftcode','discount','groupKoc','contractType'];
-export const courseReadComplete=payload=>!!payload&&(payload.readFinance?payload.hubContract?.payments?.state==='read'||payload.hubContract?.movements?.state==='read':payload.courseState==='empty'||['courseFee','hoursPerWeek','package','giftcode','discount'].every(k=>payload[k]!=null));
+export const courseReadComplete=payload=>!!payload&&(payload.readFinance?payload.hubContract?.payments?.state==='read'||payload.hubContract?.movements?.state==='read'||!!payload.hubContract?.outgoingPayments?.length:payload.courseState==='empty'||['courseFee','hoursPerWeek','package','giftcode','discount'].every(k=>payload[k]!=null));
 export const COURSE_LABELS={
  'price name':'courseFee','course fee koc':'courseFee','hour/week':'hoursPerWeek','hours/week':'hoursPerWeek','hours per week':'hoursPerWeek',
  'package':'package','package before discount':'package','package (before discount)':'package','student id':'student','student code':'student',

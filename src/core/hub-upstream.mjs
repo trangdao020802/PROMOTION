@@ -37,7 +37,7 @@ export function isOriginalPaymentSource(row,parentCt,parentHubFact=null,manual=[
  const ct=ctCode(parentCt),facts=parentHubFact?.hubContract;
  if(!ct||facts?.ct!==ct||facts.payments?.state!=='read'||upstreamCandidates(row,ct,parentHubFact,manual).length)return false;
  const outgoing=new Set((facts.movements?.rows??[]).filter(m=>m.direction==='out').map(m=>m.reference));
- return facts.payments.rows.some(p=>p.complete===true&&p.amount>0&&p.completeDate&&!outgoing.has(p.code)&&p.typeId!=='10'&&!/transfer|moving|deposit to contract|^other$/i.test((p.method+' '+p.type).trim()));
+ return facts.payments.rows.some(p=>p.complete===true&&p.amount>0&&p.completeDate&&!outgoing.has(p.code)&&!internalHubPayment(p));
 }
 export function originPaymentSummary(facts){
  const seen=new Set(),results=[];
@@ -45,9 +45,9 @@ export function originPaymentSummary(facts){
   for(const p of fact?.hubContract?.payments?.rows??[]){
    const key=String(fact.ct)+'|'+String(p.id??p.code);
    if(seen.has(key))continue;seen.add(key);
-   const internal=internalHubPayment(p),original=p.complete===true&&p.amount>0&&p.completeDate&&p.invoiceRef&&!p.invoice?.conflicts?.length&&(p.invoice?.amount==null||Math.abs(p.invoice.amount-p.amount)<=1)&&!internal;
-   results.push({ct:fact.ct,paymentCode:p.code,amount:p.complete===true?p.amount:null,complete:p.complete===true,original:!!original,internal});
+   const internal=internalHubPayment(p),original=p.complete===true&&p.amount>0&&p.completeDate&&p.invoiceRef&&!(p.invoiceConflicts??p.invoice?.conflicts)?.length&&(p.invoice?.amount==null||Math.abs(p.invoice.amount-p.amount)<=1)&&!internal;
+   results.push({ct:fact.ct,paymentCode:p.code,amount:p.complete===true?p.amount:null,complete:p.complete===true,original:!!original,internal,proof:p});
   }
  }
- return {payments:results,hubPaid:results.reduce((s,p)=>s+(p.amount??0),0),originalCount:results.filter(p=>p.original).length,invoicePaid:results.filter(p=>p.original).reduce((s,p)=>s+p.amount,0)};
+ return {payments:results,hubPaid:results.filter(p=>!p.internal).reduce((s,p)=>s+(p.amount??0),0),originalCount:results.filter(p=>p.original).length,invoicePaid:results.filter(p=>p.original).reduce((s,p)=>s+p.amount,0)};
 }

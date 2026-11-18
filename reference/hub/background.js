@@ -48,7 +48,11 @@ async function handle(m,sender){
   if(job)return {error:'Đang có một lượt Hub. Hoàn tất hoặc dừng lượt đó trước.'};
   let request;
   if(m.type==='course-start'){const course=C.courseRequest(m.course);if(!course)return {error:'Yêu cầu Course info không hợp lệ.'};request={id:m.id,kind:'course',course};}
-  else if(m.type==='voucher-start'){const voucher=V.voucherRequest(m.voucher);if(!voucher)return {error:'Mã Giftcode không hợp lệ.'};request={id:m.id,kind:'voucher',voucher,stage:'voucher-search'};}
+  else if(m.type==='voucher-start'){
+   const voucher=V.voucherRequest(m.voucher);if(!voucher)return {error:'Mã Giftcode không hợp lệ.'};
+   const fields=voucher.url?null:V.voucherSearchFields((await chrome.storage.session.get('voucherSearch')).voucherSearch);
+   request={id:m.id,kind:'voucher',voucher,stage:voucher.url?'voucher-detail':'voucher-search',...(voucher.url?{detailUrl:voucher.url}:fields?{searchFields:fields,searchApplied:true}:{})};
+  }
   else if(m.type==='report-start'){if(!Object.hasOwn(R.HUB_REPORTS,m.report)||!R.reportPeriod(m.month))return {error:'Báo cáo hoặc tháng không hợp lệ.'};request={id:m.id,kind:'report',report:m.report,month:m.month,pageSize:50,stage:'report-probe'};}
   else {let groups;try{groups=I.indexGroups(m.type==='start'?[m.ct]:m.codes);}catch{return {error:'Danh sách CT / DEP không hợp lệ.'};}if(groups.length!==1)return {error:'Mỗi lượt cần cùng loại hồ sơ và tháng.'};request={id:m.id,kind:m.type==='start'?'lookup':'index',codes:groups[0].codes,ct:m.type==='start'?P.code(m.ct):undefined};}
   return startAgent(request,sender);
@@ -71,7 +75,10 @@ async function handle(m,sender){
  if(m.type==='login'){await finish(job,{type:'error',code:'hub_login',message:'Đăng nhập lại trên tab Hub đang mở rồi bấm lấy tiếp.'});return {};}
   if(job.kind==='voucher'){
     const manage=new URL(sender.url).pathname.toLowerCase()==='/giftcode/manage';
-    if(m.type==='voucher-search-applied'&&manage&&job.stage==='voucher-search'&&m.code===job.voucher.code){job={...job,searchApplied:true};await chrome.storage.session.set({job});return {apply:true};}
+    if(m.type==='voucher-search-applied'&&manage&&job.stage==='voucher-search'&&m.code===job.voucher.code){
+      const fields=V.voucherSearchFields(m.fields);job={...job,searchApplied:true};
+      await chrome.storage.session.set({job,...(fields?{voucherSearch:fields}:{})});return {apply:true};
+    }
     if(m.type==='voucher-detail'&&manage&&job.stage==='voucher-search'&&job.searchApplied){
       const choice=V.voucherListChoice([m.row]);if(!choice)return {error:'Link Voucher chưa được xác minh từ dòng kết quả Hub.'};
       const list={};for(const key of ['label','center','startDate','endDate','status','creator','conditions'])if(typeof choice.record[key]==='string')list[key]=choice.record[key].slice(0,key==='conditions'?1500:200);

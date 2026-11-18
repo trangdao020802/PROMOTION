@@ -42,7 +42,7 @@ test('the Hub reader extracts detail controls and the exact code row without cli
  }
  const codes=table(['No.','Giftcode No.','Status'],[['1',code,'Used']]);
  const document={documentElement:{},getElementById:id=>controls.get(id),querySelectorAll:selector=>selector==='label,dt'?labels:selector==='table'?[codes]:[]};
- const r=runtime(document,{id:'job',kind:'voucher',voucher:{code},stage:'voucher-detail',url,list:{center:'North, South',creator:'QA APPROVER'}});await r.settle();await r.advance(1000);await r.settle();
+ const r=runtime(document,{id:'job',kind:'voucher',voucher:{code},stage:'voucher-detail',url,list:{center:'North, South',creator:'QA APPROVER'}});await r.settle();await r.advance(250);await r.settle();
  const result=r.messages.find(m=>m.type==='voucher-complete');assert.ok(result);assert.equal(result.payload.code,code);assert.equal(result.payload.rate,.15);assert.equal(result.payload.startDate,'2026-09-05');assert.equal(result.payload.center,'North, South');
  const separate='https://hub24.apollo.vn:7777/giftcode/listgiftcode/12345';
  const listRuntime=runtime(document,{id:'job-list',kind:'voucher',voucher:{code},stage:'voucher-codes',url,codesUrl:separate,detailPairs:[{label:'Voucher name',value:'QA Voucher'},{label:'Discount amount',value:'15',unit:'%'}],list:{center:'North, South'}},{location:separate});await listRuntime.settle();await listRuntime.advance(1000);await listRuntime.settle();assert.equal(listRuntime.messages.find(m=>m.type==='voucher-complete')?.payload.rate,.15);

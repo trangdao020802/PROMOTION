@@ -21,7 +21,7 @@ const approved=r=>({reviews:Object.fromEntries(r.reviewItems.map(i=>[i.id,{appro
 const voucher=(more={})=>({...EMPTY_VOUCHER,code:'QA-VOUCHER',label:'VOUCHER GIẢ KIỂM THỬ',studentId:'QA-CONSISTENCY',studentName:'DỮ LIỆU GIẢ KIỂM THỬ',center:'QA1',startDate:'2026-09-18',endDate:'2026-10-31',type:'percent',rate:.1,status:'APPROVED',approvalNote:'Căn cứ kiểm thử giả',...more});
 
 test('all 192 dated schedule rows reconcile columns and are the exact schedules the calculator selects',()=>{
- const rows=buildPriceCatalogue(p).filter(r=>['base','september','october','q4'].includes(r.regime)&&r.id.startsWith('ATLS|'));assert.equal(rows.length,192);assert.equal(p.priceEvidence.sources.length,18);assert.equal(p.priceEvidence.checkedRows,48);assert.equal(p.priceEvidence.conflicts,0);
+ const rows=buildPriceCatalogue(p).filter(r=>['base','september','october','q4'].includes(r.regime)&&r.id.startsWith('ATLS|'));assert.equal(rows.length,192);assert.equal(p.priceEvidence.sources.length,19);assert.equal(p.priceEvidence.checkedRows,48);assert.equal(p.priceEvidence.conflicts,0);
  for(const r of rows){
   assert.equal(r.monthly*r.months,r.gross);assert.equal(r.gross-r.discount,r.net);assert.ok(r.group&&r.koc&&r.layer&&r.hours&&r.from&&r.to);assert.ok(r.refs.length);
   const label=r.regime==='september'?`Big Bang Sep 2026 - Giảm Tiền - Layer ${r.layer} - ${r.packageKey==='36 SPLIT'?'36 months (chia đôi)':r.packageKey+' months'} - ${r.hours}hrs/week`:'';

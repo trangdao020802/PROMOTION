@@ -1,2 +1,9 @@
-// Applied only to projected Hub rows; internal allocations are not new cash.
-export const internalHubPayment=p=>p?.typeId==='10'||/transfer|moving|deposit to contract|^other$/i.test((String(p?.method??'')+' '+String(p?.type??'')).trim());
+export const hubPaymentType=p=>String(p?.PaymentTypeName||p?.PaymentType||p?.type||'').trim();
+export const outgoingHubPayment=p=>Number(p?.PaymentTypeId??p?.typeId)===8||/\b(?:moving|transfer)[\s-]*out\b/i.test(hubPaymentType(p));
+
+// A method such as Online Payments also appears on internal Hub movements.
+export function internalHubPayment(p){
+ const type=hubPaymentType(p);
+ return outgoingHubPayment(p)||Number(p?.PaymentTypeId??p?.typeId)===10||
+  /^other$/i.test(type)||/transfer|moving|deposit[\s-]+to[\s-]+contract/i.test(type+' '+String(p?.method??''));
+}

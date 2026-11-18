@@ -5,9 +5,9 @@ import {AuditEngine} from '../src/local/calculation.mjs';
 import {policyData} from '../scripts/policy-data.mjs';
 import {parseDate} from '../src/core/source-parser.mjs';
 import {attachHubFunding} from '../src/core/hub-proven-funding.mjs';
-import {projectHubContract,projectHubDisplayedTables} from '../src/core/hub-contract.mjs';
+import {projectHubContract,projectHubDisplayedTables,mergeDisplayedHubContract} from '../src/core/hub-contract.mjs';
 import {projectContractDetail,parseContractDetailProjection} from '../src/core/hub-course-network.mjs';
-import {childFactInput,childFactKey,mergeChildFinancialFact} from '../src/core/child-hub-evidence.mjs';
+import {childFactInput,childFactKey,mergeChildFinancialFact,compareChildFacts} from '../src/core/child-hub-evidence.mjs';
 import {paymentAllocations} from '../src/core/payment-allocations.mjs';
 import {knownFinanceDocuments} from '../src/core/hub-upstream.mjs';
 import {projectLearnerPaymentPage,mergeLearnerFinance} from '../src/core/hub-learner-payments.mjs';
@@ -87,4 +87,59 @@ test('one learner history read funds both multi-hop branches without reading unr
  attachHubFunding(f.model,{datasetId,facts:[main],links:[{ct:master,url}]});const after=row(f.model);
  assert.equal(after.cells.W,10800000);assert.equal(after.receipts.length,3);assert.equal(after.cells.ctCheck,'OK');assert.equal(paymentAllocations(after).pending.length,0);
  assert.deepEqual(after.receipts.filter(r=>roots.includes(r.contract)).map(r=>r.vat).sort(),['0000424','0000425']);
+});
+test('a Deposit invoice funds two hops once even when Learner Payments omits the Deposit Moving-out code',()=>{
+ const dep=roots[1],mid=mids[0],root={ContractId:990,ContractNo:master,LeadId:90,KidId:91,ListCourseInfo:[],
+  ListMovingIn:[{FromContractNo:mid,Amount:7200000,TransferDate:'2026-11-14'}]};
+ const deposit={DepositId:8801,DepositNo:dep,LeadId:90,KidId:91};
+ const original='QA2611-PAY-000355',outgoing='QA2611-PAY-000356',vat='0000287',own='QA2611-PAY-000734';
+ const group=(ct,id,ListPayment)=>({ContractDepositNo:ct,ContractDepositId:id,ListPayment});
+ const paid=(PaymentCode,Amount,PaymentDate,PaymentType,extra)=>({PaymentCode,Amount,PaymentDate,PaymentType,Status:'Paid',PaymentMethodName:'Online Payments',...extra});
+ const learner={KidId:91,TotalCount:3,ListData:[
+  group(master,990,[paid('QA2611-PAY-000733',7200000,'14/11/2026','Other',{RelatedContractDepositNo:mid}),paid(own,46980000,'14/11/2026','Payment',{InvoiceNo:'0000290'})]),
+  group(mid,901,[paid('QA2611-PAY-000357',7200000,'03/11/2026','Deposit to contract',{RelatedContractDepositNo:dep})]),
+  group(dep,8801,[paid(original,7200000,'03/11/2026','Deposit',{InvoiceNo:vat})])
+ ]};
+ const finance=mergeLearnerFinance(projectHubContract(root),[projectLearnerPaymentPage(learner,root)]);
+ assert.equal(finance.movements.rows.length,1);
+ assert.equal(finance.relatedFinance.find(d=>d.ct===dep).payments.rows[0].invoice.number,vat);
+ const key='12345678-1234-4567-89ab-123456789abc';
+ const paymentResponse={DepositId:8801,Data:{ListPayment:[original,outgoing].map((PaymentCode,i)=>({
+  DepositId:8801,PaymentId:355+i,PaymentCode,Amount:7200000,IsComplete:true,CompleteDate:'2026-11-03'
+ }))}};
+ const viewed=mergeDisplayedHubContract(projectHubContract(deposit,{paymentResponse}),[{
+  headers:['Payment type','Payment code','Payment method','Completed date','Payment amount','Remain amount','Paid amount','Receipt no','Complete payment','Others'],
+  rows:[['Deposit',original,'Online Payments','03/11/2026','7.200.000','0','7.200.000',key+' (E-Invoice)','On',''],
+   ['Moving-out',outgoing,'Online Payments','03/11/2026','7.200.000','0','7.200.000','','On','']]
+ }],dep);
+ assert.deepEqual(viewed.payments.rows.map(p=>[p.code,p.type,p.eInvoiceKey]),[[original,'Deposit',key]]);
+ assert.deepEqual(viewed.outgoingPayments,[{code:outgoing,amount:7200000,date:'2026-11-03'}]);
+ assert.equal(viewed.movements.rows.length,0);
+ const complete=mergeLearnerFinance(viewed,[projectLearnerPaymentPage(learner,deposit)]);
+ assert.equal(complete.payments.rows[0].invoice.number,vat);
+ assert.equal(complete.outgoingPayments[0].code,outgoing);
+ const scoped=(ct,id,hubContract)=>{
+  const url='https://hub24.apollo.vn:7777/'+(ct===dep?'deposit':'contract')+'/detail/'+id;
+  const context={datasetId,masterCt:master,ct,student};
+  return {...context,id:childFactKey(context),url,hubContract};
+ };
+ const saved=[scoped(master,990,finance),scoped(dep,8801,complete)];
+ for(const imported of [false,true]){
+  const {bundle}=fixture();
+  bundle.scope={from:'2026-11-01',to:'2026-11-30',center:''};bundle.cutoff=parseDate(bundle.scope.to);bundle.transfers=[];
+  Object.assign(bundle.cash[0].cells,{D:own,O:parseDate('2026-11-14'),P:'0000290',AC:54180000,AF:46980000});
+  Object.assign(bundle.exports[0],{paid:54180000,target:54180000});
+  const model=buildModel(bundle,policyData());model.dataset={id:datasetId};
+  if(imported)model.input.cashSources[0].rows.push({payment:original,contract:dep,student,vat,date:parseDate('2026-11-03'),amount:7200000,paid:true,cancelled:false,ref:{file:'QA PaymentList'}});
+  attachHubFunding(model,{datasetId,facts:saved,links:links(saved)});
+  const result=row(model),allocated=paymentAllocations(result);
+  assert.equal(result.cells.W,54180000);
+  assert.equal(result.receipts.length,2);
+  assert.equal(allocated.pending.length,0);
+  assert.deepEqual(allocated.invoices.map(i=>[i.receipt.contract,i.receipt.vat,i.amount,i.paths[0].length]),[[dep,vat,7200000,2]]);
+  assert.deepEqual(result.reconciliation.hubSupplement.pending,[]);
+  const report=compareChildFacts(scoped(dep,8801,viewed),result);
+  assert.equal(report.payments[0].invoice,vat);
+  assert.equal(report.outgoingPayments[0].code,outgoing);
+ }
 });

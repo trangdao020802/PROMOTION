@@ -8,6 +8,7 @@ import {pricingIdentity,canonicalCourseName,priceText,isWeeklyCourse,packageIden
 import {matchTypedPrice} from './policy-pack.mjs';
 import {PRICE_PHASES,roadmapSchedule} from './price-schedule.mjs';
 import {policyMatchesInputs} from './hub-policy.mjs';
+import {configuredHubEvidence} from './hub-price-config.mjs';
 const number=x=>typeof x==='number'&&Number.isFinite(x);
 const text=x=>String(x??'').trim();
 const unique=a=>[...new Set(a.filter(x=>x!==null&&x!==undefined&&x!==''))];
@@ -33,6 +34,8 @@ export function priceFor(data,cells,context={}){
   const prices=data.policy.prices??[],exact=prices.filter(r=>r.C===cells.H&&r.D===cells.I&&r.E===cells.J);
   result.refs=(exact.length?exact:prices.filter(r=>pricingIdentity(r.C,r.D,r.E).key===identity.key)).map(r=>({file:'Bang_gia_chung_doi_chieu_Report.xlsx',sheet:'Bảng giá chung',row:r.row}));
  }
+ const hubReference=configuredHubEvidence(data.policy.hubPriceConfig,cells,context,identity);
+ if(hubReference)result.hubReference=hubReference;
  return result;
 }
 // These are the same inputs a user can enter in the Contract detail form.

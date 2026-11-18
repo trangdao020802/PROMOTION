@@ -4,5 +4,5 @@ export function policyData(){
  const base=read('rules-source.json'),policyRegister=read('policy-register.json');
  const programs=[...new Map([...base.programs,...policyRegister.programs].map(p=>[p.id,p])).values()];
  const supplement=read('policy-supplement.json');
- return {...base,programs,priceEvidence:read('price-evidence.json'),policyRegister,typedPrices:supplement.rows,policySupplement:supplement};
+ return {...base,programs,priceEvidence:read('price-evidence.json'),policyRegister,typedPrices:supplement.rows,policySupplement:supplement,hubPriceConfig:read('hub-price-config.json')};
 }

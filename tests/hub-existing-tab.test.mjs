@@ -231,6 +231,32 @@ test('an API result is bound to the requested CT/student, stops its fallback and
  r.packet({type:'course',projection:p});assert.equal(r.messages.length,1);
  const bad=isolatedRuntime();bad.send({type:'hub-agent-run',id:'qa-isolated',agentKey:'qa-agent',kind:'course',course});bad.packet({type:'course',projection:{...p,student:'OTHER'}});assert.equal(bad.messages[0].code,'course_unavailable');assert.ok(!bad.messages[0].payload);
 });
+test('a Deposit read checks the rendered owner table for Moving-out while keeping the invoice from Learner Payments',async()=>{
+ const r=isolatedRuntime();r.context.AbortController=AbortController;
+ const ct='QA2611-DEP-000055',request={...course,ct,url:origin+'/deposit/detail/55',readFinance:true};
+ const issued='QA2611-PAY-000055',moving='QA2611-PAY-000056',key='12345678-1234-4567-89ab-123456789abc';
+ const raw={DepositId:55,DepositNo:ct,ListPayment:[{PaymentId:55,PaymentCode:issued,PaymentTypeName:'Deposit',Amount:7200000,
+  IsComplete:true,CompleteDate:'2026-11-03',InvoiceNo:'0000287'}]};
+ const projection=r.context.PromotionHubCourseNetwork.projectContractDetail(raw,origin+'/api/Deposit/GetDepositDetail?depositId=55',request.url);
+ r.send({type:'hub-agent-run',id:'qa-isolated',agentKey:'qa-agent',kind:'course',course:request});
+ r.packet({type:'course',projection});
+ assert.equal(r.messages.length,0);assert.equal(r.frames.length,1);
+ const frame=r.frames[0],table={getClientRects:()=>[{}]},heading={textContent:'Deposit '+ct,getClientRects:()=>[{}]};
+ const cell=(v,tagName)=>({tagName,textContent:v,getClientRects:()=>[{}]});
+ const row=(values,tag)=>({children:values.map(v=>cell(v,tag)),closest:s=>s==='table'?table:null,getClientRects:()=>[{}]});
+ table.querySelectorAll=()=>[
+  row(['Payment type','Payment code','Completed date','Payment amount','Paid amount','Receipt no'],'TH'),
+  row(['Deposit',issued,'03/11/2026','7.200.000','7.200.000',key+' (E-Invoice)'],'TD'),
+  row(['Moving-out',moving,'03/11/2026','7.200.000','7.200.000',''],'TD')
+ ];
+ frame.contentWindow.location.href=request.url;
+ frame.contentDocument={querySelectorAll:q=>q.startsWith('h1,')?[heading]:q==='table'?[table]:[]};
+ frame.load();await drain();
+ const result=r.messages[0]?.payload?.hubContract;
+ assert.ok(result);assert.equal(result.payments.rows.length,1);assert.equal(result.payments.rows[0].invoice.number,'0000287');
+ assert.equal(result.payments.rows[0].eInvoiceKey,key);assert.equal(result.outgoingPayments[0].code,moving);
+ assert.equal(r.context.location.href,origin+'/home');assert.equal(frame.removed,true);
+});
 
 test('pre-upgrade automated jobs are discarded without closing their former tabs',async()=>{
  const r=backgroundRuntime();r.store.job={id:'old-job',kind:'course',hubTab:22,sourceTab:10,expires:Date.now()+10000};

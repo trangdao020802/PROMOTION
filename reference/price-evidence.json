@@ -258,6 +258,21 @@
         "HƯỚNG DẪN",
         "THAM SỐ"
       ]
+    },
+    {
+      "file": "Học phí tháng 11_2026.xlsx",
+      "sha256": "f585bda1c7d47d4f4e8509cfe1cc57c24fc0b3037b1a3706067d129e579a5bc9",
+      "role": "monthly-tuition-policy",
+      "from": "2026-11-01",
+      "to": "2026-11-30",
+      "sheets": [
+        "10.1 Layer 1 - HV New",
+        "10.2 Layer 1 - HV Hiện tại đã p",
+        "10.3 Layer 2 - HV New",
+        "10.4 Layer 2 - HV hiện tại đã p",
+        "10.5 Layer 3 - HV New",
+        "10.6 Layer 3 - HV Hiện tại đã p"
+      ]
     }
   ],
   "roadmap": [
@@ -310,6 +325,22 @@
             "file": "2026 Price & Promotion - update 10.10.26.xlsx",
             "sheet": "Big bang promotion 6.10 - 31.12",
             "row": 36
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.1 Layer 1 - HV New",
+            "row": 9,
+            "cell": "L9:L16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.2 Layer 1 - HV Hiện tại đã p",
+            "row": 8,
+            "cell": "L8:L16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
           }
         ]
       },
@@ -418,6 +449,22 @@
             "file": "2026 Price & Promotion - update 10.10.26.xlsx",
             "sheet": "Big bang promotion 6.10 - 31.12",
             "row": 36
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.1 Layer 1 - HV New",
+            "row": 9,
+            "cell": "M9:M16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.2 Layer 1 - HV Hiện tại đã p",
+            "row": 8,
+            "cell": "M8:M16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
           }
         ]
       },
@@ -472,6 +519,22 @@
             "file": "2026 Price & Promotion - update 10.10.26.xlsx",
             "sheet": "Big bang promotion 6.10 - 31.12",
             "row": 36
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.1 Layer 1 - HV New",
+            "row": 9,
+            "cell": "N9:N16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.2 Layer 1 - HV Hiện tại đã p",
+            "row": 8,
+            "cell": "N8:N16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
           }
         ]
       },
@@ -526,6 +589,22 @@
             "file": "2026 Price & Promotion - update 10.10.26.xlsx",
             "sheet": "Big bang promotion 6.10 - 31.12",
             "row": 36
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.1 Layer 1 - HV New",
+            "row": 9,
+            "cell": "O9:O16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.2 Layer 1 - HV Hiện tại đã p",
+            "row": 8,
+            "cell": "O8:O16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
           }
         ]
       },
@@ -573,6 +652,22 @@
             "file": "2026 Price & Promotion - update 10.10.26.xlsx",
             "sheet": "Big bang promotion 6.10 - 31.12",
             "row": 36
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.1 Layer 1 - HV New",
+            "row": 9,
+            "cell": "P9:P16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.2 Layer 1 - HV Hiện tại đã p",
+            "row": 8,
+            "cell": "P8:P16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
           }
         ]
       },
@@ -620,6 +715,22 @@
             "file": "2026 Price & Promotion - update 10.10.26.xlsx",
             "sheet": "Big bang promotion 6.10 - 31.12",
             "row": 36
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.1 Layer 1 - HV New",
+            "row": 9,
+            "cell": "P9:P16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.2 Layer 1 - HV Hiện tại đã p",
+            "row": 8,
+            "cell": "P8:P16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
           }
         ]
       },
@@ -667,6 +778,22 @@
             "file": "2026 Price & Promotion - update 10.10.26.xlsx",
             "sheet": "Big bang promotion 6.10 - 31.12",
             "row": 36
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.1 Layer 1 - HV New",
+            "row": 9,
+            "cell": "P9:P16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.2 Layer 1 - HV Hiện tại đã p",
+            "row": 8,
+            "cell": "P8:P16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
           }
         ]
       },
@@ -721,6 +848,22 @@
             "file": "2026 Price & Promotion - update 10.10.26.xlsx",
             "sheet": "Big bang promotion 6.10 - 31.12",
             "row": 36
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.3 Layer 2 - HV New",
+            "row": 9,
+            "cell": "L9:L16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.4 Layer 2 - HV hiện tại đã p",
+            "row": 8,
+            "cell": "L8:L16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
           }
         ]
       },
@@ -829,6 +972,22 @@
             "file": "2026 Price & Promotion - update 10.10.26.xlsx",
             "sheet": "Big bang promotion 6.10 - 31.12",
             "row": 36
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.3 Layer 2 - HV New",
+            "row": 9,
+            "cell": "M9:M16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.4 Layer 2 - HV hiện tại đã p",
+            "row": 8,
+            "cell": "M8:M16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
           }
         ]
       },
@@ -883,6 +1042,22 @@
             "file": "2026 Price & Promotion - update 10.10.26.xlsx",
             "sheet": "Big bang promotion 6.10 - 31.12",
             "row": 36
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.3 Layer 2 - HV New",
+            "row": 9,
+            "cell": "N9:N16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.4 Layer 2 - HV hiện tại đã p",
+            "row": 8,
+            "cell": "N8:N16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
           }
         ]
       },
@@ -937,6 +1112,22 @@
             "file": "2026 Price & Promotion - update 10.10.26.xlsx",
             "sheet": "Big bang promotion 6.10 - 31.12",
             "row": 36
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.3 Layer 2 - HV New",
+            "row": 9,
+            "cell": "O9:O16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.4 Layer 2 - HV hiện tại đã p",
+            "row": 8,
+            "cell": "O8:O16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
           }
         ]
       },
@@ -984,6 +1175,22 @@
             "file": "2026 Price & Promotion - update 10.10.26.xlsx",
             "sheet": "Big bang promotion 6.10 - 31.12",
             "row": 36
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.3 Layer 2 - HV New",
+            "row": 9,
+            "cell": "P9:P16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.4 Layer 2 - HV hiện tại đã p",
+            "row": 8,
+            "cell": "P8:P16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
           }
         ]
       },
@@ -1031,6 +1238,22 @@
             "file": "2026 Price & Promotion - update 10.10.26.xlsx",
             "sheet": "Big bang promotion 6.10 - 31.12",
             "row": 36
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.3 Layer 2 - HV New",
+            "row": 9,
+            "cell": "P9:P16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.4 Layer 2 - HV hiện tại đã p",
+            "row": 8,
+            "cell": "P8:P16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
           }
         ]
       },
@@ -1078,6 +1301,22 @@
             "file": "2026 Price & Promotion - update 10.10.26.xlsx",
             "sheet": "Big bang promotion 6.10 - 31.12",
             "row": 36
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.3 Layer 2 - HV New",
+            "row": 9,
+            "cell": "P9:P16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.4 Layer 2 - HV hiện tại đã p",
+            "row": 8,
+            "cell": "P8:P16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
           }
         ]
       },
@@ -1132,6 +1371,22 @@
             "file": "2026 Price & Promotion - update 10.10.26.xlsx",
             "sheet": "Big bang promotion 6.10 - 31.12",
             "row": 36
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.5 Layer 3 - HV New",
+            "row": 9,
+            "cell": "L9:L16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.6 Layer 3 - HV Hiện tại đã p",
+            "row": 8,
+            "cell": "L8:L16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
           }
         ]
       },
@@ -1240,6 +1495,22 @@
             "file": "2026 Price & Promotion - update 10.10.26.xlsx",
             "sheet": "Big bang promotion 6.10 - 31.12",
             "row": 36
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.5 Layer 3 - HV New",
+            "row": 9,
+            "cell": "M9:M16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.6 Layer 3 - HV Hiện tại đã p",
+            "row": 8,
+            "cell": "M8:M16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
           }
         ]
       },
@@ -1294,6 +1565,22 @@
             "file": "2026 Price & Promotion - update 10.10.26.xlsx",
             "sheet": "Big bang promotion 6.10 - 31.12",
             "row": 36
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.5 Layer 3 - HV New",
+            "row": 9,
+            "cell": "N9:N16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.6 Layer 3 - HV Hiện tại đã p",
+            "row": 8,
+            "cell": "N8:N16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
           }
         ]
       },
@@ -1348,6 +1635,22 @@
             "file": "2026 Price & Promotion - update 10.10.26.xlsx",
             "sheet": "Big bang promotion 6.10 - 31.12",
             "row": 36
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.5 Layer 3 - HV New",
+            "row": 9,
+            "cell": "O9:O16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.6 Layer 3 - HV Hiện tại đã p",
+            "row": 8,
+            "cell": "O8:O16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
           }
         ]
       },
@@ -1395,6 +1698,22 @@
             "file": "2026 Price & Promotion - update 10.10.26.xlsx",
             "sheet": "Big bang promotion 6.10 - 31.12",
             "row": 36
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.5 Layer 3 - HV New",
+            "row": 9,
+            "cell": "P9:P16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.6 Layer 3 - HV Hiện tại đã p",
+            "row": 8,
+            "cell": "P8:P16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
           }
         ]
       },
@@ -1442,6 +1761,22 @@
             "file": "2026 Price & Promotion - update 10.10.26.xlsx",
             "sheet": "Big bang promotion 6.10 - 31.12",
             "row": 36
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.5 Layer 3 - HV New",
+            "row": 9,
+            "cell": "P9:P16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.6 Layer 3 - HV Hiện tại đã p",
+            "row": 8,
+            "cell": "P8:P16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
           }
         ]
       },
@@ -1489,6 +1824,22 @@
             "file": "2026 Price & Promotion - update 10.10.26.xlsx",
             "sheet": "Big bang promotion 6.10 - 31.12",
             "row": 36
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.5 Layer 3 - HV New",
+            "row": 9,
+            "cell": "P9:P16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.6 Layer 3 - HV Hiện tại đã p",
+            "row": 8,
+            "cell": "P8:P16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
           }
         ]
       },
@@ -1543,6 +1894,22 @@
             "file": "2026 Price & Promotion - update 10.10.26.xlsx",
             "sheet": "Big bang promotion 6.10 - 31.12",
             "row": 53
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.1 Layer 1 - HV New",
+            "row": 9,
+            "cell": "C9:C16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.2 Layer 1 - HV Hiện tại đã p",
+            "row": 8,
+            "cell": "C8:C16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
           }
         ]
       },
@@ -1651,6 +2018,22 @@
             "file": "2026 Price & Promotion - update 10.10.26.xlsx",
             "sheet": "Big bang promotion 6.10 - 31.12",
             "row": 53
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.1 Layer 1 - HV New",
+            "row": 9,
+            "cell": "D9:D16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.2 Layer 1 - HV Hiện tại đã p",
+            "row": 8,
+            "cell": "D8:D16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
           }
         ]
       },
@@ -1705,6 +2088,22 @@
             "file": "2026 Price & Promotion - update 10.10.26.xlsx",
             "sheet": "Big bang promotion 6.10 - 31.12",
             "row": 53
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.1 Layer 1 - HV New",
+            "row": 9,
+            "cell": "E9:E16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.2 Layer 1 - HV Hiện tại đã p",
+            "row": 8,
+            "cell": "E8:E16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
           }
         ]
       },
@@ -1759,6 +2158,22 @@
             "file": "2026 Price & Promotion - update 10.10.26.xlsx",
             "sheet": "Big bang promotion 6.10 - 31.12",
             "row": 53
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.1 Layer 1 - HV New",
+            "row": 9,
+            "cell": "F9:F16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.2 Layer 1 - HV Hiện tại đã p",
+            "row": 8,
+            "cell": "F8:F16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
           }
         ]
       },
@@ -1806,6 +2221,22 @@
             "file": "2026 Price & Promotion - update 10.10.26.xlsx",
             "sheet": "Big bang promotion 6.10 - 31.12",
             "row": 53
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.1 Layer 1 - HV New",
+            "row": 9,
+            "cell": "G9:G16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.2 Layer 1 - HV Hiện tại đã p",
+            "row": 8,
+            "cell": "G8:G16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
           }
         ]
       },
@@ -1853,6 +2284,22 @@
             "file": "2026 Price & Promotion - update 10.10.26.xlsx",
             "sheet": "Big bang promotion 6.10 - 31.12",
             "row": 53
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.1 Layer 1 - HV New",
+            "row": 9,
+            "cell": "G9:G16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.2 Layer 1 - HV Hiện tại đã p",
+            "row": 8,
+            "cell": "G8:G16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
           }
         ]
       },
@@ -1900,6 +2347,22 @@
             "file": "2026 Price & Promotion - update 10.10.26.xlsx",
             "sheet": "Big bang promotion 6.10 - 31.12",
             "row": 53
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.1 Layer 1 - HV New",
+            "row": 9,
+            "cell": "G9:G16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.2 Layer 1 - HV Hiện tại đã p",
+            "row": 8,
+            "cell": "G8:G16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
           }
         ]
       },
@@ -1954,6 +2417,22 @@
             "file": "2026 Price & Promotion - update 10.10.26.xlsx",
             "sheet": "Big bang promotion 6.10 - 31.12",
             "row": 53
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.3 Layer 2 - HV New",
+            "row": 9,
+            "cell": "C9:C16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.4 Layer 2 - HV hiện tại đã p",
+            "row": 8,
+            "cell": "C8:C16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
           }
         ]
       },
@@ -2062,6 +2541,22 @@
             "file": "2026 Price & Promotion - update 10.10.26.xlsx",
             "sheet": "Big bang promotion 6.10 - 31.12",
             "row": 53
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.3 Layer 2 - HV New",
+            "row": 9,
+            "cell": "D9:D16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.4 Layer 2 - HV hiện tại đã p",
+            "row": 8,
+            "cell": "D8:D16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
           }
         ]
       },
@@ -2116,6 +2611,22 @@
             "file": "2026 Price & Promotion - update 10.10.26.xlsx",
             "sheet": "Big bang promotion 6.10 - 31.12",
             "row": 53
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.3 Layer 2 - HV New",
+            "row": 9,
+            "cell": "E9:E16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.4 Layer 2 - HV hiện tại đã p",
+            "row": 8,
+            "cell": "E8:E16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
           }
         ]
       },
@@ -2170,6 +2681,22 @@
             "file": "2026 Price & Promotion - update 10.10.26.xlsx",
             "sheet": "Big bang promotion 6.10 - 31.12",
             "row": 53
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.3 Layer 2 - HV New",
+            "row": 9,
+            "cell": "F9:F16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.4 Layer 2 - HV hiện tại đã p",
+            "row": 8,
+            "cell": "F8:F16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
           }
         ]
       },
@@ -2217,6 +2744,22 @@
             "file": "2026 Price & Promotion - update 10.10.26.xlsx",
             "sheet": "Big bang promotion 6.10 - 31.12",
             "row": 53
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.3 Layer 2 - HV New",
+            "row": 9,
+            "cell": "G9:G16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.4 Layer 2 - HV hiện tại đã p",
+            "row": 8,
+            "cell": "G8:G16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
           }
         ]
       },
@@ -2264,6 +2807,22 @@
             "file": "2026 Price & Promotion - update 10.10.26.xlsx",
             "sheet": "Big bang promotion 6.10 - 31.12",
             "row": 53
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.3 Layer 2 - HV New",
+            "row": 9,
+            "cell": "G9:G16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.4 Layer 2 - HV hiện tại đã p",
+            "row": 8,
+            "cell": "G8:G16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
           }
         ]
       },
@@ -2311,6 +2870,22 @@
             "file": "2026 Price & Promotion - update 10.10.26.xlsx",
             "sheet": "Big bang promotion 6.10 - 31.12",
             "row": 53
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.3 Layer 2 - HV New",
+            "row": 9,
+            "cell": "G9:G16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.4 Layer 2 - HV hiện tại đã p",
+            "row": 8,
+            "cell": "G8:G16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
           }
         ]
       },
@@ -2365,6 +2940,22 @@
             "file": "2026 Price & Promotion - update 10.10.26.xlsx",
             "sheet": "Big bang promotion 6.10 - 31.12",
             "row": 53
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.5 Layer 3 - HV New",
+            "row": 9,
+            "cell": "C9:C16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.6 Layer 3 - HV Hiện tại đã p",
+            "row": 8,
+            "cell": "C8:C16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
           }
         ]
       },
@@ -2473,6 +3064,22 @@
             "file": "2026 Price & Promotion - update 10.10.26.xlsx",
             "sheet": "Big bang promotion 6.10 - 31.12",
             "row": 53
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.5 Layer 3 - HV New",
+            "row": 9,
+            "cell": "D9:D16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.6 Layer 3 - HV Hiện tại đã p",
+            "row": 8,
+            "cell": "D8:D16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
           }
         ]
       },
@@ -2527,6 +3134,22 @@
             "file": "2026 Price & Promotion - update 10.10.26.xlsx",
             "sheet": "Big bang promotion 6.10 - 31.12",
             "row": 53
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.5 Layer 3 - HV New",
+            "row": 9,
+            "cell": "E9:E16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.6 Layer 3 - HV Hiện tại đã p",
+            "row": 8,
+            "cell": "E8:E16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
           }
         ]
       },
@@ -2581,6 +3204,22 @@
             "file": "2026 Price & Promotion - update 10.10.26.xlsx",
             "sheet": "Big bang promotion 6.10 - 31.12",
             "row": 53
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.5 Layer 3 - HV New",
+            "row": 9,
+            "cell": "F9:F16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.6 Layer 3 - HV Hiện tại đã p",
+            "row": 8,
+            "cell": "F8:F16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
           }
         ]
       },
@@ -2628,6 +3267,22 @@
             "file": "2026 Price & Promotion - update 10.10.26.xlsx",
             "sheet": "Big bang promotion 6.10 - 31.12",
             "row": 53
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.5 Layer 3 - HV New",
+            "row": 9,
+            "cell": "G9:G16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.6 Layer 3 - HV Hiện tại đã p",
+            "row": 8,
+            "cell": "G8:G16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
           }
         ]
       },
@@ -2675,6 +3330,22 @@
             "file": "2026 Price & Promotion - update 10.10.26.xlsx",
             "sheet": "Big bang promotion 6.10 - 31.12",
             "row": 53
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.5 Layer 3 - HV New",
+            "row": 9,
+            "cell": "G9:G16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.6 Layer 3 - HV Hiện tại đã p",
+            "row": 8,
+            "cell": "G8:G16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
           }
         ]
       },
@@ -2722,6 +3393,22 @@
             "file": "2026 Price & Promotion - update 10.10.26.xlsx",
             "sheet": "Big bang promotion 6.10 - 31.12",
             "row": 53
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.5 Layer 3 - HV New",
+            "row": 9,
+            "cell": "G9:G16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
+          },
+          {
+            "file": "Học phí tháng 11_2026.xlsx",
+            "sheet": "10.6 Layer 3 - HV Hiện tại đã p",
+            "row": 8,
+            "cell": "G8:G16",
+            "from": "2026-11-01",
+            "to": "2026-11-30"
           }
         ]
       },
@@ -15347,5 +16034,5 @@
   ],
   "checkedRows": 48,
   "conflicts": 0,
-  "scope": "48 lộ trình giá; đối chiếu giá tháng/Q4 và khoản tiền Big Bang Sep với văn bản gốc. Danh sách case không được dùng làm quy tắc chung."
+  "scope": "48 lộ trình giá; đối chiếu giá tháng/Q4 và khoản tiền Big Bang Sep với văn bản gốc. Danh sách case không được dùng làm quy tắc chung. Đã đối chiếu học phí tháng 11/2026 cho 3 Layer, lớp 3/4 giờ và học viên mới/hiện tại, gồm 84 trường hợp thuộc 42 khóa giá Q4."
 }

@@ -18,7 +18,7 @@ export async function completeContractVoucher(row,payload,saved,io){
  const previous=await io.loadVoucher(code,current);
  if(!voucherNeedsRead(previous)){if(previous?.version===0&&!previous.id){await io.saveVoucher(voucherInput(previous),0);return {state:'saved',code,status:previous.status};}return {state:'known',code};}
  io.progress?.('Đang đọc Voucher '+code+' trong nền…');
- const source=await io.readVoucher(code);if(io.signal?.aborted)throw Object.assign(Error('Đã dừng tra Voucher.'),{code:'cancelled'});
+ const source=await io.readVoucher(code,previous?.hubUrl);if(io.signal?.aborted)throw Object.assign(Error('Đã dừng tra Voucher.'),{code:'cancelled'});
  const initial=voucherInput({...previous,code});let merged;
  try{merged=mergeHubVoucher(initial,source,voucherRecordProfile(current));}
  catch(e){throw Object.assign(Error(String(e.message??e)),{code:'voucher_invalid'});}

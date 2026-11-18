@@ -2,6 +2,23 @@ import test from 'node:test';import assert from 'node:assert/strict';import vm f
 import {backgroundRuntime} from './helpers/existing-hub-runtime.mjs';
 const ctx=vm.createContext({URL,Date});vm.runInContext(fs.readFileSync(new URL('../reference/hub/report-core.js',import.meta.url),'utf8'),ctx);const R=ctx.PromotionHubReports;
 const headers={export:['Contract No.','Student code','Final pay amount contract','Total final payment amount invoice','Contract full date'],payment:['Payment code','Contract No.','Student ID','Invoice date','VAT Invoice No.'],transfer:['Transfer type','Transfer date','From student ID','To student ID','From Contract/Deposit No.','To Contract No.']};
+test('PaymentList requests all 14 requested centers in both the website and bridge',()=>{
+ const centers='87_66_27_59_74_78_36_95_67_44_45_99_70_23';
+ const url=new URL(R.reportURL('payment','2026-11',50));
+ assert.equal(url.searchParams.get('centers'),centers);
+ assert.equal(new Set(centers.split('_')).size,14);
+ assert.equal(url.searchParams.get('fromDate'),'2026-11-01');
+ assert.equal(url.searchParams.get('toDate'),'2026-11-30');
+ assert.equal(R.reportURLMatches(url.href,'payment','2026-11',50),true);
+ url.searchParams.set('centers','87_66_27_59_74_36_95_67_44_45_78');
+ assert.equal(R.reportURLMatches(url.href,'payment','2026-11',50),false);
+ const website=fs.readFileSync(new URL('../src/supplied/dashboard.js',import.meta.url),'utf8');
+ const declaration=website.match(/^var Y = Object\.freeze\(.+\);$/m);
+ assert.ok(declaration);
+ const websiteContext=vm.createContext({});
+ vm.runInContext(declaration[0],websiteContext);
+ assert.equal(websiteContext.Y.payment.centers,centers);
+});
 for(const report of Object.keys(headers))test(report+' report probes its row count and reads the complete result in one bound background frame',async()=>{
  const r=backgroundRuntime(),id='qa-report-'+report,month='2026-10';let url=R.reportURL(report,month,50);
  const send=(m,extra={})=>r.send({id,frameJob:id,frameKey:'qa-agent',...m},20,url,{frameId:9,documentId:'qa-report-frame',...extra});

@@ -4,7 +4,7 @@ export default function InvoiceEvidence({payment={}}:any){
  const no=paymentInvoiceNumber(payment)??invoiceNumber(payment.invoiceNumber)??invoiceNumber(payment.vat);
  const key=payment.eInvoiceKey??eInvoiceKey(payment.invoiceRef??payment.vat);
  const day=payment.invoice?.date??payment.invoiceDate,value=payment.invoice?.amount??payment.invoiceAmount;
- const conflicts=payment.invoice?.conflicts??payment.invoiceConflicts??[];
+ const conflicts=payment.invoiceConflicts??payment.invoice?.conflicts??[];
  return <span className="invoice-evidence"><strong>{no??displayedInvoiceNo(payment.vat??payment.invoiceRef)}</strong>
   {key&&<small className="invoice-key"><a href={eInvoicePDFURL(key)} target="_blank" rel="noopener noreferrer">E-Invoice: {key}</a></small>}
   {day&&<small>Ngày hóa đơn: {String(day).split('-').reverse().join('/')}</small>}

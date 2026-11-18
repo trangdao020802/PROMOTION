@@ -192,6 +192,12 @@ class IndependentCalculator{
   const complete=['Z','AA','AB','AC','AD'].every(k=>number(cells[k])&&Math.abs(cells[k])<=1);
   cells.AF=complete&&cells.AE==='OK'&&cells.BD==='OK'&&cells.BO==='OK'&&['OK','NO GIFTCODE'].includes(cells.CI)&&!promotion.blocking&&!reconciliation.blocking?'OK':'CHECK';
   cells.AN=unique([pricing?.key?'Khóa giá: '+pricing.key:'',pricing?pricing.refs.map(r=>r.file+' · '+r.sheet+' · dòng '+r.row+(r.cell?' · ô '+r.cell:'')).join('; '):'Chưa có quy tắc giá đúng Course fee / giờ / gói / ngày.',pricing?.short&&number(pricing.monthly)?'Giá gốc gói lẻ = '+pricing.monthly.toLocaleString('vi-VN')+' VND/tháng chưa giảm × '+pricing.months+' tháng. Discount và Giftcode tính riêng.':'',number(cells.Q)?'Phải đóng = giá niêm yết − discount − giftcode. Transfer là phân bổ tiền, không trừ học phí lần hai.':'Chưa đủ dữ liệu để tính; ô trống không được coi là 0.',code&&hubActive?'Giftcode tính theo thứ tự và trần gốc của mã; đối chiếu cấu hình Hub và căn cứ duyệt.':code?((context.voucherBasis&&context.voucherBasis!=='policy-default'?context.voucherBasis:voucherBasisFor(data,cells.D))==='gross'?'Giftcode % trên giá gốc trước Discount; kiểm tra căn cứ phê duyệt của mã.':'Giftcode % trên giá gốc trừ Discount; theo căn cứ phê duyệt của mã.'):'',number(cells.extraHours)?hubActive?'Giờ tặng và tổng giờ tính theo thời lượng của PriceId '+group.hubPolicy.product.priceId+' trên Hub; tổng giờ làm tròn sau khi cộng.':courseHoursExplanation(courseHours):'',loyaltyMissing?'Cần lịch sử học phí và ngày dừng học để xét loyalty.':'',...promotion.checks]).join(' | ');
+  if(pricing?.hubReference){
+   const {codes,values,discountCodes}=pricing.hubReference;
+   const quote=values.map(v=>v.toLocaleString('vi-VN')+' đ').join(' / ');
+   const discountNote=discountCodes.length?' Ưu đãi Hub khớp tên: '+discountCodes.join(', ')+'.':'';
+   cells.AN+=' | Giá cài trên Hub ('+codes.join(', ')+'): '+quote+'. Đối chiếu phạm vi trên đúng CT.'+discountNote;
+  }
   if(account.hubSupplement?.amount){
    const proofs=account.hubSupplement.receipts.map(r=>r.origin+' / '+r.paymentCode+' / E-Invoice '+r.invoiceRef).join('; ');
    cells.AN=[cells.AN,'Bổ sung thu từ Hub có căn cứ: '+account.hubSupplement.amount.toLocaleString('vi-VN')+' đ. Chứng từ: '+proofs+'. Không cộng lại tiền chuyển nội bộ.'].filter(Boolean).join(' | ');

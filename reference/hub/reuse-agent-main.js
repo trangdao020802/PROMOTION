@@ -95,7 +95,7 @@
   for(const row of projection.hubContract.payments.rows){
    if(signal.aborted||Date.now()-started>5000||tried>=4)break;
    const key=N.eInvoiceKey(row.eInvoiceKey??row.invoiceRef);
-   if(!key||row.complete!==true||row.amount<=0||row.invoice?.date&&row.invoice?.amount!==null)continue;
+   if(!key||N.internalHubPayment(row)||row.complete!==true||row.amount<=0||row.invoice?.date&&row.invoice?.amount!==null)continue;
    tried++;const ctrl=new AbortController(),stop=()=>ctrl.abort(),timer=setTimeout(stop,4000);signal.addEventListener('abort',stop,{once:true});
    try{
     let bytes=null;
@@ -116,13 +116,18 @@
   }
  }
  async function addDisplayedFinance(projection,request,signal){
-  if(signal.aborted||!request.readFinance||!projection?.hubContract||typeof DOMParser!=='function')return;
+  if(signal.aborted||!request.readFinance||!projection?.hubContract)return;
+  const merge=doc=>{
+   projection.hubContract=N.mergeUpgradeLinks(N.mergeDisplayedHubContract(projection.hubContract,N.hubDisplayedTablesFromDocument(doc,{staticDocument:doc!==document}),request.ct),N.upgradeLinksFromDocument(doc,{staticDocument:doc!==document}))??projection.hubContract;
+  };
+  if(location.href===request.url&&typeof document.querySelectorAll==='function'){merge(document);return;}
+  if(typeof DOMParser!=='function')return;
   if(projection.hubContract.payments?.rows?.every(p=>p.invoiceRef)&&projection.hubContract.payments.rows.length&&projection.hubContract.movements?.state==='read')return;
   const controller=new AbortController(),stop=()=>controller.abort(),timer=setTimeout(stop,3000);signal.addEventListener('abort',stop,{once:true});
   try{const html=await fetchBody(request.url,controller.signal),doc=new DOMParser().parseFromString(html,'text/html');
    const titles=[...doc.querySelectorAll('title,h1,h2,h3,.page-title,.content-header')].map(n=>n.textContent??'').join(' ');
    if(!titles.includes(request.ct))return;
-   const merged=N.mergeUpgradeLinks(N.mergeDisplayedHubContract(projection.hubContract,N.hubDisplayedTablesFromDocument(doc,{staticDocument:true}),request.ct),N.upgradeLinksFromDocument(doc,{staticDocument:true}));if(merged)projection.hubContract=merged;
+   merge(doc);
   }catch{}finally{clearTimeout(timer);signal.removeEventListener('abort',stop);}
  }
  async function addUpgradeFinance(projection,client,signal,request,jobId){
@@ -134,7 +139,7 @@
     const payment=client?.payments?bounded(client.payments({contractId:link.id}),1500):Promise.resolve(null);
     const value=await bounded(client?.read?client.read(link.id):fetchJSON(api,ctrl.signal),Math.min(1800,remaining)),root=N.contractRoot(value);
     if(!root||ctrl.signal.aborted)return null;
-    const payments=N.projectContractPayments(await payment,link.id),facts=N.projectHubContract(root,{payments,paymentState:payments?'read':'pending'});
+    const facts=N.projectHubContract(root,{paymentResponse:await payment});
     if(!facts||facts.contractId!==link.id||link.ct&&facts.ct!==link.ct)return null;
     const expected={...request,ct:facts.ct,url:link.url,readFinance:true},source={hubContract:facts};
     await addDisplayedFinance(source,expected,ctrl.signal);
@@ -220,7 +225,7 @@
     // comes exclusively from its live session, including an existing frame.
     const source=capture.url||N.courseDetailEndpoint(P.HUB+(client.deposit?'/api/Deposit/GetDepositDetail?depositId=':'/api/Contract/GetContractDetail?contractId=')+contractId+'&userRoleId='+client.role,request.url);
     const projection=source&&N.projectContractDetail(value,source,request.url),root=N.contractRoot(value);
-    if(projection&&root){const rawPayments=await paymentRead,payments=N.projectContractPayments(rawPayments,contractId),facts=N.projectHubContract({...root,...(Array.isArray(rawPayments)?{ListPayment:rawPayments}:{})},{payments,paymentState:payments?'read':'unavailable'});if(facts)projection.hubContract=facts;}
+    if(projection&&root){const facts=N.projectHubContract(root,{paymentResponse:await paymentRead,paymentState:'unavailable'});if(facts)projection.hubContract=facts;}
     await addDisplayedFinance(projection,request,signal);
     await addUpgradeDate(projection,client,signal);
     await addLearnerFinance(projection,root,client,signal,request);
@@ -234,15 +239,19 @@
    }catch{if(active?.id===m.id&&!signal.aborted)publish({type:'route-missing',id:m.id});}finally{if(serviceCapture===capture)serviceCapture=null;}})();
    return;
   }
-  let url=null;if(route){const target=new URL(route);target.searchParams.set('contractId',request.url.replace(/\/$/,'').split('/').pop());url=N.courseDetailEndpoint(target.href,request.url);}
+  let url=null;if(route){const target=new URL(route),deposit=request.ct.includes('-DEP-'),detail=new URL(request.url),parameter=deposit?'depositId':'contractId';
+   target.searchParams.set(parameter,detail.searchParams.get(parameter)??detail.searchParams.get('id')??detail.pathname.replace(/\/$/,'').split('/').pop());
+   url=N.courseDetailEndpoint(target.href,request.url);
+  }
   if(!url){publish({type:'route-missing',id:m.id});return;}
   publish({type:'course-fetch',id:m.id});
   void (async()=>{
    try{
     const paymentURL=new URL(url);let paymentRead=Promise.resolve(null);
     if(paymentURL.pathname.toLowerCase()==='/api/contract/getcontractdetail'){paymentURL.pathname='/api/Contract/GetContractPayment';paymentURL.searchParams.delete('userRoleId');paymentRead=bounded(fetchJSON(paymentURL.href,signal),2000);}
+    if(paymentURL.pathname.toLowerCase()==='/api/deposit/getdepositdetail'){paymentURL.pathname='/api/Deposit/GetDepositPayment';paymentURL.searchParams.delete('userRoleId');paymentRead=bounded(fetchJSON(paymentURL.href,signal),2000);}
     const value=await fetchJSON(url,signal),projection=N.projectContractDetail(value,url,request.url),root=N.contractRoot(value);
-    if(projection&&root){const payments=N.projectContractPayments(await paymentRead,projection.contractId),facts=N.projectHubContract(root,{payments,paymentState:payments?'read':'unavailable'});if(facts)projection.hubContract=facts;}
+    if(projection&&root){const facts=N.projectHubContract(root,{paymentResponse:await paymentRead,paymentState:'unavailable'});if(facts)projection.hubContract=facts;}
     await addDisplayedFinance(projection,request,signal);
     await addUpgradeFinance(projection,null,signal,request,m.id);
     if(active?.id===m.id&&!signal.aborted)publish(projection?{type:'course',id:m.id,projection}:{type:'route-missing',id:m.id});

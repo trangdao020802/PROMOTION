@@ -14,13 +14,42 @@ const select=(p=policy,input=cells())=>priceFor({policy:p},input,{group:'AGLS',c
 
 test('every price catalogue row is the Contract selector result for the same declared inputs',()=>{
  const rows=buildPriceCatalogue(policy);assert.ok(rows.length>400);
- for(const row of rows){
+ for(const row of rows.filter(row=>!row.hubConfig)){
   const r=priceFor({policy},row.resolution.cells,row.resolution.context);
   for(const field of financial)assert.equal(row[field],r[field],row.id+' '+field);
   assert.equal(row.issue,r.issue??null,row.id+' policy state');assert.equal(row.pricingKey,r.key);
  }
  // A price for a multi-student class must not be displayed as one student's fee.
  const group=rows.find(r=>r.variant==='premium'&&r.groupMin>1);assert.ok(group);assert.equal(group.gross,null);assert.equal(group.status,'missing');
+});
+test('Hub configuration separates price units, ambiguous rates and unscoped offers from Contract prices',()=>{
+ const rows=buildPriceCatalogue(policy),hub=rows.filter(r=>r.hubConfig);
+ assert.equal(hub.length,227);
+ const week=hub.find(r=>r.priceCode==='P00606'&&r.hours===3);
+ assert.deepEqual([week.unit,week.weeks,week.unitPrice,week.gross],['weeks',4,900000,3600000]);
+ const trial=hub.find(r=>r.priceCode==='P00572'&&r.packageHours===12);
+ assert.deepEqual([trial.unit,trial.gross],['hour-package',2600000]);
+ const summer=hub.filter(r=>r.group==='Summer 2026');
+ assert.deepEqual(summer.map(r=>[r.priceCode,r.unit,r.packageHours,r.gross,r.refs[0].file]),[
+  ['P00595','hours',1,750000,'GetCoursePrice (1).json'],
+  ['P00596','hours',1,500000,'GetCoursePrice (1).json'],
+ ]);
+ const layer3Week=hub.find(r=>r.priceCode==='P00608'&&r.hours===3);
+ assert.deepEqual([layer3Week.unit,layer3Week.gross,layer3Week.refs[0].file],['weeks',3300000,'GetCoursePrice (3).json']);
+ const duplicate=hub.filter(r=>r.priceCode==='P00578'&&r.package==='6 months (P.24M Siblings)'&&r.hours===3);
+ assert.deepEqual(duplicate.map(r=>[r.gross,r.status]),[[13980000,'conflict'],[15480000,'conflict']]);
+ const h18=hub.find(r=>r.priceCode==='P00589'&&r.package==='18 months'&&r.hours===3);
+ assert.equal(h18.comparisons[0].delta,1350000);
+ assert.ok(h18.masterRefs.every(ref=>ref.file===policy.hubPriceConfig.reportFile));
+ const input={...cells('18 months'),H:'ATLS - New Price 2026 - Layer 1',L:'Siblings - Siblings 1.000.000 VND (AGLS/ATLS/IELTS)'};
+ const result=priceFor({policy},input,{group:'ATLS',contractType:'New'});
+ assert.equal(result.gross,56700000);
+ assert.deepEqual(result.hubReference.values,[58050000]);
+ assert.deepEqual(result.hubReference.discountCodes,['GD000293-1674']);
+ assert.equal(priceFor({policy},{...input,H:input.H.replace('ATLS','AGLS')},{group:'AGLS',contractType:'New'}).hubReference,undefined);
+ const discount=policyRuleCatalogue(policy,rows).find(r=>r.ruleKey==='GD00301-1719');
+ assert.equal(discount.status,'manual-policy');
+ assert.match(discount.benefit,/27%/);
 });
 test('S26-2 retains its 12 months while catalogue, RULE and calculator share the unresolved policy',()=>{
  const row=buildPriceCatalogue(policy).find(r=>r.id==='master-48'),r=select();

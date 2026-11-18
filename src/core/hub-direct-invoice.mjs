@@ -1,5 +1,5 @@
 import {validateHubContract} from './hub-contract.mjs';
-import {eInvoiceKey,eInvoicePDFURL,validateInvoice,mergePaymentInvoice} from './hub-invoice.mjs';
+import {eInvoiceKey,eInvoicePDFURL,validateInvoice,mergePaymentInvoice,internalHubPayment} from './hub-invoice.mjs';
 
 // The route is the actual E-Invoice download route supplied by the user. It
 // needs neither an Angular controller nor CenterId, and never opens a viewer.
@@ -8,7 +8,7 @@ export async function readDirectInvoices(facts,{fetch:read,readPDF,signal,isCurr
  const started=Date.now(),rows=facts.payments.rows.map(p=>({...p}));let tried=0;
  for(const row of rows){
   const key=eInvoiceKey(row.eInvoiceKey??row.invoiceRef);
-  if(!key||row.complete!==true||row.amount<=0||row.invoice?.date&&row.invoice?.amount!==null)continue;
+  if(!key||internalHubPayment(row)||row.complete!==true||row.amount<=0||row.invoice?.date&&row.invoice?.amount!==null)continue;
   if(signal?.aborted||!isCurrent()||tried>=4||Date.now()-started>=budgetMs)break;tried++;
   const ctrl=new AbortController(),stop=()=>ctrl.abort(),timer=setTimeout(stop,Math.max(1,Math.min(timeoutMs,budgetMs-(Date.now()-started))));
   signal?.addEventListener('abort',stop,{once:true});

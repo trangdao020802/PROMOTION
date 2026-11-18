@@ -1,6 +1,7 @@
-import {hubList,projectHubContract,projectContractPayments,projectHubLearner,mergeHubFinanceFacts,validateHubContract} from './hub-contract.mjs';
+import {hubList,projectHubContract,projectHubLearner,mergeHubFinanceFacts,mergeHubOutgoingPayments,validateHubContract} from './hub-contract.mjs';
 import {hubDocumentCode} from './hub-document.mjs';
 import {invoiceDay,projectPaymentInvoice,mergePaymentInvoice} from './hub-invoice.mjs';
+import {hubPaymentType,internalHubPayment,outgoingHubPayment} from './hub-payment-kind.mjs';
 import {upgradeEdges} from './hub-upgrade.mjs';
 const plain=v=>v&&typeof v==='object'&&!Array.isArray(v);
 const id=v=>/^[1-9]\d{0,14}$/.test(String(v??''))?String(v):null;
@@ -23,31 +24,39 @@ export function projectLearnerPaymentPage(value,root){
   if(ct===code(root.ContractNo??root.DepositNo)&&contractId!==id(root.ContractId??root.DepositId))return null;
   const lists=['ListPayment','ListPayments','PaymentDetails','ListPaymentDetails','Payments'].map(k=>hubList(group[k],500)).filter(Boolean);
   const rows=lists.length?lists.find(a=>a.length)??[]:group.PaymentCode?[group]:[];
-  const payments=[],moves=[];
+  const payments=[],moves=[],outgoing=[];
   for(const raw of rows){
    if(!plain(raw)||raw.KidId!=null&&id(raw.KidId)!==learner.kidId)continue;
-   const explicit=code(raw.ContractDepositNo??raw.ContractNo??raw.DepositNo);
-   if(explicit&&explicit!==ct)continue;
-   const paymentCode=text(raw.PaymentCode),paid=raw.IsComplete===true||raw.IsComplete!==false&&/^paid$/i.test(text(raw.StatusName??raw.Status??raw.PaymentStatusName));
+   const explicit=code(raw.ContractDepositNo??raw.ContractNo??raw.DepositNo),owner=id(raw.ContractDepositId??raw.ContractId??raw.DepositId);
+   if(explicit&&explicit!==ct||owner&&owner!==contractId)continue;
+   const paymentCode=text(raw.PaymentCode).toUpperCase(),paid=raw.IsComplete===true||raw.IsComplete!==false&&/^paid$/i.test(text(raw.StatusName||raw.Status||raw.PaymentStatusName));
    const paidAmount=amount(raw.PaidAmount??raw.Amount),completeDate=invoiceDay(raw.CompleteDate??raw.PaymentDate);
    if(!/^[A-Z0-9]+-PAY-[A-Z0-9-]{3,30}$/i.test(paymentCode)||paidAmount===null)continue;
-   const method=text(raw.PaymentMethodTypeName??raw.PaymentMethodName).slice(0,200),type=text(raw.PaymentTypeName??raw.PaymentType).slice(0,200);
+   const method=text(raw.PaymentMethodTypeName||raw.PaymentMethodName).slice(0,200),type=hubPaymentType(raw).slice(0,200);
    const p={id:id(raw.PaymentId),code:paymentCode,amount:paidAmount,totalAmount:amount(raw.TotalAmount??raw.Amount),remaining:amount(raw.RemainAmount),typeId:id(raw.PaymentTypeId),type,method,
     scheduledDate:invoiceDay(raw.ScheduledDate),completeDate,complete:paid,...projectPaymentInvoice(raw,'learner-payments')};
+   const related=code(raw.RelatedContractDepositNo??raw.RelatedContractNo??raw.RelatedDepositNo);
+   if(outgoingHubPayment(p)){
+    if(paid&&paidAmount>0&&completeDate){
+     outgoing.push({code:paymentCode,amount:paidAmount,date:completeDate});
+     if(related&&related!==ct)moves.push({from:ct,to:related,amount:paidAmount,date:completeDate,reference:paymentCode,direction:'out'});
+    }
+    continue;
+   }
    const previous=payments.find(q=>q.code===p.code);
    if(previous){if(Math.abs(previous.amount-p.amount)>1||previous.completeDate!==p.completeDate||previous.complete!==p.complete)return null;Object.assign(previous,mergePaymentInvoice(previous,p));}
    else payments.push(p);
-   const from=code(raw.RelatedContractDepositNo??raw.RelatedContractNo);
-   if(from&&from!==ct&&paid&&paidAmount>0&&completeDate&&!/refund|moving[ -]?out|transfer[ -]?out/i.test(type))moves.push({from,to:ct,amount:paidAmount,date:completeDate,reference:paymentCode,direction:'in'});
+   if(related&&related!==ct&&paid&&paidAmount>0&&completeDate&&internalHubPayment(p)&&!/refund/i.test(type))moves.push({from:related,to:ct,amount:paidAmount,date:completeDate,reference:paymentCode,direction:'in'});
   }
-  if(!payments.length&&!moves.length)continue;
+  if(!payments.length&&!moves.length&&!outgoing.length)continue;
   const facts=projectHubContract({ContractNo:ct,ContractId:contractId,LeadId:learner.leadId,KidId:learner.kidId,ListMovingIn:[],ListCourseInfo:[]},{payments,paymentState:'read'});
   if(!facts)continue;facts.discounts=null;facts.movements={state:'read',rows:moves};
+  if(outgoing.length)facts.outgoingPayments=mergeHubOutgoingPayments(outgoing);
   const prior=documents.get(ct);
   if(prior){
    if(prior.contractId!==facts.contractId)return null;
-   for(const p of facts.payments.rows){const old=prior.payments.rows.find(x=>x.code===p.code);if(old&&(Math.abs(old.amount-p.amount)>1||old.completeDate!==p.completeDate||old.complete!==p.complete))return null;if(old)Object.assign(old,mergePaymentInvoice(old,p));else prior.payments.rows.push(p);}
-   prior.movements.rows.push(...moves);
+   for(const p of facts.payments.rows){const old=prior.payments.rows.find(x=>x.code===p.code);if(old&&(Math.abs(old.amount-p.amount)>1||old.completeDate!==p.completeDate||old.complete!==p.complete))return null;}
+   documents.set(ct,mergeHubFinanceFacts(prior,facts,{appendPayments:true}));
   }else documents.set(ct,facts);
  }
  return {documents:[...documents.values()],count:groups.length,total:Number.isSafeInteger(value.TotalCount)&&value.TotalCount>=0?value.TotalCount:null};
@@ -60,13 +69,11 @@ export function mergeLearnerFinance(facts,pages){
   const prior=docs.get(doc.ct);
   if(prior){
    if(prior.contractId!==doc.contractId||prior.learner&&prior.learner.kidId!==doc.learner.kidId)return facts;
-   const merged=mergeHubFinanceFacts(prior,doc);
-   const rows=[...merged.payments.rows];for(const p of doc.payments.rows)if(!rows.some(q=>q.code===p.code))rows.push(p);
-   docs.set(doc.ct,{...merged,payments:{...merged.payments,rows}});
+   docs.set(doc.ct,mergeHubFinanceFacts(prior,doc,{appendPayments:true}));
   }else docs.set(doc.ct,doc);
  }
  const own=docs.get(facts.ct);
- let result=own?.contractId===facts.contractId?mergeHubFinanceFacts(facts,own):facts;
+ let result=own?.contractId===facts.contractId?mergeHubFinanceFacts(facts,own,{appendPayments:true,acrossViews:true}):facts;
  // Only ancestors connected to the requested document leave Hub. Other
  // courses, siblings and unrelated payments of this household stay in Hub.
  const known=new Set([facts.ct]),related=[],upgrades=upgradeEdges([result,...docs.values()]);

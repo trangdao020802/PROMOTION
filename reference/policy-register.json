@@ -138,6 +138,114 @@
           ]
         }
       ]
+    },
+    {
+      "id": "tuition-2026-11",
+      "title": "Học phí tháng 11/2026",
+      "from": "2026-11-01",
+      "to": "2026-11-30",
+      "state": "confirmed",
+      "match": [],
+      "benefit": "Đã đối chiếu 84 trường hợp với bảng Q4. Gói 36 / 24 / 18 / 12 tháng được giảm 30% / 27% / 15% / 10%, trả góp tối đa 12 / 12 / 9 / 6 tháng. Gói 9 / 6 / 3 tháng theo giá thường và trả thẳng.",
+      "conditions": [
+        "Áp dụng trong tháng 11/2026 cho 3 Layer, lớp Mẫu giáo 3 giờ/tuần và Thiếu nhi/Thiếu niên 4 giờ/tuần.",
+        "Học viên mới cần đủ điều kiện học bổng ghi danh trong ngày kiểm tra trình độ.",
+        "Học viên hiện tại đối chiếu lịch sử thanh toán và điều kiện Q4 trước khi tính tháng loyalty 4 / 3 / 2 cho gói 36 / 24 / 18 tháng.",
+        "Gói từ 12 tháng được tặng 1 tháng khi trả thẳng. Referral xét theo điều kiện giới thiệu trong nguồn và hồ sơ từng học viên."
+      ],
+      "stacking": "Một mức giảm Q4 + trả thẳng + loyalty đúng từng học viên + referral/sibling đúng loại gói. Không nhân đôi khi nhiều nhãn mô tả cùng khoản giảm.",
+      "refs": [
+        {
+          "file": "Học phí tháng 11_2026.xlsx",
+          "sheet": "10.1 Layer 1 - HV New",
+          "rows": [
+            3,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            15,
+            18
+          ]
+        },
+        {
+          "file": "Học phí tháng 11_2026.xlsx",
+          "sheet": "10.2 Layer 1 - HV Hiện tại đã p",
+          "rows": [
+            3,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            15,
+            18
+          ]
+        },
+        {
+          "file": "Học phí tháng 11_2026.xlsx",
+          "sheet": "10.3 Layer 2 - HV New",
+          "rows": [
+            3,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            15,
+            18
+          ]
+        },
+        {
+          "file": "Học phí tháng 11_2026.xlsx",
+          "sheet": "10.4 Layer 2 - HV hiện tại đã p",
+          "rows": [
+            3,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            15,
+            18
+          ]
+        },
+        {
+          "file": "Học phí tháng 11_2026.xlsx",
+          "sheet": "10.5 Layer 3 - HV New",
+          "rows": [
+            3,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            15,
+            18
+          ]
+        },
+        {
+          "file": "Học phí tháng 11_2026.xlsx",
+          "sheet": "10.6 Layer 3 - HV Hiện tại đã p",
+          "rows": [
+            3,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            15,
+            18
+          ]
+        }
+      ]
     }
   ],
   "rules": [

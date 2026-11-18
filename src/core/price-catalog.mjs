@@ -6,6 +6,7 @@ import {PRICE_PHASES} from './price-schedule.mjs';
 export {PRICE_PHASES,roadmapSchedule} from './price-schedule.mjs';
 import {pricingIdentity,packageIdentity} from './pricing-key.mjs';
 import {calculateHubPolicy,validateHubPolicy} from './hub-policy.mjs';
+import {configuredHubPriceRows,configuredHubRuleRows} from './hub-price-config.mjs';
 const num=x=>typeof x==='number'&&Number.isFinite(x);
 const text=x=>String(x??'').trim();
 const key=x=>text(x).toUpperCase().replace(/\s+/g,' ');
@@ -17,7 +18,7 @@ function calculated(policy,inputs){
  const result=priceFor({policy},inputs.cells,inputs.context),identity=result?.identity??pricingIdentity(inputs.cells.H,inputs.cells.I,inputs.cells.J,inputs.context);
  const issue=result?.issue??(result?null:'CHECK - CHƯA CÓ GIÁ CHÍNH SÁCH ĐÃ XÁC MINH');
  return {...Object.fromEntries(financial.map(k=>[k,result?.[k]??(k==='months'?identity.months:null)])),pricingKey:result?.key??identity.key,variant:identity.variant,
-  unit:result?.unit??identity.unit,weeks:result?.weeks??identity.weeks,unitPrice:result?.unitPrice??result?.monthly??null,issue,refs:result?.refs??[],resolution:inputs,
+  unit:result?.unit??identity.unit,weeks:result?.weeks??identity.weeks,unitPrice:result?.unitPrice??result?.monthly??null,issue,refs:result?.refs??[],resolution:inputs,hubReference:result?.hubReference,
   status:/NHIỀU RULE|MÂU THUẪN|(?:BẢNG|DÒNG) GIÁ KHÔNG THỐNG NHẤT/.test(issue??'')?'conflict':!num(result?.gross)?'missing':issue?.startsWith('XÁC MINH')?'manual-policy':issue?'conflict':'ready'};
 }
 export function courseIdentity(course,hours){
@@ -36,7 +37,7 @@ export function buildPriceCatalogue(policy){
   const r=calculated(published,resolution),meta=metadata(policy,course,row.C+' hrs/week',pkg);
   rows.push({id,group:'ATLS',year:2026,course:`ATLS - New Price 2026 - Layer ${row.B}`,layer:row.B,hours:row.C,package:row.D==='36 SPLIT'?'18 months siblings':row.D+' months',packageKey:row.D,
    regime:phase,regimeLabel:spec.label,from:spec.from,renewFrom:spec.renewFrom??spec.from,to:spec.to,currency:'VND',
-   ...r,
+   ...r,hubReference:row.D==='36 SPLIT'?undefined:r.hubReference,
    status:r.issue?'conflict':phase==='september'&&row.E<12?'not-applicable':'ready',note:r.issue??(phase==='september'&&row.E<12?'Có giá gốc; Big Bang Sep không có ưu đãi cho gói này.':'Giảm theo chương trình đã chọn; tháng tặng chỉ cộng khi đủ điều kiện. Voucher tính riêng.'),refs:r.refs,sourceRow:row.row,
    conditions:row.D==='36 SPLIT'?'Hai con ruột, hai CT khác học viên, full cùng ngày; Q4 mỗi con 18 tháng.':'New: ghi danh trong ngày / Current: điều kiện thanh toán và lịch sử tương ứng. ATLS/AGLS dùng chung khung 2026; AHP dùng Layer 2 từ 17/03.',
    observedPrice:meta.at(-1)?.observedGross??null,masterRefs:meta.map(m=>({file:m.file,sheet:m.sheet,row:m.row,source:m.source,statedGross:m.statedGross,observedGross:m.observedGross})),koc:kocNames(meta,row.C===3?'Kindergarten':'Primary / Secondary')});
@@ -67,12 +68,12 @@ export function buildPriceCatalogue(policy){
   const replacements=updates.filter(u=>(u.group===r.group||[u.group,r.group].includes('ATLS/AGLS')&&['ATLS','AGLS','ATLS/AGLS'].includes(u.group)&&['ATLS','AGLS','ATLS/AGLS'].includes(r.group))&&u.year===r.year&&u.layer===r.layer&&u.hours===r.hours&&u.variant===variant&&String(u.packageKey)===String(r.packageKey)&&u.from<=r.to&&r.from<=u.to);
   if(replacements.length){r.status='overridden';r.note='Giá phát hành. Phần được thay thế: '+replacements.map(u=>`${u.from}–${u.to}, ${u.group}, center ${u.center||'*'}, đối tượng ${u.contractType||'*'}: dùng ${u.revisionTitle||'bản cập nhật'}`).join('; ')+'. Ngoài phạm vi này tiếp tục dùng giá phát hành.';}
  }
- return rows;
+ return [...rows,...configuredHubPriceRows(policy.hubPriceConfig,rows)];
 }
 export function policyRuleCatalogue(policy,prices=buildPriceCatalogue(policy)){
  const months=n=>num(n)?'+'+n+' tháng':'chưa xác định';
  const straight=r=>r.straightWeeks>0?(r.straight>0?months(r.straight)+' + ':'')+'+'+r.straightWeeks+' tuần':months(r.straight);
-  return [...prices.map(r=>({...r,id:'rule-'+r.id,ruleKey:[r.regime,r.pricingKey??[r.layer,r.hours,r.packageKey].join('|')].join('|'),benefit:`Giảm ${num(r.discount)?r.discount.toLocaleString('vi-VN')+' VND':'chưa xác định'}; trả thẳng ${straight(r)}; loyalty tối đa ${months(r.loyalty)}; referral ${months(r.referral)} theo điều kiện.`,conditions:r.conditions??r.issue??'Cần chính sách đúng khóa/gói và kỳ hiệu lực.',stacking:r.stacking??policy.policyRegister?.stacking?.[r.regime]??'Theo chính sách của từng kỳ.'})),...(policy.policyRegister?.rules??[])];
+  return [...prices.filter(r=>!r.hubConfig).map(r=>({...r,id:'rule-'+r.id,ruleKey:[r.regime,r.pricingKey??[r.layer,r.hours,r.packageKey].join('|')].join('|'),benefit:`Giảm ${num(r.discount)?r.discount.toLocaleString('vi-VN')+' VND':'chưa xác định'}; trả thẳng ${straight(r)}; loyalty tối đa ${months(r.loyalty)}; referral ${months(r.referral)} theo điều kiện.`,conditions:r.conditions??r.issue??'Cần chính sách đúng khóa/gói và kỳ hiệu lực.',stacking:r.stacking??policy.policyRegister?.stacking?.[r.regime]??'Theo chính sách của từng kỳ.'})),...(policy.policyRegister?.rules??[]),...configuredHubRuleRows(policy.hubPriceConfig)];
 }
 export function hubPriceCatalogue(policy,sources=[]){
  return sources.filter(s=>validateHubPolicy(s.hubPolicy)).flatMap(source=>{
