@@ -3,6 +3,7 @@ import ReviewApprovalCell from './ReviewApprovalCell.tsx';
 import {updateReview,reviewMessages} from '../core/reviews.mjs';
 import {voucherCode,voucherInput,voucherMissing} from '../core/vouchers.mjs';
 import {withVoucherProfile,voucherRecordProfile} from '../core/hub-voucher.mjs';
+import TermText from './TermText.tsx';
 
 export default function DetailApprovals({row,disabled,onEdit,voucher,onVoucherSave}:any){
  const [saving,setSaving]=useState(false),[error,setError]=useState('');
@@ -26,7 +27,7 @@ export default function DetailApprovals({row,disabled,onEdit,voucher,onVoucherSa
   {row.cells.L&&row.cells.L!=='0'?<details className="approval-programs"><summary>Ưu đãi đang đối chiếu</summary><ul>{String(row.cells.L).split(';').filter(Boolean).map((s:string,i:number)=><li key={i}>{s}</li>)}</ul></details>:null}
   <div className="detail-approval-list">
    {items.map((item:any)=><div className="detail-approval-item" key={item.id}>
-    <div><strong>{item.label}</strong><ul>{(item.details??reviewMessages(item.messages??[item.description])).map((message:string,i:number)=><li key={i}>{message}</li>)}</ul></div>
+    <div><strong><TermText text={item.label}/></strong><ul>{(item.details??reviewMessages(item.messages??[item.description])).map((message:string,i:number)=><li key={i}><TermText text={message}/></li>)}</ul></div>
     <ReviewApprovalCell row={row} id={item.id} disabled={locked} onChange={(approved:boolean)=>onEdit('reviews',updateReview(row,item.id,approved))}/>
    </div>)}
    {installment||row.cells.AE==='CHECK - VƯỢT KỲ'?<div className="detail-approval-item"><div><strong>Ngoại lệ vượt kỳ trả góp</strong><p>Xác nhận cho phép kỳ {row.context?.term||row.cells.Y||'đang áp dụng'} vượt giới hạn {row.cells.S??'của chính sách'}. Các lỗi phương thức, chính sách và chênh lệch vẫn được kiểm tra.</p></div>

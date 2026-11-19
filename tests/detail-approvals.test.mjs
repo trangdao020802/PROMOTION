@@ -1,6 +1,17 @@
 import test from 'node:test';import assert from 'node:assert/strict';import vm from 'node:vm';import {build} from 'esbuild';
-const bundled=build({entryPoints:['src/local/DetailApprovals.tsx'],bundle:true,write:false,format:'cjs',platform:'node',jsx:'transform',plugins:[{name:'qa-react',setup(b){b.onResolve({filter:/^react$/},()=>({path:'react',namespace:'qa'}));b.onLoad({filter:/.*/,namespace:'qa'},()=>({contents:'export const useState=v=>[v,()=>{}];export default {createElement:(type,props,...children)=>({type,props:{...props,children},children})};',loader:'js'}));}}]});
+const bundled=build({entryPoints:['src/local/DetailApprovals.tsx'],bundle:true,write:false,format:'cjs',platform:'node',jsx:'transform',plugins:[{name:'qa-react',setup(b){
+ b.onResolve({filter:/^react$/},()=>({path:'react',namespace:'qa'}));
+ b.onResolve({filter:/^react-dom$/},()=>({path:'react-dom',namespace:'qa'}));
+ b.onLoad({filter:/.*/,namespace:'qa'},file=>({contents:file.path==='react-dom'?'export const createPortal=value=>value;':'export const useState=v=>[v,()=>{}];export const useEffect=()=>{};export const useId=()=>"qa-term";export const useRef=current=>({current});export default {createElement:(type,props,...children)=>({type,props:{...props,children},children})};',loader:'js'}));
+}}]});
 function nodes(node){if(!node||typeof node!=='object')return [];if(Array.isArray(node))return node.flatMap(nodes);if(typeof node.type==='function')return nodes(node.type(node.props));return [node,...(node.children??[]).flatMap(nodes)];}
+function renderedText(node){
+ if(node==null||typeof node==='boolean')return '';
+ if(typeof node!=='object')return String(node);
+ if(Array.isArray(node))return node.map(renderedText).join('');
+ if(typeof node.type==='function')return renderedText(node.type(node.props));
+ return renderedText(node.children);
+}
 const row={kind:'contract',cells:{F:'QA-STUDENT',G:'HỌC VIÊN GIẢ',K:'QA-VOUCHER',AG:'',AE:'CHECK - VƯỢT KỲ'},reviews:{},reviewItems:[{id:'ceo',label:'CEO / RCM',description:'Đúng học viên, EPP và ngày full',scope:'qa-ceo',approved:false},{id:'registration',label:'Ghi danh trong ngày',description:'Đối chiếu ngày',scope:'qa-registration',approved:false},{id:'policy-1234',label:'Điều kiện riêng',description:'Căn cứ riêng',scope:'qa-policy',approved:false}]};
 const voucher={code:'QA-VOUCHER',studentId:'QA-STUDENT',studentName:'HỌC VIÊN GIẢ',center:'HN1',startDate:'2026-10-01',endDate:'2026-10-31',type:'amount',amount:1000000,status:'PENDING',approvalNote:'QA đã đối chiếu',version:4};
 test('all dynamic condition checkboxes in detail use the same scoped reviews as the reconciliation table',async()=>{
@@ -19,6 +30,6 @@ test('detail Voucher approval requires complete matching metadata and saves the 
 test('detail shows one checkbox per condition and names its Contract/student; irrelevant installment approval is absent',async()=>{
  const module={exports:{}};vm.runInNewContext((await bundled).outputFiles[0].text,{module,exports:module.exports,console});
  const current={...row,ct:'QA2610-CT-000722',cells:{...row.cells,AG:'',AE:'OK',K:'0'},reviewItems:[row.reviewItems[0],row.reviewItems[0]]};
- const list=nodes(module.exports.default({row:current,onEdit:()=>{}}));assert.equal(list.filter(n=>n.type==='input').length,1);
- const text=JSON.stringify(list);assert.ok(text.includes('QA2610-CT-000722'));assert.ok(text.includes('QA-STUDENT'));assert.ok(text.includes('Đúng học viên, EPP và ngày full'));
+ const tree=module.exports.default({row:current,onEdit:()=>{}}),list=nodes(tree);assert.equal(list.filter(n=>n.type==='input').length,1);
+ const text=renderedText(tree);assert.ok(text.includes('QA2610-CT-000722'));assert.ok(text.includes('QA-STUDENT'));assert.ok(text.includes('Đúng học viên, EPP và ngày full'));
 });

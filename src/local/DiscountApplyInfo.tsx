@@ -1,5 +1,6 @@
 import React from 'react';
 import {discountOffers,discountPolicyMatch} from '../core/promotions.mjs';
+import TermText from './TermText.tsx';
 
 export default function DiscountApplyInfo({value,date,components=[],checks=[],pricing}:any){
  const offers=discountOffers(value);if(!offers.length)return null;
@@ -12,7 +13,7 @@ export default function DiscountApplyInfo({value,date,components=[],checks=[],pr
    const amount=typeof part?.amount==='number'?part.amount:null;
    const septemberStraight=match.ruleKey==='BBSEP26_STRAIGHT';
    const detail=septemberStraight?'Học phí Big Bang Sep sau giảm + tháng trả thẳng':kind==='weeks'?`${match.addonWeeks} tuần × Hour/week · tính giờ sau khi duyệt điều kiện`:kind==='months'||kind==='straight'?'Tặng tháng · không cộng vào tiền giảm':kind==='sibling-cash'?'Siblings giảm tiền':kind==='cash'?'Giảm theo gói':kind==='referral'?'Referral / Sibling':'Cần xác minh quy tắc';
-   return <span className="discount-offer" role="listitem" key={label}><span className="discount-offer-label">{index+1}. {label}</span><span className="discount-offer-detail">{detail}{amount!==null&&(septemberStraight||!['months','straight','weeks'].includes(kind))?' · '+amount.toLocaleString('vi-VN')+' ₫':''}</span></span>;
+   return <span className="discount-offer" role="listitem" key={label}><span className="discount-offer-label">{index+1}. <TermText text={label}/></span><span className="discount-offer-detail"><TermText text={detail}/>{amount!==null&&(septemberStraight||!['months','straight','weeks'].includes(kind))?' · '+amount.toLocaleString('vi-VN')+' ₫':''}</span></span>;
   })}
   {validBasis&&<span className="discount-offer-detail">Giá gốc: {units} {unit} × {money(unitPrice)}/{unit} = {money(pricing.gross)}.{pricing.from&&pricing.to?' Kỳ chính sách: '+day(pricing.from)+'–'+day(pricing.to)+'.':''}</span>}
   {checks.filter((message:string)=>/^CHECK - (?:SIBLINGS|SỐ TIỀN SIBLINGS|NHIỀU MỨC GIẢM SIBLINGS|NHIỀU ƯU ĐÃI|KEY DISCOUNT MÂU THUẪN|QUÁ 4 ƯU ĐÃI|SỐ THÁNG TẶNG KHÁC RULE|LAYER TRONG|GIỜ TRONG|GÓI TRONG|LOẠI GÓI TRONG|GÓI VTDH TRONG|SPECIAL30)/.test(message)).map((message:string)=><span className="discount-offer-warning" key={message}>{message}</span>)}

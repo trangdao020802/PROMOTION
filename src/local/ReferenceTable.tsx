@@ -3,6 +3,7 @@ import {voucherDetailURL} from '../core/hub-voucher.mjs';
 import {VOUCHER_POLICIES} from '../core/vouchers.mjs';
 import {PRICE_PHASES} from '../core/price-catalog.mjs';
 import PriceRowEditor from './PriceRowEditor.tsx';
+import TermText from './TermText.tsx';
 
 const value=(v:any)=>v===null||v===undefined||v===''?'Chưa có':typeof v==='number'?v.toLocaleString('vi-VN'):String(v);
 const day=(v:any)=>typeof v==='number'&&Number.isFinite(v)?new Date(Date.UTC(1899,11,30)+v*86400000).toLocaleDateString('vi-VN',{timeZone:'UTC'}):v?String(v).split('-').reverse().join('/'):'Chưa xác định';
@@ -43,7 +44,7 @@ export default function ReferenceTable({section,rows,disabled,onVoucherEdit}:any
     <td>{r.package}<small>{priceDuration(r)}</small></td>
     <td>{r.regimeLabel}<small>{r.hubConfig?'Chưa xác định kỳ':`${day(r.from)} – ${day(r.to)}`}</small>{r.renewFrom&&r.renewFrom!==r.from&&<small>Current từ {day(r.renewFrom)}</small>}</td>
     <td className="numeric"><Amount n={r.unit==='months'?r.monthly:r.unitPrice}/><small>VND / {priceUnits[r.unit]??'tháng'}</small></td><td className="numeric"><Amount n={r.gross}/></td><td className="numeric"><Amount n={r.discount}/></td><td className="numeric"><Amount n={r.net}/></td>
-    <td>Trả thẳng: {r.straightWeeks>0?(r.straight>0?r.straight+' tháng + ':'')+r.straightWeeks+' tuần':r.straight===null?'Chưa xác định':r.straight+' tháng'}<small>Loyalty tối đa: {r.loyalty??'Chưa xác định'}</small><small>Referral: {r.referral??'Chưa xác định'}</small></td>
+    <td>Trả thẳng: {r.straightWeeks>0?(r.straight>0?r.straight+' tháng + ':'')+r.straightWeeks+' tuần':r.straight===null?'Chưa xác định':r.straight+' tháng'}<small><TermText text="Loyalty"/> tối đa: {r.loyalty??'Chưa xác định'}</small><small><TermText text="Referral"/>: {r.referral??'Chưa xác định'}</small></td>
     <td className="numeric">{r.maxTerms===0?'Trả thẳng':r.maxTerms===null?'Chưa có':r.maxTerms+' tháng'}</td>
     <td><span className={'price-coverage '+r.status}>{coverage[r.status]}</span>{r.conditions&&<small>{r.conditions}</small>}</td><td><Sources row={r}/></td>
    </tr>:<tr key={r.id} className={'price-status-'+r.status}>
