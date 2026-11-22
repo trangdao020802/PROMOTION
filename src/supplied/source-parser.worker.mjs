@@ -1,3 +1,4 @@
+import {prepareSourceSheets} from '../core/source-composition.mjs';
 (function() {
   var e = (e2, t2) => () => (t2 || (e2((t2 = { exports: {} }).exports, t2), e2 = null), t2.exports), t = Uint8Array, n = Uint16Array, r = Int32Array, i = new t([0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0, 0, 0, 0]), a = new t([0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13, 0, 0]), o = new t([16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15]), s = function(e2, t2) {
     for (var i2 = new n(31), a2 = 0; a2 < 31; ++a2) i2[a2] = t2 += 1 << e2[a2 - 1];
@@ -1474,8 +1475,10 @@
         let t3 = e2.configurations.map((e3) => {
           let t4 = Te(Le(Fe[e3.fileIndex], e3.sheetName), e3.role, e3);
           return { ...e3, ...t4 };
-        }), r2 = [...new Set(t3.filter((e3) => e3.role === `payment`).flatMap((e3) => e3.records.map((e4) => String(e4.cells.C ?? ``)).filter(Boolean)))].sort(), i2 = Ae(t3, e2.scope);
-        $.postMessage({ type: `preview`, requestId: n2, ...i2, centers: r2, samples: i2.bundle?.records.slice(0, 8) ?? [], sources: t3.map((e3) => ({ key: e3.key, count: e3.records.length, errors: e3.errors.length })) });
+        });
+        const prepared=prepareSourceSheets(t3,e2.savedSources??[]),combined=prepared.sheets;
+        const centers=[...new Set(combined.filter(s=>s.role==='payment').flatMap(s=>s.records.map(r=>String(r.cells.C??'')).filter(Boolean)))].sort(),result=Ae(combined,e2.scope);
+        $.postMessage({type:'preview',requestId:n2,...result,centers,fileRefs:prepared.fileRefs,origins:prepared.origins,samples:result.bundle?.records.slice(0,8)??[],sources:combined.map(s=>({key:s.key,count:s.records.length,errors:s.errors.length}))});
       }
     } catch (e3) {
       $.postMessage({ type: `error`, requestId: n2, message: e3 instanceof Error ? e3.message : `Không đọc được bộ nguồn.` });

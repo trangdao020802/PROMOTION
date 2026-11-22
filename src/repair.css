@@ -130,3 +130,21 @@
 .glossary-table thead th{background:#edf3ee}
 .glossary-table tbody th{width:26%;min-width:150px;font-weight:600}
 .glossary-table td>p{margin:5px 0 0;color:#52635a}
+.saved-source-picker{padding:1.25rem;border:1px solid #bfd7d1;border-radius:12px;background:#f5faf8}
+.saved-source-picker h3{margin:0 0 .5rem;font-size:1.05rem}
+.saved-source-picker>p{max-width:80ch;line-height:1.6}
+.reuse-source-controls{display:flex;gap:.75rem;align-items:end;flex-wrap:wrap}
+.reuse-source-controls>label{display:grid;gap:.4rem;flex:1 1 22rem;min-width:0;font-size:.875rem}
+.reuse-source-controls select{width:100%;min-height:42px;padding:.6rem 2rem .6rem .65rem;border:1px solid #bfcbc7;border-radius:7px;background-color:white;color:inherit;font:inherit}
+.reuse-source-batch{margin:1rem 0 0;padding:1rem;border:1px solid #cbdad5;border-radius:8px;min-width:0;background:white}
+.reuse-source-batch legend{padding:0 .4rem;font-size:.95rem;font-weight:650}
+.reuse-sheet,.reuse-history{display:flex;align-items:start;gap:.65rem;padding:.65rem 0;cursor:pointer;font-size:.875rem;line-height:1.5}
+.reuse-sheet+ .reuse-sheet{border-top:1px solid #edf0ee}
+.reuse-sheet>input,.reuse-history>input,.hub-report-choice>input{width:17px;height:17px;flex:none;margin:.15rem 0 0;accent-color:#21684f}
+.reuse-sheet>span{min-width:0;overflow-wrap:anywhere}
+.reuse-sheet small{display:block;color:#586e65;font-size:.82rem}
+.hub-report-mapping .hub-report-choice{display:grid;grid-template-columns:auto 1fr;gap:.35rem .6rem;cursor:pointer;border:1px solid #cbdad5;border-radius:8px;padding:.8rem;font-size:.875rem}
+.hub-report-choice>input{grid-row:span 2}
+.hub-report-choice>span{grid-column:2}
+.reuse-source-batch:disabled .reuse-sheet,.reuse-source-batch:disabled .reuse-history{cursor:default}
+@media(max-width:650px){.saved-source-picker{padding:.9rem}.reuse-source-controls>label{flex-basis:100%}.reuse-source-controls>.secondary-button{width:100%}.hub-report-mapping{grid-template-columns:1fr}}

@@ -4,6 +4,8 @@ import {sourceKey,progressNote} from '../core/contract-memory.mjs';
 import {get,all,put,versioned,activatePolicy} from './db.mjs';
 import {buildModel,identity} from './model.mjs';
 import {validateBundle} from '../core/source-parser.mjs';
+import {reusableSources,selectReusableSources} from '../core/source-composition.mjs';
+import {inheritedFinanceSettings} from '../core/dataset-continuity.mjs';
 import {AuditEngine} from './calculation.mjs';
 import {EMPTY_VOUCHER,voucherInput,validateVoucher,voucherCode,voucherReference,voucherStorageKey,voucherForStudent} from '../core/vouchers.mjs';
 import {validateVerification} from '../core/verification.mjs';
@@ -77,7 +79,7 @@ async function bootstrap(datasetId){
  const hubCoverage=hubConfig&&{prices:hubConfig.prices.length,discounts:hubConfig.discounts.length,products:hubConfig.products,contractTypes:hubConfig.contractTypes,reportFile:hubConfig.reportFile,roadmapFile:hubConfig.roadmapFile};
  return {cachedRows:restored.count?restored.rows:null,cachedCount:restored.count,priceCatalogue,ruleCatalogue,policyCoverage:{hubConfig:hubCoverage,sources:model.policy.priceEvidence.sources.length+(model.policy.policySupplement?.sources.length??0),checkedRows:model.policy.priceEvidence.checkedRows,conflicts:model.policy.priceEvidence.conflicts,sourceOrder:model.policy.policyRegister.sourceOrder,decisions:model.policy.policySupplement?.decisions??[],revision:model.policy.policyRevision,typedRows:model.policy.typedPrices?.length??0},source:model.source,hash:model.hash,tolerance:model.policy.auditPolicy?.moneyTolerance??1,policyReference:model.policy.auditPolicy?{file:model.policy.auditPolicy.sourceFile,moneyTolerance:model.policy.auditPolicy.moneyTolerance,hourTolerance:model.policy.auditPolicy.hourTolerance}:null,dataset:d?datasetMeta(d):null,needsSources:!d,needsCalculation:!!d,records,edits,choices:model.choices,courseSources:Object.fromEntries((await courseMemories()).filter(s=>groups.some(g=>g.ct===s.ct&&String(g.cells.F)===s.student)).map(s=>[s.ct,s])),hubLinks:Object.fromEntries(links.map(l=>[l.ct,l])),customVouchers:model.extensions.customVouchers,vouchers:model.extensions.customVouchers.map(voucherReference),prices:model.policy.prices,rules:model.policy.rules,catalogue:model.extensions.catalogue,sourceManifest:[...model.policy.manifest,...model.policy.priceEvidence.sources.slice(16),...(model.policy.policySupplement?.sources??[])],cutoff:model.cutoff??Math.floor((Date.now()-Date.UTC(1899,11,30))/86400000),groupKocByRecord:Object.fromEntries(groups.map(g=>[g.id,model.grids.RAW_REPORT['X'+g.rawRow]||''])),groupingStats:{payments:d?.bundle.records.length||0,contracts:groups.filter(g=>g.kind==='contract').length,unlinked:groups.filter(g=>g.kind!=='contract').length},reconciliationStats:model.extensions.accounts.statistics,sourceCalculation:d?{counts:{payments:model.input.cashSources.flatMap(s=>s.rows).filter(r=>r.paid&&r.vat&&!r.cancelled).length,transfers:d.bundle.transfers.length,exports:d.bundle.exports.length},scope:d.bundle.scope,inputs:d.bundle.sources.map(s=>({file:s.fileName,sheet:s.sheetName,rows:s.rowCount}))}:null,continuity:d?{matchedRecords:Object.keys(edits).length,newRecords:groups.length-Object.keys(edits).length}:null};
 }
-function datasetMeta(d){return {id:d.id,fileName:d.fileName,sheetName:'Export · PaymentList · Transfer',rowCount:d.bundle.records.length,createdAt:d.createdAt,from:d.bundle.scope.from,to:d.bundle.scope.to,usable:true,sources:d.bundle.sources.map(s=>({...s,fileId:d.fileIds[s.fileIndex]}))}}
+function datasetMeta(d){return {id:d.id,fileName:d.fileName,sheetName:'Export · PaymentList · Transfer',rowCount:d.bundle.records.length,createdAt:d.createdAt,from:d.bundle.scope.from,to:d.bundle.scope.to,usable:true,origins:d.origins??[],sources:d.bundle.sources.map(s=>({...s,fileId:d.fileIds[s.fileIndex]}))}}
 async function recordFor(datasetId,recordId,{allowSource=false}={}){const model=await datasetIndex(datasetId),group=model.groups.get(recordId)??(allowSource?[...model.groups.values()].find(g=>g.sourceContracts?.includes(String(recordId).replace(/^CT::/,''))):null);if(!group)throw fail('Không có CT/hồ sơ trong bộ nguồn đang mở.');return {model,group,key:identity(group)}}
 async function ensureVouchers(codes){for(const code of [...new Set(codes.map(voucherCode).filter(Boolean))])if(!await get('vouchers',code))await versioned('vouchers',code,0,()=>({...EMPTY_VOUCHER,code}));}
 export function validHubURL(value,code){try{const u=new URL(value);if(u.origin!=='https://hub24.apollo.vn:7777'||u.username||u.password||u.hash)return false;const ct=String(code).includes('-CT-');if(ct)return /^\/contract\/detail\/[1-9]\d{0,14}\/?$/i.test(u.pathname)&&!u.search;return /^\/deposit\/(?:detail|view)\/[1-9]\d{0,14}\/?$/i.test(u.pathname)&&!u.search||/^\/deposit\/(?:detail|view)\/?$/i.test(u.pathname)&&u.searchParams.size===1&&['id','depositId'].some(k=>/^[1-9]\d{0,14}$/.test(u.searchParams.get(k)||''))}catch{return false}}
@@ -111,6 +113,11 @@ export async function localFetch(input,options={}){
   if(path==='/api/bootstrap')return response(await bootstrap(url.searchParams.get('dataset')));
   if(path==='/api/workbook')return response(await loadWorkbook(url.searchParams.get('dataset')));
   if(path==='/api/datasets'&&method==='GET')return response({datasets:(await all('datasets')).sort((a,b)=>b.createdAt.localeCompare(a.createdAt)).map(datasetMeta)});
+  if(path==='/api/datasets/sources'&&method==='GET'){
+   const dataset=await currentDataset(url.searchParams.get('id'));if(!dataset)throw fail('Chọn bộ nguồn đã lưu.');
+   const model=buildModel(dataset.bundle,await loadPolicies()),keys=new Set(model.contractGroups.map(identity));
+   return response({dataset:datasetMeta(dataset),sources:reusableSources(dataset),editedRecords:(await all('edits')).filter(edit=>keys.has(edit.id)).length});
+  }
   if(path==='/api/source-files'&&method==='POST'){
    const name=url.searchParams.get('name')||'Nguồn';if(!(body instanceof Blob)||!body.size||body.size>20*1024*1024||!/^.{1,180}\.(xlsx|csv|tsv)$/i.test(name))throw fail('File nguồn cần XLSX/CSV/TSV, tối đa 20 MB.');
    const file={id:id(),name,blob:body,createdAt:now()};await put('files',file);return response({file:{id:file.id}});
@@ -119,8 +126,28 @@ export async function localFetch(input,options={}){
    const problem=validateBundle(body.bundle);if(problem)throw fail(problem);
    if(!Array.isArray(body.fileIds)||body.fileIds.length>8)throw fail('Danh sách file gốc không hợp lệ.');
    for(const s of body.bundle.sources)if(!await get('files',body.fileIds[s.fileIndex]))throw fail('Cần lưu đủ từng file gốc trước khi lưu bộ nguồn.');
-   const dataset={id:id(),fileName:'Bộ nguồn '+body.bundle.scope.from+' → '+body.bundle.scope.to,bundle:body.bundle,fileIds:body.fileIds,createdAt:now()};
-   await ensureVouchers(body.bundle.cash.map(r=>r.cells.AO||''));await put('datasets',dataset);await put('settings',{id:'current',datasetId:dataset.id});return response({dataset:datasetMeta(dataset)});
+   const origins=body.origins??[],parents=new Set();
+   if(!Array.isArray(origins)||origins.length>12||origins.length&&origins.length!==body.bundle.sources.length)throw fail('Danh sách nguồn kết hợp không hợp lệ.');
+   const originKeys=new Set(),reusedDatasets=new Map();
+   for(const origin of origins){
+    const source=body.bundle.sources.find(s=>s.key===origin.key);
+    if(!source||originKeys.has(origin.key))throw fail('Nguồn kết hợp bị trùng hoặc thiếu sheet.');originKeys.add(origin.key);
+    if(!origin.datasetId)continue;
+    if(!reusedDatasets.has(origin.datasetId))reusedDatasets.set(origin.datasetId,await currentDataset(origin.datasetId));
+    const saved=reusedDatasets.get(origin.datasetId),selected=selectReusableSources(reusableSources(saved),[origin.sourceKey],{includeHistory:origin.includeHistory===true})[0];
+    if(!selected||selected.fileId!==body.fileIds[source.fileIndex]||selected.role!==source.role||selected.fileName!==source.fileName||selected.sheetName!==source.sheetName)throw fail('Sheet dùng lại không khớp bộ nguồn đã chọn.');
+    const rowKey=({sourceKey,...row})=>JSON.stringify(row),known=new Set(selected.records.map(rowKey));
+    const rows=source.role==='payment'?body.bundle.cash:source.role==='transfer'?body.bundle.transfers:body.bundle.exports;
+    if(rows.some(row=>row.sourceKey===source.key&&!known.has(rowKey(row))))throw fail('Dòng dùng lại không còn khớp nguồn hoặc phạm vi lịch sử. Xem trước lại bộ kết hợp.');
+    parents.add(saved.id);
+   }
+   const dataset={id:id(),fileName:'Bộ nguồn '+body.bundle.scope.from+' → '+body.bundle.scope.to,bundle:body.bundle,fileIds:body.fileIds,origins,createdAt:now()};
+   const inherited=parents.size?inheritedFinanceSettings(await all('settings'),[...parents],buildModel(body.bundle,await loadPolicies()).contractGroups,dataset.id):[];
+   await ensureVouchers(body.bundle.cash.map(r=>r.cells.AO||''));
+   // Commit the current pointer last. A failed save cannot switch the user to
+   // a partially written batch or modify any of the selected original batches.
+   for(const fact of inherited)await put('settings',fact);
+   await put('datasets',dataset);await put('settings',{id:'current',datasetId:dataset.id});return response({dataset:datasetMeta(dataset)});
   }
   if(path==='/api/datasets/file'){
    const d=await currentDataset(url.searchParams.get('id'));const fileId=url.searchParams.get('file')||d?.fileIds[0];if(!d?.fileIds.includes(fileId))throw fail('File không thuộc bộ nguồn này.');return originalFile(await sourceDownload(await get('files',fileId)));
